@@ -1,84 +1,213 @@
-# ocp – OpenCode Configuration Profiles
+# ocp - OpenCode Configuration Profiles
 
-`ocp` is a command-line tool that provides the ability to use configuration profiles for [OpenCode](https://opencode.ai/).
+`ocp` is a CLI that manages OpenCode configuration profiles stored in Git repositories.
 
 ## Motivation
 
-OpenCode (and some plugins, such as [oh-my-opencode](https://github.com/code-yeongyu/oh-my-opencode) have configuration
-files in `~/.config/opencode/opencode.json` and `~/.config/opencode/oh-my-opencode.json`. These configuration files
-define LLM providers and their models, agents, and a bunch of other elements.
+OpenCode and plugins (for example [oh-my-opencode](https://github.com/code-yeongyu/oh-my-opencode)) read configuration files such as:
 
-In corporate environments, it is common to have a requirement to use company-provided AI models, whilst users may want 
-to use commercial frontier models (such as those provided by OpenAI, Anthropic or Gemini) for personal and/or open-source
-projects.
+- `~/.config/opencode/opencode.json`
+- `~/.config/opencode/oh-my-opencode.json`
 
-`ocp` helps in this scenario by allowing users to switch between different configuration profiles. The configuration
-profiles are essentially Git repositories with the profile metadata and the configuration files.
+Many users need to switch between different model/provider setups depending on context (for example company-managed vs personal/open-source usage). `ocp` enables this by selecting a profile and linking its configuration files into the expected OpenCode locations.
 
-## Example usage (assuming users have `ocp` already installed, fresh install).
+## Goals
 
-1. List profiles (shows empty list):
+- Manage profile repositories.
+- Discover available profiles across repositories.
+- Switch active OpenCode configuration by profile name.
+- Keep profile metadata simple and explicit.
+- Provide deterministic CLI behavior with testable output and exit codes.
 
-        ocp profile list
+## Non-goals (current scope)
 
-2. Add a new configuration repository (which contains a `my-company` profile):
+- Managing secrets directly.
+- Editing OpenCode JSON contents.
+- Supporting profile inheritance/templating.
 
-        ocp repository add git@github.com:my-company/my-repo.git
+## Key terms
 
-3. Switch to a profile (symlinks configuration files to their expected destination):
+- Repository: Git repository containing `repository.json` and one directory per profile.
+- Profile: named set of OpenCode config files (for example `opencode.json`).
+- Registry: local `ocp` configuration file listing added repositories.
 
-        ocp profile use my-company
+## Quick usage
 
-## Configuration files
+```bash
+ocp profile list
+ocp repository add git@github.com:my-company/my-repo.git
+ocp profile use my-company
+```
 
-- `~/.config/ocp/config.json` – contains 2 sections:
-  1. `config`: list of global `ocp` configuration options. At the moment, only `profileVersionCheck` (true/false)
-  2. `repositories`: list of user-added repositories and their Git URLs.
-- `~/.cache/ocp/repositories/<repo>/repository.json` – declares available profiles in this repo.
+## Configuration and storage
 
-## Features (commands)
+### Default paths
 
-- `ocp profile` – shows the current profile.
-- `ocp profile list` – lists profiles based on the user-added repositories. To do so, it loops over the repositories
-  declared in `~/.config/ocp/config.json`, and for each of them, reads their `repository.json` config to see which
-  profiles are available. Profile names must be unique, so if `ocp` resolves 2 profiles with the same name, it will print
-  an error and exit.
-- `ocp profile create my-profile` – creates a new configuration profile on an existing repository folder (adds it to
-  `repository.json` and creates the subfolder).
-- `ocp profile use my-profile` – switches to a given profile by symlinking configuration files. If target files exist and
-  are not symlinks, it backs them up and warns the user.
-- `ocp profile refresh my-profile` – pulls the latest changes from a profile repository.
+- OCP registry: `~/.config/ocp/config.json`
+- OCP cache root: `~/.cache/ocp`
+- Repository clone directory: `~/.cache/ocp/repositories/<repo-name>`
+- Repository metadata file: `~/.cache/ocp/repositories/<repo-name>/repository.json`
 
-- `ocp repository add git@github.com:my-company/my-repo.git` – adds a profile repository, by cloning it in 
-  `~/.cache/ocp/repositories/my-repo`, and registers it in the `ocp` configuration file (`~/.config/ocp/config.json`).
-- `ocp repository delete my-repo` – deletes an added repository (removes from config, deletes local clone).
-- `ocp repository create my-repo` – initialises a new profile repository, with a `repository.json` file and an initial
-  profile named the same as the repo. This can be customised with `--profile-name`.
+### Path overrides (for tests and advanced usage)
 
-- `ocp help <command>` – provides usage instructions about one command and/or subcommand.
+- Config directory override: JVM system property `ocp.config.dir`
+- Cache directory override: JVM system property `ocp.cache.dir`
 
-Since profiles may be updated remotely, every `ocp` invocation should check the latest commit of both local and remote 
-repositories, showing a message to the user if there is a newer version of a profile. This behaviour should be 
-configurable in `~/.config/ocp/config.json`, and is turned on by default.
+### `config.json` schema
+
+```json
+{
+  "config": {
+    "profileVersionCheck": true
+  },
+  "repositories": [
+    {
+      "name": "my-repo",
+      "uri": "git@github.com:my-company/my-repo.git",
+      "localPath": "/home/user/.cache/ocp/repositories/my-repo"
+    }
+  ]
+}
+```
+
+Rules:
+
+- `config.profileVersionCheck` defaults to `true`.
+- `repositories[*].uri` is required.
+- `repositories[*].name` may be omitted; when omitted, name is derived from URI basename without `.git`.
+- `repositories[*].localPath` is derived from cache directory and repository name.
+
+### `repository.json` schema
+
+```json
+{
+  "profiles": [
+    { "name": "my-company" },
+    { "name": "oss" }
+  ]
+}
+```
+
+Rules:
+
+- `profiles` defaults to an empty list.
+- Empty/blank profile names are ignored.
+- Profile names must be globally unique across all configured repositories.
 
 ## Repository structure
 
-A profile repository contains:
+Each profile repository contains:
 
-- `/repository.json` – repository configuration file. Currently we only store their names, but we may add more information
-  in the future.
-- For every profile, a `/<profile-name>` folder containing the config files to be symlinked (`opencode.json`, 
-  `oh-my-opencode.json`, etc.). For simplicity, we expect the profile name and the subfolder name to match.
+- `/repository.json`
+- `/<profile-name>/...` with files to link into `~/.config/opencode/`
+
+Example:
+
+```text
+repository.json
+my-company/opencode.json
+my-company/oh-my-opencode.json
+oss/opencode.json
+```
+
+## CLI contract
+
+### Global behavior
+
+- `ocp` verifies required system dependencies at startup. Current required dependency: `git`.
+- Success messages are written to stdout.
+- Errors are written to stderr.
+- Help output is available through Picocli help commands.
+
+### Exit codes
+
+- `0`: success
+- `1`: runtime/validation failure (for example duplicate profile names, failed git command, invalid JSON, missing dependency)
+- `2`: CLI usage error (invalid command arguments/options)
+
+### Command matrix
+
+| Command | Status | Behavior |
+| --- | --- | --- |
+| `ocp` | Implemented | Print root usage when no subcommand is provided. |
+| `ocp help <command>` | Implemented | Print help for command/subcommand. |
+| `ocp profile list` | Implemented | List profiles from all repositories in sorted order; fail on duplicate names. |
+| `ocp profile` | Planned | Print currently active profile. |
+| `ocp profile create <name>` | Planned behavior, placeholder implemented | Create profile folder and register it in repository metadata. |
+| `ocp profile use <name>` | Planned behavior, placeholder implemented | Switch active profile by linking profile files to OpenCode config location. |
+| `ocp profile refresh <name>` | Planned | Pull latest changes for profile repository. |
+| `ocp repository add <uri>` | Planned behavior, placeholder implemented | Clone repository into local cache and register it in `config.json`. |
+| `ocp repository delete <name>` | Planned behavior, placeholder implemented | Remove repository entry from registry and delete local clone. |
+| `ocp repository create <name> [--profile-name <profile>]` | Planned | Initialize new profile repository with `repository.json` and initial profile. |
+
+## Operational semantics
+
+### Repository name normalization
+
+- Derive repository name from URI basename split by `/` or `:`.
+- Strip `.git` suffix when present.
+- Trim URI whitespace before parsing.
+
+### Profile uniqueness
+
+- During profile discovery (`profile list` and future `profile use` resolution), duplicate names across repositories are an error.
+- Error message must include duplicate profile names.
+
+### Profile version checks
+
+- Controlled by `config.profileVersionCheck`.
+- Default is enabled.
+- Target behavior: on each invocation, check whether local repository state is behind remote and print a non-fatal update hint.
+- Version-check failures (for example offline network) must not block normal command execution.
+
+### Profile switching and backups (target behavior)
+
+- Source directory: `~/.cache/ocp/repositories/<repo-name>/<profile-name>/`
+- Target directory: `~/.config/opencode/`
+- For each profile file:
+  - If target does not exist: create symlink.
+  - If target exists and is a symlink: replace symlink.
+  - If target exists and is not a symlink: move to backup before linking.
+- Backup location: `~/.config/ocp/backups/<timestamp>/<filename>`
+- Switching must be transactional at file level:
+  - If linking one file fails, already-processed files must be restored from backups.
 
 ## Technology stack
 
-`ocp` is a command-line application written in Java 25, using Micronaut 4.10 and the Micronaut PicoCLI integration. It 
-is built with Gradle and compiled as a GraalVM native executable. Will be installed with HomeBrew.
+- Java 25
+- Micronaut 4.10
+- Micronaut Picocli integration
+- Gradle build
+- GraalVM native executable (`ocp`)
+- Homebrew distribution target
 
-Each component in the stack will use the most recent stable version.
+## Verification and acceptance criteria
 
-## Verification
+### Required verification tasks
 
-- Every feature must have tests covering different scenarios.
-- Since the outcome of this project is an `ocp` native executable, `nativeTest` task should be run as part of the
-  verification steps for each feature implemented.
+- `./gradlew test`
+- `./gradlew nativeTest`
+
+### Command-level acceptance criteria
+
+- `ocp help`
+  - exits `0`
+  - output contains `Usage: ocp`
+- `ocp profile list`
+  - with no repositories/profiles: exits `0`, prints helpful empty-state message
+  - with multiple repositories: outputs sorted profile names
+  - with duplicate profile names: exits `1`, prints duplicate-name error on stderr
+- Repository config loading
+  - missing `config.json`: treated as empty repository list
+  - invalid `config.json`: exits `1`, reports registry read failure
+  - repository URI normalization: trims URI, derives repository name, computes `localPath`
+- Git operations
+  - clone command failure: exits `1`, includes exit-code detail
+  - interrupted git operation: thread interrupt flag is restored and command fails cleanly
+
+### Test types
+
+- Unit tests for models/services/clients
+- Command tests for stdout/stderr/exit code behavior
+- Integration tests with Git server container for clone/discovery flows
+- Native tests to validate behavior parity in compiled binary
