@@ -1,0 +1,18 @@
+{
+  "resources": {
+    "includes": [
+      {
+        "pattern": "http-config/.*"
+      },
+      {
+        "pattern": "id_client"
+      },
+      {
+        "pattern": "id_client\\.pub"
+      },
+      {
+        "pattern": "sshd_config"
+      }
+    ]
+  }
+}

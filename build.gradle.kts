@@ -1,33 +1,43 @@
 plugins {
-    id("io.micronaut.application") version "4.6.2"
-    id("org.graalvm.buildtools.native") version "0.11.1"
+    alias(libs.plugins.micronaut.application)
+    alias(libs.plugins.graalvm.native)
 }
 
 version = "0.1.0"
 group = "com.github.alvarosanchez"
+
+val javaVersion = 25
+val micronautPlatformVersion = libs.versions.micronaut.platform.get()
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    annotationProcessor("io.micronaut:micronaut-inject-java")
-    annotationProcessor("info.picocli:picocli-codegen")
+    annotationProcessor(libs.micronaut.inject.java)
+    annotationProcessor(libs.picocli.codegen)
+    annotationProcessor(libs.micronaut.serde.processor)
 
-    implementation("io.micronaut.picocli:micronaut-picocli")
+    implementation(libs.micronaut.picocli)
+    implementation(libs.micronaut.serde.jackson)
 
-    runtimeOnly("ch.qos.logback:logback-classic")
+    runtimeOnly(libs.logback.classic)
 
-    testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.micronaut.test.junit5)
+    testImplementation(platform(libs.testcontainers.bom))
+    testImplementation(libs.testcontainers.junit.jupiter)
+    testImplementation(libs.testcontainers.gitserver)
+    testImplementation(libs.commons.codec)
 }
 
 application {
-    mainClass.set("com.github.alvarosanchez.ocp.Application")
+    mainClass.set("com.github.alvarosanchez.ocp.command.OcpCommand")
 }
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(25))
+        languageVersion.set(JavaLanguageVersion.of(javaVersion))
     }
 }
 
@@ -36,12 +46,12 @@ tasks.test {
 }
 
 micronaut {
-    version("4.10.7")
+    version(micronautPlatformVersion)
     runtime("none")
     testRuntime("junit5")
     processing {
         incremental(true)
-        annotations("com.github.alvarosanchez.ocp.*")
+        annotations("com.github.alvarosanchez.ocp.**")
     }
 }
 
@@ -49,8 +59,11 @@ graalvmNative {
     binaries {
         named("main") {
             imageName.set("ocp")
-            mainClass.set("com.github.alvarosanchez.ocp.Application")
+            mainClass.set("com.github.alvarosanchez.ocp.command.OcpCommand")
             buildArgs.add("--no-fallback")
+        }
+        named("test") {
+            buildArgs.add("--initialize-at-build-time=org.junit.platform.commons.logging.LoggerFactory\$DelegatingLogger")
         }
     }
 }

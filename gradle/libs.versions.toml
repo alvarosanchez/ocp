@@ -1,0 +1,25 @@
+[versions]
+micronaut-plugin = "4.6.2"
+graalvm-native-plugin = "0.11.1"
+micronaut-platform = "4.10.7"
+testcontainers = "1.21.3"
+testcontainers-gitserver = "0.8.0"
+commons-codec = "1.18.0"
+
+[libraries]
+micronaut-inject-java = { module = "io.micronaut:micronaut-inject-java" }
+picocli-codegen = { module = "info.picocli:picocli-codegen" }
+micronaut-serde-processor = { module = "io.micronaut.serde:micronaut-serde-processor" }
+micronaut-picocli = { module = "io.micronaut.picocli:micronaut-picocli" }
+micronaut-serde-jackson = { module = "io.micronaut.serde:micronaut-serde-jackson" }
+logback-classic = { module = "ch.qos.logback:logback-classic" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+micronaut-test-junit5 = { module = "io.micronaut.test:micronaut-test-junit5" }
+testcontainers-bom = { module = "org.testcontainers:testcontainers-bom", version.ref = "testcontainers" }
+testcontainers-junit-jupiter = { module = "org.testcontainers:junit-jupiter" }
+testcontainers-gitserver = { module = "io.github.sparsick.testcontainers.gitserver:testcontainers-gitserver", version.ref = "testcontainers-gitserver" }
+commons-codec = { module = "commons-codec:commons-codec", version.ref = "commons-codec" }
+
+[plugins]
+micronaut-application = { id = "io.micronaut.application", version.ref = "micronaut-plugin" }
+graalvm-native = { id = "org.graalvm.buildtools.native", version.ref = "graalvm-native-plugin" }

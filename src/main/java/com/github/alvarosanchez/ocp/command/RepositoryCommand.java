@@ -1,9 +1,12 @@
-package com.github.alvarosanchez.ocp;
+package com.github.alvarosanchez.ocp.command;
 
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
 
+/**
+ * Command group for repository-related operations.
+ */
 @Command(
     name = "repository",
     description = "Manage profile repositories.",
@@ -15,6 +18,9 @@ import picocli.CommandLine.Parameters;
 )
 public class RepositoryCommand implements Runnable {
 
+    /**
+     * Prints repository command usage when no subcommand is provided.
+     */
     @Override
     public void run() {
         CommandLine.usage(this, System.out);
