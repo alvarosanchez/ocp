@@ -1,2 +1,10 @@
 .idea/
 .oca/
+.gradle/
+build/
+out/
+.classpath
+.factorypath
+.project
+.settings/
+bin/
