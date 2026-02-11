@@ -4,11 +4,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.github.alvarosanchez.ocp.git.GitProcessExecutor;
+import com.github.alvarosanchez.ocp.git.GitRepositoryClient;
 import com.github.alvarosanchez.ocp.model.OcpConfigFile;
-import com.github.alvarosanchez.ocp.model.OcpConfigOptions;
-import com.github.alvarosanchez.ocp.model.ProfileEntry;
+import com.github.alvarosanchez.ocp.model.OcpConfigFile.OcpConfigOptions;
+import com.github.alvarosanchez.ocp.model.OcpConfigFile.RepositoryEntry;
 import com.github.alvarosanchez.ocp.model.RepositoryConfigFile;
-import com.github.alvarosanchez.ocp.model.RepositoryEntry;
+import com.github.alvarosanchez.ocp.model.RepositoryConfigFile.ProfileEntry;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.serde.ObjectMapper;
 import java.io.IOException;
@@ -31,10 +33,15 @@ class ProfileServiceTest {
     private String previousConfigDir;
     private String previousCacheDir;
 
+    private RepositoryService repositoryService;
+    private GitRepositoryClient gitRepositoryClient;
+
     @BeforeEach
     void setUp() {
         applicationContext = ApplicationContext.run();
         objectMapper = applicationContext.getBean(ObjectMapper.class);
+        gitRepositoryClient = new GitRepositoryClient(new GitProcessExecutor());
+        repositoryService = new RepositoryService(objectMapper, gitRepositoryClient);
         previousConfigDir = System.getProperty("ocp.config.dir");
         previousCacheDir = System.getProperty("ocp.cache.dir");
         System.setProperty("ocp.config.dir", tempDir.resolve("config").toString());
@@ -65,7 +72,7 @@ class ProfileServiceTest {
             new RepositoryEntry("repo-two", "git@github.com:acme/repo-two.git", null)
         ));
 
-        profileService = new ProfileService(objectMapper, new RepositoryService(objectMapper));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
 
         List<ProfileEntry> profiles = profileService.listProfiles();
 
@@ -81,7 +88,7 @@ class ProfileServiceTest {
             new RepositoryEntry("repo-two", "git@github.com:acme/repo-two.git", null)
         ));
 
-        profileService = new ProfileService(objectMapper, new RepositoryService(objectMapper));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
 
         ProfileService.DuplicateProfilesException thrown = assertThrows(
             ProfileService.DuplicateProfilesException.class,
@@ -95,7 +102,7 @@ class ProfileServiceTest {
     void listProfilesIgnoresRepositoriesWithoutRepositoryJson() throws IOException {
         writeConfig(List.of(new RepositoryEntry("repo-missing", "git@github.com:acme/repo-missing.git", null)));
 
-        profileService = new ProfileService(objectMapper, new RepositoryService(objectMapper));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
 
         List<ProfileEntry> profiles = profileService.listProfiles();
 

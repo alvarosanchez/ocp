@@ -48,7 +48,7 @@ Run commands from repository root: `/Users/alvaro/Dev/alvarosanchez/ocp`.
 ## 5) Architecture boundaries
 - `command/`: Picocli commands and CLI entry points
 - `service/`: business logic and orchestration
-- `client/`: external process calls (`git`)
+- `git/`: external process calls (`git`)
 - `model/`: immutable serde models (records)
 
 Guideline: keep commands thin and place domain logic in services.
@@ -80,6 +80,9 @@ Guideline: keep commands thin and place domain logic in services.
 - Constants: `UPPER_SNAKE_CASE`
 - Tests: descriptive `camelCase` method names
 - Subcommands often use nested types (for example `ProfileCommand.ListCommand`)
+
+### Documentation
+- Public classes and public methods must have Javadoc
 
 ### Error handling
 - Never swallow exceptions

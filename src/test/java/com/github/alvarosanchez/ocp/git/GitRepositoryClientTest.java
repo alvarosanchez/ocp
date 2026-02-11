@@ -1,4 +1,4 @@
-package com.github.alvarosanchez.ocp.client;
+package com.github.alvarosanchez.ocp.git;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -10,6 +10,10 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -65,42 +69,98 @@ class GitRepositoryClientTest {
         assertTrue(thrown.getMessage().contains("Failed to clone git repository"));
     }
 
+    @Test
+    void commitsBehindRemoteRunsFetchAndParsesRevListOutput() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(
+            List.of(new StubProcess(0, ""), new StubProcess(0, "3\n"))
+        );
+        Path localPath = tempDir.resolve("repositories/repo-four");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        int commitsBehind = client.commitsBehindRemote(localPath);
+
+        assertEquals(3, commitsBehind);
+        assertEquals(
+            List.of(
+                List.of("git", "-C", localPath.toString(), "fetch", "--quiet"),
+                List.of("git", "-C", localPath.toString(), "rev-list", "--count", "HEAD..@{upstream}")
+            ),
+            processExecutor.commands()
+        );
+    }
+
+    @Test
+    void commitsBehindRemoteThrowsWhenRevListIsNotNumeric() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(
+            List.of(new StubProcess(0, ""), new StubProcess(0, "not-a-number"))
+        );
+        Path localPath = tempDir.resolve("repositories/repo-five");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        IllegalStateException thrown = assertThrows(IllegalStateException.class, () -> client.commitsBehindRemote(localPath));
+
+        assertTrue(thrown.getMessage().contains("Failed to parse git rev-list output"));
+    }
+
     private static final class StubProcessExecutor extends GitProcessExecutor {
 
-        private final Process process;
+        private final Deque<Process> processes;
         private final IOException exception;
-        private List<String> lastCommand;
+        private final List<List<String>> commands;
 
         StubProcessExecutor(Process process) {
-            this.process = process;
+            this.processes = new ArrayDeque<>(List.of(process));
             this.exception = null;
+            this.commands = new ArrayList<>();
+        }
+
+        StubProcessExecutor(List<Process> processes) {
+            this.processes = new ArrayDeque<>(processes);
+            this.exception = null;
+            this.commands = new ArrayList<>();
         }
 
         StubProcessExecutor(IOException exception) {
-            this.process = null;
+            this.processes = new ArrayDeque<>();
             this.exception = exception;
+            this.commands = new ArrayList<>();
         }
 
         @Override
-        Process start(List<String> command) throws IOException {
-            lastCommand = List.copyOf(command);
+        public Process start(List<String> command) throws IOException {
+            commands.add(List.copyOf(command));
             if (exception != null) {
                 throw exception;
             }
-            return process;
+            if (processes.isEmpty()) {
+                throw new IOException("No process available");
+            }
+            return processes.removeFirst();
         }
 
         List<String> lastCommand() {
-            return lastCommand;
+            return commands.getLast();
+        }
+
+        List<List<String>> commands() {
+            return List.copyOf(commands);
         }
     }
 
     private static final class StubProcess extends Process {
 
         private final int exitCode;
+        private final String output;
 
         StubProcess(int exitCode) {
+            this(exitCode, "");
+        }
+
+        StubProcess(int exitCode, String output) {
             this.exitCode = exitCode;
+            this.output = output;
         }
 
         @Override
@@ -110,7 +170,7 @@ class GitRepositoryClientTest {
 
         @Override
         public InputStream getInputStream() {
-            return new ByteArrayInputStream(new byte[0]);
+            return new ByteArrayInputStream(output.getBytes(StandardCharsets.UTF_8));
         }
 
         @Override

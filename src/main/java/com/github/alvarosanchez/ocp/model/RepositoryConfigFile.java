@@ -19,4 +19,13 @@ public record RepositoryConfigFile(List<ProfileEntry> profiles) {
     public RepositoryConfigFile {
         profiles = profiles == null ? List.of() : List.copyOf(profiles);
     }
+
+    /**
+     * Profile definition entry from profile metadata.
+     *
+     * @param name profile name
+     */
+    @Serdeable
+    public record ProfileEntry(String name) {
+    }
 }

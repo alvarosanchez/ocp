@@ -1,18 +1,27 @@
 package com.github.alvarosanchez.ocp.service;
 
-import com.github.alvarosanchez.ocp.model.ProfileEntry;
+import com.github.alvarosanchez.ocp.git.GitRepositoryClient;
+import com.github.alvarosanchez.ocp.model.OcpConfigFile;
+import com.github.alvarosanchez.ocp.model.OcpConfigFile.OcpConfigOptions;
+import com.github.alvarosanchez.ocp.model.OcpConfigFile.RepositoryEntry;
 import com.github.alvarosanchez.ocp.model.RepositoryConfigFile;
-import com.github.alvarosanchez.ocp.model.RepositoryEntry;
+import com.github.alvarosanchez.ocp.model.RepositoryConfigFile.ProfileEntry;
 import io.micronaut.serde.ObjectMapper;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import jakarta.inject.Singleton;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 /**
  * Service that discovers available profile names across configured repositories.
@@ -22,13 +31,16 @@ public final class ProfileService {
 
     private final ObjectMapper objectMapper;
     private final RepositoryService repositoryService;
+    private final GitRepositoryClient gitRepositoryClient;
 
     ProfileService(
         ObjectMapper objectMapper,
-        RepositoryService repositoryService
+        RepositoryService repositoryService,
+        GitRepositoryClient gitRepositoryClient
     ) {
         this.objectMapper = objectMapper;
         this.repositoryService = repositoryService;
+        this.gitRepositoryClient = gitRepositoryClient;
     }
 
     /**
@@ -38,40 +50,310 @@ public final class ProfileService {
      */
     public List<ProfileEntry> listProfiles() {
         Set<String> profileNames = new TreeSet<>();
-        Set<String> duplicateProfileNames = new TreeSet<>();
-        for (RepositoryEntry repositoryEntry : repositoryService.load()) {
-            Path localPath = Path.of(repositoryEntry.localPath());
-            for (ProfileEntry profileEntry : readProfiles(localPath.resolve("repository.json"))) {
-                if (!profileNames.add(profileEntry.name())) {
-                    duplicateProfileNames.add(profileEntry.name());
-                }
-            }
-        }
+        Set<String> duplicateProfileNames = duplicateProfileNames();
         if (!duplicateProfileNames.isEmpty()) {
             throw new DuplicateProfilesException(duplicateProfileNames);
         }
         List<ProfileEntry> profiles = new ArrayList<>();
+        for (RepositoryEntry repositoryEntry : repositoryService.load()) {
+            Path localPath = Path.of(repositoryEntry.localPath());
+            for (ProfileEntry profileEntry : readProfiles(localPath.resolve("repository.json"))) {
+                profileNames.add(profileEntry.name());
+            }
+        }
         for (String profileName : profileNames) {
             profiles.add(new ProfileEntry(profileName));
         }
         return profiles;
     }
 
-    private List<ProfileEntry> readProfiles(Path profilesFile) {
-        if (!Files.exists(profilesFile)) {
+    /**
+     * Creates a profile directory and registers it in repository metadata.
+     *
+     * @param repositoryPath repository root path
+     * @param profileName profile name to create
+     */
+    public void createProfile(Path repositoryPath, String profileName) {
+        String normalizedProfileName = profileName == null ? "" : profileName.trim();
+        if (normalizedProfileName.isBlank()) {
+            throw new IllegalStateException("Profile name is required.");
+        }
+
+        Path metadataFile = repositoryPath.resolve("repository.json");
+        RepositoryConfigFile repositoryConfigFile = readRepositoryConfigFile(metadataFile);
+
+        for (ProfileEntry profileEntry : repositoryConfigFile.profiles()) {
+            if (normalizedProfileName.equals(profileEntry.name())) {
+                throw new IllegalStateException("Profile `" + normalizedProfileName + "` already exists.");
+            }
+        }
+
+        try {
+            Files.createDirectories(repositoryPath.resolve(normalizedProfileName));
+            List<ProfileEntry> profiles = new ArrayList<>(repositoryConfigFile.profiles());
+            profiles.add(new ProfileEntry(normalizedProfileName));
+            writeRepositoryConfigFile(metadataFile, new RepositoryConfigFile(profiles));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to create profile `" + normalizedProfileName + "` in " + repositoryPath, e);
+        }
+    }
+
+    /**
+     * Switches the active profile by linking its files into the OpenCode config directory.
+     *
+     * @param profileName profile name to activate
+     */
+    public void useProfile(String profileName) {
+        ResolvedProfile resolvedProfile = resolveProfile(profileName);
+        Path profilePath = Path.of(resolvedProfile.repositoryEntry().localPath()).resolve(resolvedProfile.profileName());
+        if (!Files.isDirectory(profilePath)) {
+            throw new IllegalStateException("Profile directory does not exist: " + profilePath);
+        }
+
+        Optional<Path> previousProfilePath = activeProfileName()
+            .filter(previousProfileName -> !previousProfileName.equals(resolvedProfile.profileName()))
+            .flatMap(this::profilePathByName);
+
+        switchProfileFiles(profilePath, previousProfilePath.orElse(null), openCodeDirectory());
+        writeActiveProfile(resolvedProfile.profileName());
+    }
+
+    /**
+     * Pulls latest changes for the repository containing the requested profile.
+     *
+     * @param profileName profile name used to resolve repository
+     */
+    public void refreshProfile(String profileName) {
+        ResolvedProfile resolvedProfile = resolveProfile(profileName);
+        gitRepositoryClient.pull(Path.of(resolvedProfile.repositoryEntry().localPath()));
+    }
+
+    /**
+     * Returns the currently active profile name when available.
+     *
+     * @return active profile name, or empty when no profile is active
+     */
+    public Optional<String> activeProfileName() {
+        return Optional.ofNullable(repositoryService.loadConfigFile().config().activeProfile());
+    }
+
+    private void writeActiveProfile(String profileName) {
+        OcpConfigFile currentConfig = repositoryService.loadConfigFile();
+        OcpConfigOptions currentOptions = currentConfig.config();
+        OcpConfigOptions nextOptions = new OcpConfigOptions(currentOptions.profileVersionCheck(), profileName);
+        repositoryService.saveConfig(new OcpConfigFile(nextOptions, currentConfig.repositories()));
+    }
+
+    private void switchProfileFiles(Path sourceDirectory, Path previousSourceDirectory, Path targetDirectory) {
+        List<Path> sourceFiles = profileFiles(sourceDirectory);
+        Set<Path> sourceFileRelativePaths = new HashSet<>();
+        for (Path sourceFile : sourceFiles) {
+            sourceFileRelativePaths.add(sourceDirectory.relativize(sourceFile));
+        }
+
+        Path backupRoot = backupsDirectory().resolve(timestamp());
+        List<FileSwitchState> switchStates = new ArrayList<>();
+
+        try {
+            if (previousSourceDirectory != null) {
+                for (Path previousSourceFile : profileFiles(previousSourceDirectory)) {
+                    Path relativePath = previousSourceDirectory.relativize(previousSourceFile);
+                    if (sourceFileRelativePaths.contains(relativePath)) {
+                        continue;
+                    }
+
+                    Path targetFile = targetDirectory.resolve(relativePath);
+                    if (!Files.isSymbolicLink(targetFile)) {
+                        continue;
+                    }
+
+                    Path currentSymlinkTarget = Files.readSymbolicLink(targetFile);
+                    if (!currentSymlinkTarget.equals(previousSourceFile.toAbsolutePath())) {
+                        continue;
+                    }
+
+                    switchStates.add(new FileSwitchState(targetFile, null, currentSymlinkTarget));
+                    Files.delete(targetFile);
+                }
+            }
+
+            for (Path sourceFile : sourceFiles) {
+                Path relativePath = sourceDirectory.relativize(sourceFile);
+                Path targetFile = targetDirectory.resolve(relativePath);
+
+                Files.createDirectories(targetFile.getParent());
+
+                Path backupPath = null;
+                Path previousSymlinkTarget = null;
+                boolean existedBefore = Files.exists(targetFile, LinkOption.NOFOLLOW_LINKS);
+
+                if (existedBefore) {
+                    if (Files.isSymbolicLink(targetFile)) {
+                        previousSymlinkTarget = Files.readSymbolicLink(targetFile);
+                        Files.delete(targetFile);
+                    } else {
+                        backupPath = backupRoot.resolve(relativePath);
+                        Files.createDirectories(backupPath.getParent());
+                        Files.move(targetFile, backupPath);
+                    }
+                }
+
+                switchStates.add(new FileSwitchState(targetFile, backupPath, previousSymlinkTarget));
+                Files.createSymbolicLink(targetFile, sourceFile.toAbsolutePath());
+            }
+        } catch (IOException e) {
+            IOException rollbackFailure = rollbackSwitch(switchStates);
+            if (rollbackFailure != null) {
+                e.addSuppressed(rollbackFailure);
+            }
+            throw new IllegalStateException("Failed to switch active profile files", e);
+        }
+    }
+
+    private Optional<Path> profilePathByName(String profileName) {
+        for (RepositoryEntry repositoryEntry : repositoryService.load()) {
+            Path localPath = Path.of(repositoryEntry.localPath());
+            for (ProfileEntry profileEntry : readProfiles(localPath.resolve("repository.json"))) {
+                if (profileName.equals(profileEntry.name())) {
+                    return Optional.of(localPath.resolve(profileName));
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    private IOException rollbackSwitch(List<FileSwitchState> switchStates) {
+        List<FileSwitchState> rollbackStates = new ArrayList<>(switchStates);
+        rollbackStates.sort(Comparator.comparing((FileSwitchState state) -> state.target().toString()).reversed());
+        IOException rollbackFailure = null;
+        for (FileSwitchState state : rollbackStates) {
+            try {
+                Files.deleteIfExists(state.target());
+                if (state.previousSymlinkTarget() != null) {
+                    Files.createSymbolicLink(state.target(), state.previousSymlinkTarget());
+                } else if (state.backupPath() != null && Files.exists(state.backupPath())) {
+                    Files.createDirectories(state.target().getParent());
+                    Files.move(state.backupPath(), state.target());
+                }
+            } catch (IOException e) {
+                if (rollbackFailure == null) {
+                    rollbackFailure = new IOException("Failed to rollback profile switch");
+                }
+                rollbackFailure.addSuppressed(e);
+            }
+        }
+        return rollbackFailure;
+    }
+
+    private List<Path> profileFiles(Path sourceDirectory) {
+        if (!Files.exists(sourceDirectory)) {
             return List.of();
         }
-        try {
-            String content = Files.readString(profilesFile);
-            RepositoryConfigFile configFile = objectMapper.readValue(content, RepositoryConfigFile.class);
-            return configFile
-                .profiles()
-                .stream()
-                .filter(entry -> entry.name() != null && !entry.name().isBlank())
+        try (var paths = Files.walk(sourceDirectory)) {
+            return paths
+                .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+                .sorted()
                 .toList();
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to read profile metadata from " + profilesFile, e);
+            throw new UncheckedIOException("Failed to list profile files from " + sourceDirectory, e);
         }
+    }
+
+    private Set<String> duplicateProfileNames() {
+        Set<String> seen = new TreeSet<>();
+        Set<String> duplicates = new TreeSet<>();
+        for (RepositoryEntry repositoryEntry : repositoryService.load()) {
+            Path localPath = Path.of(repositoryEntry.localPath());
+            for (ProfileEntry profileEntry : readProfiles(localPath.resolve("repository.json"))) {
+                if (!seen.add(profileEntry.name())) {
+                    duplicates.add(profileEntry.name());
+                }
+            }
+        }
+        return duplicates;
+    }
+
+    private ResolvedProfile resolveProfile(String profileName) {
+        String normalizedProfileName = profileName == null ? "" : profileName.trim();
+        if (normalizedProfileName.isBlank()) {
+            throw new IllegalStateException("Profile name is required.");
+        }
+
+        Set<String> duplicateProfileNames = duplicateProfileNames();
+        if (!duplicateProfileNames.isEmpty()) {
+            throw new DuplicateProfilesException(duplicateProfileNames);
+        }
+
+        for (RepositoryEntry repositoryEntry : repositoryService.load()) {
+            Path localPath = Path.of(repositoryEntry.localPath());
+            for (ProfileEntry profileEntry : readProfiles(localPath.resolve("repository.json"))) {
+                if (normalizedProfileName.equals(profileEntry.name())) {
+                    return new ResolvedProfile(repositoryEntry, normalizedProfileName);
+                }
+            }
+        }
+
+        throw new IllegalStateException("Profile `" + normalizedProfileName + "` was not found.");
+    }
+
+    private RepositoryConfigFile readRepositoryConfigFile(Path metadataFile) {
+        if (!Files.exists(metadataFile)) {
+            return new RepositoryConfigFile(List.of());
+        }
+        try {
+            String content = Files.readString(metadataFile);
+            return objectMapper.readValue(content, RepositoryConfigFile.class);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read profile metadata from " + metadataFile, e);
+        }
+    }
+
+    private void writeRepositoryConfigFile(Path metadataFile, RepositoryConfigFile configFile) {
+        try {
+            Files.createDirectories(metadataFile.getParent());
+            Files.writeString(metadataFile, objectMapper.writeValueAsString(configFile));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to write profile metadata to " + metadataFile, e);
+        }
+    }
+
+    private List<ProfileEntry> readProfiles(Path profilesFile) {
+        RepositoryConfigFile configFile = readRepositoryConfigFile(profilesFile);
+        return configFile
+            .profiles()
+            .stream()
+            .filter(entry -> entry.name() != null && !entry.name().isBlank())
+            .toList();
+    }
+
+    private Path configDirectory() {
+        String configuredPath = System.getProperty("ocp.config.dir");
+        if (configuredPath != null && !configuredPath.isBlank()) {
+            return Path.of(configuredPath);
+        }
+        return Path.of(System.getProperty("user.home"), ".config", "ocp");
+    }
+
+    private Path backupsDirectory() {
+        return configDirectory().resolve("backups");
+    }
+
+    private Path openCodeDirectory() {
+        String configuredPath = System.getProperty("ocp.opencode.config.dir");
+        if (configuredPath != null && !configuredPath.isBlank()) {
+            return Path.of(configuredPath);
+        }
+        return Path.of(System.getProperty("user.home"), ".config", "opencode");
+    }
+
+    private String timestamp() {
+        return DateTimeFormatter.ofPattern("yyyyMMddHHmmss").format(LocalDateTime.now());
+    }
+
+    private record FileSwitchState(Path target, Path backupPath, Path previousSymlinkTarget) {
+    }
+
+    private record ResolvedProfile(RepositoryEntry repositoryEntry, String profileName) {
     }
 
     /**

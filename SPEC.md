@@ -52,13 +52,16 @@ ocp profile use my-company
 
 - Config directory override: JVM system property `ocp.config.dir`
 - Cache directory override: JVM system property `ocp.cache.dir`
+- OpenCode config directory override: JVM system property `ocp.opencode.config.dir`
+- Working directory override for local create commands: JVM system property `ocp.working.dir`
 
 ### `config.json` schema
 
 ```json
 {
   "config": {
-    "profileVersionCheck": true
+    "profileVersionCheck": true,
+    "activeProfile": "my-company"
   },
   "repositories": [
     {
@@ -73,6 +76,7 @@ ocp profile use my-company
 Rules:
 
 - `config.profileVersionCheck` defaults to `true`.
+- `config.activeProfile` defaults to `null` (no active profile selected).
 - `repositories[*].uri` is required.
 - `repositories[*].name` may be omitted; when omitted, name is derived from URI basename without `.git`.
 - `repositories[*].localPath` is derived from cache directory and repository name.
@@ -132,13 +136,13 @@ oss/opencode.json
 | `ocp` | Implemented | Print root usage when no subcommand is provided. |
 | `ocp help <command>` | Implemented | Print help for command/subcommand. |
 | `ocp profile list` | Implemented | List profiles from all repositories in sorted order; fail on duplicate names. |
-| `ocp profile` | Planned | Print currently active profile. |
-| `ocp profile create <name>` | Planned behavior, placeholder implemented | Create profile folder and register it in repository metadata. |
-| `ocp profile use <name>` | Planned behavior, placeholder implemented | Switch active profile by linking profile files to OpenCode config location. |
-| `ocp profile refresh <name>` | Planned | Pull latest changes for profile repository. |
-| `ocp repository add <uri>` | Planned behavior, placeholder implemented | Clone repository into local cache and register it in `config.json`. |
-| `ocp repository delete <name>` | Planned behavior, placeholder implemented | Remove repository entry from registry and delete local clone. |
-| `ocp repository create <name> [--profile-name <profile>]` | Planned | Initialize new profile repository with `repository.json` and initial profile. |
+| `ocp profile` | Implemented | Print currently active profile. |
+| `ocp profile create <name>` | Implemented | Create profile folder and register it in repository metadata. |
+| `ocp profile use <name>` | Implemented | Switch active profile by linking profile files to OpenCode config location. |
+| `ocp profile refresh <name>` | Implemented | Pull latest changes for profile repository. |
+| `ocp repository add <uri>` | Implemented | Clone repository into local cache and register it in `config.json`. |
+| `ocp repository delete <name>` | Implemented | Remove repository entry from registry and delete local clone. |
+| `ocp repository create <name> [--profile-name <profile>]` | Implemented | Initialize new profile repository with `repository.json` and initial profile. |
 
 ## Operational semantics
 

@@ -4,9 +4,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.github.alvarosanchez.ocp.git.GitProcessExecutor;
+import com.github.alvarosanchez.ocp.git.GitRepositoryClient;
 import com.github.alvarosanchez.ocp.model.OcpConfigFile;
-import com.github.alvarosanchez.ocp.model.OcpConfigOptions;
-import com.github.alvarosanchez.ocp.model.RepositoryEntry;
+import com.github.alvarosanchez.ocp.model.OcpConfigFile.OcpConfigOptions;
+import com.github.alvarosanchez.ocp.model.OcpConfigFile.RepositoryEntry;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.serde.ObjectMapper;
 import java.io.IOException;
@@ -34,7 +36,7 @@ class RepositoryServiceTest {
     void setUp() {
         applicationContext = ApplicationContext.run();
         objectMapper = applicationContext.getBean(ObjectMapper.class);
-        repositoryService = new RepositoryService(objectMapper);
+        repositoryService = new RepositoryService(objectMapper, new GitRepositoryClient(new GitProcessExecutor()));
         previousConfigDir = System.getProperty("ocp.config.dir");
         previousCacheDir = System.getProperty("ocp.cache.dir");
         System.setProperty("ocp.config.dir", tempDir.resolve("config").toString());
