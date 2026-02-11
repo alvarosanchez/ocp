@@ -79,6 +79,27 @@ class RepositoryCommandTest {
     }
 
     @Test
+    void addRemovesUnknownCachedCloneWhenConfigIsMissing() throws IOException, InterruptedException {
+        Path remote = createRemoteRepository();
+        Path localClone = Path.of(System.getProperty("ocp.cache.dir"), "repositories", "remote");
+
+        runCommand(List.of("git", "clone", remote.toUri().toString(), localClone.toString()));
+        Path staleMarker = localClone.resolve("stale-marker.txt");
+        Files.writeString(staleMarker, "stale");
+
+        CommandResult result = execute("repository", "add", remote.toUri().toString());
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("Added repository `remote`"));
+        assertTrue(Files.exists(localClone.resolve(".git")));
+        assertTrue(Files.notExists(staleMarker));
+
+        OcpConfigFile configFile = readOcpConfig(Path.of(System.getProperty("ocp.config.dir"), "config.json"));
+        assertEquals(1, configFile.repositories().size());
+        assertEquals("remote", configFile.repositories().get(0).name());
+    }
+
+    @Test
     void deleteRemovesRepositoryFromConfigAndDeletesLocalClone() throws IOException {
         Path localClone = Path.of(System.getProperty("ocp.cache.dir"), "repositories", "repo-one");
         Files.createDirectories(localClone);

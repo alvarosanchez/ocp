@@ -63,7 +63,11 @@ public final class RepositoryService {
         }
 
         RepositoryEntry added = new RepositoryEntry(repositoryName, uri, repositoriesDirectory().resolve(repositoryName).toString());
-        gitRepositoryClient.clone(uri, Path.of(added.localPath()));
+        Path localPath = Path.of(added.localPath());
+        if (Files.exists(localPath)) {
+            deleteRecursively(localPath);
+        }
+        gitRepositoryClient.clone(uri, localPath);
 
         repositories.add(added);
         saveConfig(new OcpConfigFile(loadConfigFile().config(), repositories));
