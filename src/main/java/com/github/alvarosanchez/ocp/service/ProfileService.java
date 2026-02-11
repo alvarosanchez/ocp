@@ -1,6 +1,7 @@
 package com.github.alvarosanchez.ocp.service;
 
 import com.github.alvarosanchez.ocp.git.GitRepositoryClient;
+import com.github.alvarosanchez.ocp.git.GitRepositoryClient.CommitMetadata;
 import com.github.alvarosanchez.ocp.model.OcpConfigFile;
 import com.github.alvarosanchez.ocp.model.OcpConfigFile.OcpConfigOptions;
 import com.github.alvarosanchez.ocp.model.OcpConfigFile.RepositoryEntry;
@@ -14,12 +15,16 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import jakarta.inject.Singleton;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
@@ -49,22 +54,52 @@ public final class ProfileService {
      * @return sorted, unique profiles discovered from repository metadata
      */
     public List<ProfileEntry> listProfiles() {
-        Set<String> profileNames = new TreeSet<>();
-        Set<String> duplicateProfileNames = duplicateProfileNames();
-        if (!duplicateProfileNames.isEmpty()) {
-            throw new DuplicateProfilesException(duplicateProfileNames);
-        }
         List<ProfileEntry> profiles = new ArrayList<>();
-        for (RepositoryEntry repositoryEntry : repositoryService.load()) {
-            Path localPath = Path.of(repositoryEntry.localPath());
-            for (ProfileEntry profileEntry : readProfiles(localPath.resolve("repository.json"))) {
-                profileNames.add(profileEntry.name());
-            }
-        }
-        for (String profileName : profileNames) {
-            profiles.add(new ProfileEntry(profileName));
+        for (DiscoveredProfile profile : discoverProfiles()) {
+            profiles.add(new ProfileEntry(profile.profileName()));
         }
         return profiles;
+    }
+
+    /**
+     * Lists profiles with repository and commit metadata for tabular CLI output.
+     *
+     * @return profile table data with optional update footnotes
+     */
+    public ProfileListResult listProfilesTable() {
+        List<DiscoveredProfile> discoveredProfiles = discoverProfiles();
+        Map<String, RepositorySnapshot> snapshotsByRepository = new HashMap<>();
+        Set<String> failedVersionChecks = new TreeSet<>();
+
+        for (RepositoryEntry repositoryEntry : repositoryService.load()) {
+            snapshotsByRepository.put(
+                repositoryEntry.name(),
+                snapshotForRepository(repositoryEntry, failedVersionChecks)
+            );
+        }
+
+        List<ProfileListRow> rows = new ArrayList<>();
+        boolean hasUpdates = false;
+        for (DiscoveredProfile discoveredProfile : discoveredProfiles) {
+            RepositorySnapshot snapshot = snapshotsByRepository.get(discoveredProfile.repositoryEntry().name());
+            if (snapshot == null) {
+                continue;
+            }
+            boolean updateAvailable = snapshot.commitsBehindRemote() > 0;
+            hasUpdates = hasUpdates || updateAvailable;
+            rows.add(
+                new ProfileListRow(
+                    discoveredProfile.profileName(),
+                    discoveredProfile.repositoryEntry().uri(),
+                    snapshot.shortSha(),
+                    humanizeInstant(snapshot.commitEpochSeconds()),
+                    snapshot.message(),
+                    updateAvailable
+                )
+            );
+        }
+
+        return new ProfileListResult(rows, hasUpdates, List.copyOf(failedVersionChecks));
     }
 
     /**
@@ -129,6 +164,15 @@ public final class ProfileService {
     }
 
     /**
+     * Pulls latest changes for all configured repositories.
+     */
+    public void refreshAllProfiles() {
+        for (RepositoryEntry repositoryEntry : repositoryService.load()) {
+            gitRepositoryClient.pull(Path.of(repositoryEntry.localPath()));
+        }
+    }
+
+    /**
      * Returns the currently active profile name when available.
      *
      * @return active profile name, or empty when no profile is active
@@ -139,8 +183,7 @@ public final class ProfileService {
 
     private void writeActiveProfile(String profileName) {
         OcpConfigFile currentConfig = repositoryService.loadConfigFile();
-        OcpConfigOptions currentOptions = currentConfig.config();
-        OcpConfigOptions nextOptions = new OcpConfigOptions(currentOptions.profileVersionCheck(), profileName);
+        OcpConfigOptions nextOptions = new OcpConfigOptions(profileName);
         repositoryService.saveConfig(new OcpConfigFile(nextOptions, currentConfig.repositories()));
     }
 
@@ -259,41 +302,112 @@ public final class ProfileService {
         }
     }
 
-    private Set<String> duplicateProfileNames() {
-        Set<String> seen = new TreeSet<>();
-        Set<String> duplicates = new TreeSet<>();
-        for (RepositoryEntry repositoryEntry : repositoryService.load()) {
-            Path localPath = Path.of(repositoryEntry.localPath());
-            for (ProfileEntry profileEntry : readProfiles(localPath.resolve("repository.json"))) {
-                if (!seen.add(profileEntry.name())) {
-                    duplicates.add(profileEntry.name());
-                }
-            }
-        }
-        return duplicates;
-    }
-
     private ResolvedProfile resolveProfile(String profileName) {
         String normalizedProfileName = profileName == null ? "" : profileName.trim();
         if (normalizedProfileName.isBlank()) {
             throw new IllegalStateException("Profile name is required.");
         }
 
-        Set<String> duplicateProfileNames = duplicateProfileNames();
-        if (!duplicateProfileNames.isEmpty()) {
-            throw new DuplicateProfilesException(duplicateProfileNames);
-        }
-
-        for (RepositoryEntry repositoryEntry : repositoryService.load()) {
-            Path localPath = Path.of(repositoryEntry.localPath());
-            for (ProfileEntry profileEntry : readProfiles(localPath.resolve("repository.json"))) {
-                if (normalizedProfileName.equals(profileEntry.name())) {
-                    return new ResolvedProfile(repositoryEntry, normalizedProfileName);
-                }
+        for (DiscoveredProfile profile : discoverProfiles()) {
+            if (normalizedProfileName.equals(profile.profileName())) {
+                return new ResolvedProfile(profile.repositoryEntry(), normalizedProfileName);
             }
         }
 
         throw new IllegalStateException("Profile `" + normalizedProfileName + "` was not found.");
+    }
+
+    private List<DiscoveredProfile> discoverProfiles() {
+        Set<String> seen = new HashSet<>();
+        Set<String> duplicates = new TreeSet<>();
+        List<DiscoveredProfile> discoveredProfiles = new ArrayList<>();
+
+        for (RepositoryEntry repositoryEntry : repositoryService.load()) {
+            Path localPath = Path.of(repositoryEntry.localPath());
+            for (ProfileEntry profileEntry : readProfiles(localPath.resolve("repository.json"))) {
+                if (!seen.add(profileEntry.name())) {
+                    duplicates.add(profileEntry.name());
+                    continue;
+                }
+                discoveredProfiles.add(new DiscoveredProfile(profileEntry.name(), repositoryEntry));
+            }
+        }
+
+        if (!duplicates.isEmpty()) {
+            throw new DuplicateProfilesException(duplicates);
+        }
+
+        discoveredProfiles.sort(Comparator.comparing(DiscoveredProfile::profileName));
+        return discoveredProfiles;
+    }
+
+    private RepositorySnapshot snapshotForRepository(RepositoryEntry repositoryEntry, Set<String> failedVersionChecks) {
+        Path localPath = Path.of(repositoryEntry.localPath());
+
+        String shortSha = "-";
+        long commitEpochSeconds = 0L;
+        String message = "-";
+
+        try {
+            CommitMetadata latestCommit = gitRepositoryClient.latestCommit(localPath);
+            shortSha = latestCommit.shortSha();
+            commitEpochSeconds = latestCommit.epochSeconds();
+            message = latestCommit.message();
+        } catch (RuntimeException e) {
+            message = "No local commits";
+        }
+
+        int commitsBehindRemote = 0;
+        try {
+            commitsBehindRemote = gitRepositoryClient.commitsBehindRemote(localPath);
+        } catch (RuntimeException e) {
+            failedVersionChecks.add(repositoryEntry.name());
+        }
+
+        return new RepositorySnapshot(shortSha, commitEpochSeconds, message, commitsBehindRemote);
+    }
+
+    private String humanizeInstant(long epochSeconds) {
+        if (epochSeconds <= 0) {
+            return "unknown";
+        }
+
+        Duration duration = Duration.between(Instant.ofEpochSecond(epochSeconds), Instant.now());
+        if (duration.isNegative()) {
+            return "just now";
+        }
+
+        long seconds = duration.getSeconds();
+        if (seconds < 60) {
+            return ago(seconds, "second");
+        }
+
+        long minutes = seconds / 60;
+        if (minutes < 60) {
+            return ago(minutes, "minute");
+        }
+
+        long hours = minutes / 60;
+        if (hours < 24) {
+            return ago(hours, "hour");
+        }
+
+        long days = hours / 24;
+        if (days < 30) {
+            return ago(days, "day");
+        }
+
+        long months = days / 30;
+        if (months < 12) {
+            return ago(months, "month");
+        }
+
+        long years = months / 12;
+        return ago(years, "year");
+    }
+
+    private String ago(long value, String unit) {
+        return value + " " + unit + (value == 1 ? "" : "s") + " ago";
     }
 
     private RepositoryConfigFile readRepositoryConfigFile(Path metadataFile) {
@@ -353,7 +467,55 @@ public final class ProfileService {
     private record FileSwitchState(Path target, Path backupPath, Path previousSymlinkTarget) {
     }
 
+    private record DiscoveredProfile(String profileName, RepositoryEntry repositoryEntry) {
+    }
+
+    private record RepositorySnapshot(String shortSha, long commitEpochSeconds, String message, int commitsBehindRemote) {
+    }
+
     private record ResolvedProfile(RepositoryEntry repositoryEntry, String profileName) {
+    }
+
+    /**
+     * Row data for `ocp profile list` table output.
+     *
+     * @param name profile name
+     * @param repository repository URI
+     * @param version short local commit SHA, optionally with update marker
+     * @param lastUpdated humanized relative local commit time
+     * @param message latest local commit message
+     * @param updateAvailable whether remote has newer commits
+     */
+    public record ProfileListRow(
+        String name,
+        String repository,
+        String version,
+        String lastUpdated,
+        String message,
+        boolean updateAvailable
+    ) {
+    }
+
+    /**
+     * Result for profile table rendering, including update footnotes.
+     *
+     * @param rows rows to render in table output
+     * @param hasUpdates whether at least one row has updates available
+     * @param failedVersionChecks repositories where remote checks failed
+     */
+    public record ProfileListResult(List<ProfileListRow> rows, boolean hasUpdates, List<String> failedVersionChecks) {
+
+        /**
+         * Creates a profile list result.
+         *
+         * @param rows rows to render in table output
+         * @param hasUpdates whether at least one row has updates available
+         * @param failedVersionChecks repositories where remote checks failed
+         */
+        public ProfileListResult {
+            rows = List.copyOf(rows);
+            failedVersionChecks = List.copyOf(failedVersionChecks);
+        }
     }
 
     /**

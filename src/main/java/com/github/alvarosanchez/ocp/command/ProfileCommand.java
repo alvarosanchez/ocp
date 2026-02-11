@@ -1,10 +1,16 @@
 package com.github.alvarosanchez.ocp.command;
 
-import com.github.alvarosanchez.ocp.model.RepositoryConfigFile.ProfileEntry;
+import com.github.kusoroadeolu.clique.Clique;
+import com.github.alvarosanchez.ocp.service.ProfileService.ProfileListResult;
+import com.github.alvarosanchez.ocp.service.ProfileService.ProfileListRow;
 import com.github.alvarosanchez.ocp.service.ProfileService;
+import com.github.kusoroadeolu.clique.tables.Table;
+import com.github.kusoroadeolu.clique.tables.TableType;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.concurrent.Callable;
 import jakarta.inject.Inject;
+import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
 
@@ -23,6 +29,9 @@ import picocli.CommandLine.Parameters;
     }
 )
 public class ProfileCommand implements Callable<Integer> {
+
+    private static final String ACTIVE_MARKER = "✓";
+    private static final String UPDATE_MARKER = "❄";
 
     private final ProfileService profileService;
 
@@ -68,19 +77,73 @@ public class ProfileCommand implements Callable<Integer> {
         @Override
         public Integer call() {
             try {
-                var profiles = profileService.listProfiles();
-                if (profiles.isEmpty()) {
-                    System.out.println("No profiles available yet. Add a repository with `ocp repository add`.");
+                Clique.enableCliqueColors(CommandLine.Help.Ansi.AUTO.enabled());
+                ProfileListResult listResult = profileService.listProfilesTable();
+                if (listResult.rows().isEmpty()) {
+                    Clique.parser().print("[yellow]No profiles available yet. Add a repository with `ocp repository add`.[/]");
                     return 0;
                 }
-                for (ProfileEntry profile : profiles) {
-                    System.out.println(profile.name());
+
+                String activeProfile = profileService.activeProfileName().orElse(null);
+                printTable(listResult.rows(), activeProfile);
+                if (listResult.hasUpdates()) {
+                    Clique.parser()
+                        .print(
+                            "\n[*yellow]"
+                                + UPDATE_MARKER
+                                + "[/][yellow] Newer commits are available in remote repositories. Run `ocp profile refresh`.[/]"
+                        );
+                }
+                if (!listResult.failedVersionChecks().isEmpty()) {
+                    Clique.parser()
+                        .print(
+                            "[yellow]! Skipped remote update checks for repositories: "
+                                + String.join(", ", listResult.failedVersionChecks())
+                                + ".[/]"
+                        );
                 }
                 return 0;
             } catch (ProfileService.DuplicateProfilesException e) {
                 System.err.println("Error: duplicate profile names found: " + String.join(", ", e.duplicateProfileNames()));
                 return 1;
             }
+        }
+
+        private void printTable(List<ProfileListRow> rows, String activeProfile) {
+            Table table = Clique.table(TableType.ROUNDED_BOX_DRAW);
+            table.addHeaders(
+                "[cyan, bold]NAME[/]",
+                "[cyan, bold]ACTIVE[/]",
+                "[cyan, bold]REPOSITORY[/]",
+                "[cyan, bold]VERSION[/]",
+                "[cyan, bold]LAST UPDATED[/]",
+                "[cyan, bold]MESSAGE[/]"
+            );
+            for (ProfileListRow row : rows) {
+                table.addRows(
+                    row.name(),
+                    activeMarker(row.name(), activeProfile),
+                    row.repository(),
+                    renderedVersion(row),
+                    row.lastUpdated(),
+                    row.message()
+                );
+            }
+            table.render();
+        }
+
+        private String renderedVersion(ProfileListRow row) {
+            if (!row.updateAvailable()) {
+                return row.version();
+            }
+            return row.version() + " [*yellow]" + UPDATE_MARKER + "[/]";
+        }
+
+        private String activeMarker(String profileName, String activeProfile) {
+            if (activeProfile == null || !activeProfile.equals(profileName)) {
+                return "";
+            }
+            return "[green]" + ACTIVE_MARKER + "[/]";
         }
     }
 
@@ -160,7 +223,7 @@ public class ProfileCommand implements Callable<Integer> {
             this.profileService = profileService;
         }
 
-        @Parameters(index = "0", description = "Profile name.")
+        @Parameters(index = "0", arity = "0..1", description = "Profile name.")
         private String profileName;
 
         /**
@@ -171,8 +234,15 @@ public class ProfileCommand implements Callable<Integer> {
         @Override
         public Integer call() {
             try {
+                Clique.enableCliqueColors(CommandLine.Help.Ansi.AUTO.enabled());
+                if (profileName == null || profileName.isBlank()) {
+                    profileService.refreshAllProfiles();
+                    Clique.parser().print("[green, bold]Refreshed all repositories.[/]");
+                    return 0;
+                }
+
                 profileService.refreshProfile(profileName);
-                System.out.println("Refreshed profile `" + profileName + "`.");
+                Clique.parser().print("[green, bold]Refreshed profile `" + profileName + "`.[/]");
                 return 0;
             } catch (ProfileService.DuplicateProfilesException e) {
                 System.err.println("Error: duplicate profile names found: " + String.join(", ", e.duplicateProfileNames()));

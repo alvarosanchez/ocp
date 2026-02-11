@@ -94,6 +94,32 @@ class ProfileCommandTest {
     }
 
     @Test
+    void listShowsActiveColumnWithAsciiMarkerForCurrentProfile() throws IOException {
+        writeRepositoryMetadata(
+            "repo-local",
+            new RepositoryConfigFile(
+                List.of(
+                    new ProfileEntry("corporate"),
+                    new ProfileEntry("oss")
+                )
+            )
+        );
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions("corporate"),
+                List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null))
+            )
+        );
+
+        CommandResult result = execute("profile", "list");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("ACTIVE"));
+        assertTrue(result.stdout().contains("✓"));
+    }
+
+    @Test
     void createCreatesProfileDirectoryAndRepositoryMetadata() throws IOException {
         Path repositoryRoot = Path.of(System.getProperty("ocp.working.dir"));
         Files.createDirectories(repositoryRoot);
@@ -116,7 +142,7 @@ class ProfileCommandTest {
 
         writeOcpConfig(
             new OcpConfigFile(
-                new OcpConfigOptions(true),
+                new OcpConfigOptions(),
                 List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null))
             )
         );
@@ -164,7 +190,7 @@ class ProfileCommandTest {
 
         writeOcpConfig(
             new OcpConfigFile(
-                new OcpConfigOptions(true),
+                new OcpConfigOptions(),
                 List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null))
             )
         );
@@ -190,7 +216,7 @@ class ProfileCommandTest {
 
         writeOcpConfig(
             new OcpConfigFile(
-                new OcpConfigOptions(true),
+                new OcpConfigOptions(),
                 List.of(new RepositoryEntry("repo-refresh", state.remoteUri(), null))
             )
         );
@@ -225,6 +251,91 @@ class ProfileCommandTest {
     }
 
     @Test
+    void refreshWithoutProfileNameRefreshesAllRepositories() throws IOException, InterruptedException {
+        RemoteRepositoryState state = createRemoteProfileRepository("ops");
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-refresh", state.remoteUri(), null))
+            )
+        );
+
+        runCommand(List.of("git", "clone", state.remoteUri(), state.localClone().toString()));
+        Path outdatedFile = state.localClone().resolve("new-file.txt");
+        assertTrue(Files.notExists(outdatedFile));
+
+        Path updateWorktree = tempDir.resolve("update-worktree-all");
+        runCommand(List.of("git", "clone", state.remoteUri(), updateWorktree.toString()));
+        Files.writeString(updateWorktree.resolve("new-file.txt"), "new");
+        runCommand(List.of("git", "-C", updateWorktree.toString(), "add", "new-file.txt"));
+        runCommand(List.of(
+            "git",
+            "-C",
+            updateWorktree.toString(),
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "user.name=test",
+            "commit",
+            "-m",
+            "update"
+        ));
+        runCommand(List.of("git", "-C", updateWorktree.toString(), "push", "origin", "HEAD"));
+
+        CommandResult result = execute("profile", "refresh");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("Refreshed all repositories"));
+        assertTrue(Files.exists(outdatedFile));
+    }
+
+    @Test
+    void listShowsTableWithCommitMetadataAndUpdateFootnote() throws IOException, InterruptedException {
+        RemoteRepositoryState state = createRemoteProfileRepository("ops");
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-refresh", state.remoteUri(), null))
+            )
+        );
+
+        runCommand(List.of("git", "clone", state.remoteUri(), state.localClone().toString()));
+
+        Path updateWorktree = tempDir.resolve("update-worktree-list");
+        runCommand(List.of("git", "clone", state.remoteUri(), updateWorktree.toString()));
+        Files.writeString(updateWorktree.resolve("new-file.txt"), "new");
+        runCommand(List.of("git", "-C", updateWorktree.toString(), "add", "new-file.txt"));
+        runCommand(List.of(
+            "git",
+            "-C",
+            updateWorktree.toString(),
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "user.name=test",
+            "commit",
+            "-m",
+            "update"
+        ));
+        runCommand(List.of("git", "-C", updateWorktree.toString(), "push", "origin", "HEAD"));
+
+        CommandResult result = execute("profile", "list");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("NAME"));
+        assertTrue(result.stdout().contains("REPOSITORY"));
+        assertTrue(result.stdout().contains("VERSION"));
+        assertTrue(result.stdout().contains("LAST UPDATED"));
+        assertTrue(result.stdout().contains("MESSAGE"));
+        assertTrue(result.stdout().contains("ops"));
+        assertTrue(result.stdout().contains(state.remoteUri()));
+        assertTrue(result.stdout().contains("❄"));
+        assertTrue(result.stdout().contains("❄ Newer commits are available in remote repositories."));
+    }
+
+    @Test
     void listProfilesFromLocalRepositoryMetadata() throws IOException {
         writeRepositoryMetadata(
             "repo-local",
@@ -238,7 +349,7 @@ class ProfileCommandTest {
 
         writeOcpConfig(
             new OcpConfigFile(
-                new OcpConfigOptions(true),
+                new OcpConfigOptions(),
                 List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null))
             )
         );
@@ -246,7 +357,10 @@ class ProfileCommandTest {
         CommandResult result = execute("profile", "list");
 
         assertEquals(0, result.exitCode());
-        assertEquals("corporate\noss", result.stdout().trim());
+        assertTrue(result.stdout().contains("NAME"));
+        assertTrue(result.stdout().contains("corporate"));
+        assertTrue(result.stdout().contains("oss"));
+        assertTrue(result.stdout().contains("git@github.com:acme/repo-local.git"));
     }
 
     @Test
@@ -272,7 +386,7 @@ class ProfileCommandTest {
 
         writeOcpConfig(
             new OcpConfigFile(
-                new OcpConfigOptions(true),
+                new OcpConfigOptions(),
                 List.of(
                     new RepositoryEntry("repo-one", "git@github.com:acme/repo-one.git", null),
                     new RepositoryEntry("repo-two", "git@github.com:acme/repo-two.git", null)
@@ -283,7 +397,14 @@ class ProfileCommandTest {
         CommandResult result = execute("profile", "list");
 
         assertEquals(0, result.exitCode());
-        assertEquals("alpha\nbeta\ndelta\ngamma", result.stdout().trim());
+        int alphaPosition = result.stdout().indexOf("alpha");
+        int betaPosition = result.stdout().indexOf("beta");
+        int deltaPosition = result.stdout().indexOf("delta");
+        int gammaPosition = result.stdout().indexOf("gamma");
+        assertTrue(alphaPosition > 0);
+        assertTrue(alphaPosition < betaPosition);
+        assertTrue(betaPosition < deltaPosition);
+        assertTrue(deltaPosition < gammaPosition);
     }
 
     @Test
@@ -299,7 +420,7 @@ class ProfileCommandTest {
 
         writeOcpConfig(
             new OcpConfigFile(
-                new OcpConfigOptions(true),
+                new OcpConfigOptions(),
                 List.of(
                     new RepositoryEntry("repo-one", "git@github.com:acme/repo-one.git", null),
                     new RepositoryEntry("repo-two", "git@github.com:acme/repo-two.git", null)
@@ -350,7 +471,7 @@ class ProfileCommandTest {
 
             writeOcpConfig(
                 new OcpConfigFile(
-                    new OcpConfigOptions(true),
+                new OcpConfigOptions(),
                     List.of(new RepositoryEntry("repo-remote", gitServer.getGitRepoURIAsHttp().toString(), null))
                 )
             );
@@ -358,7 +479,8 @@ class ProfileCommandTest {
             CommandResult result = execute("profile", "list");
 
             assertEquals(0, result.exitCode());
-            assertEquals("remote-team", result.stdout().trim());
+            assertTrue(result.stdout().contains("remote-team"));
+            assertTrue(result.stdout().contains("NAME"));
             assertTrue(Files.exists(localClone.resolve(".git")));
         }
     }

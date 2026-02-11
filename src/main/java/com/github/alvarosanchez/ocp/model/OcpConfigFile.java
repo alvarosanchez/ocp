@@ -19,32 +19,28 @@ public record OcpConfigFile(OcpConfigOptions config, List<RepositoryEntry> repos
      * @param repositories user-added repositories
      */
     public OcpConfigFile {
-        config = config == null ? new OcpConfigOptions(true) : config;
+        config = config == null ? new OcpConfigOptions() : config;
         repositories = repositories == null ? List.of() : List.copyOf(repositories);
     }
 
     /**
      * Global OCP configuration options.
      *
-     * @param profileVersionCheck enables repository profile version checks
      * @param activeProfile currently active profile name
      */
     @Serdeable
-    public record OcpConfigOptions(boolean profileVersionCheck, String activeProfile) {
+    public record OcpConfigOptions(String activeProfile) {
 
         /**
-         * Creates configuration options with no active profile selected.
-         *
-         * @param profileVersionCheck enables repository profile version checks
+         * Creates configuration options.
          */
-        public OcpConfigOptions(boolean profileVersionCheck) {
-            this(profileVersionCheck, null);
+        public OcpConfigOptions() {
+            this(null);
         }
 
         /**
          * Creates configuration options.
          *
-         * @param profileVersionCheck enables repository profile version checks
          * @param activeProfile currently active profile name
          */
         public OcpConfigOptions {

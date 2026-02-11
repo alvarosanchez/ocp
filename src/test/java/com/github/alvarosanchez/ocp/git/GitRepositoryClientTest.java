@@ -104,6 +104,32 @@ class GitRepositoryClientTest {
         assertTrue(thrown.getMessage().contains("Failed to parse git rev-list output"));
     }
 
+    @Test
+    void latestCommitParsesShaTimestampAndMessage() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(List.of(new StubProcess(0, "abc1234\u001f1739382350\u001ffeat: test\n")));
+        Path localPath = tempDir.resolve("repositories/repo-six");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        GitRepositoryClient.CommitMetadata metadata = client.latestCommit(localPath);
+
+        assertEquals("abc1234", metadata.shortSha());
+        assertEquals(1739382350L, metadata.epochSeconds());
+        assertEquals("feat: test", metadata.message());
+    }
+
+    @Test
+    void latestCommitThrowsWhenOutputIsMalformed() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(List.of(new StubProcess(0, "malformed")));
+        Path localPath = tempDir.resolve("repositories/repo-seven");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        IllegalStateException thrown = assertThrows(IllegalStateException.class, () -> client.latestCommit(localPath));
+
+        assertTrue(thrown.getMessage().contains("Failed to parse git log output"));
+    }
+
     private static final class StubProcessExecutor extends GitProcessExecutor {
 
         private final Deque<Process> processes;

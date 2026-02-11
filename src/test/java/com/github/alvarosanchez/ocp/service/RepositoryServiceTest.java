@@ -69,7 +69,7 @@ class RepositoryServiceTest {
     void loadNormalizesEntriesUsingRepositoryNameAndCacheDirectory() throws IOException {
         writeConfig(
             new OcpConfigFile(
-                new OcpConfigOptions(true),
+                new OcpConfigOptions(),
                 List.of(
                     new RepositoryEntry("", " git@github.com:acme/alpha.git ", null),
                     new RepositoryEntry("custom", "https://github.com/acme/beta.git", null),

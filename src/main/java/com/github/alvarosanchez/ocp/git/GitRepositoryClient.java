@@ -83,6 +83,31 @@ public final class GitRepositoryClient {
     }
 
     /**
+     * Returns metadata for the latest local commit in a repository.
+     *
+     * @param localPath local repository path
+     * @return metadata for the latest local commit
+     */
+    public CommitMetadata latestCommit(Path localPath) {
+        String output = runAndCapture(
+            localPath,
+            "log",
+            List.of("git", "-C", localPath.toString(), "log", "-1", "--format=%h%x1f%ct%x1f%s")
+        ).trim();
+
+        String[] tokens = output.split("\\u001f", 3);
+        if (tokens.length != 3) {
+            throw new IllegalStateException("Failed to parse git log output for " + localPath + ": " + output);
+        }
+
+        try {
+            return new CommitMetadata(tokens[0], Long.parseLong(tokens[1]), tokens[2]);
+        } catch (NumberFormatException e) {
+            throw new IllegalStateException("Failed to parse git log timestamp for " + localPath + ": " + output, e);
+        }
+    }
+
+    /**
      * Initializes a git repository in the provided local path.
      *
      * @param localPath local repository path
@@ -115,5 +140,15 @@ public final class GitRepositoryClient {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while running git " + operation + " for " + localPath, e);
         }
+    }
+
+    /**
+     * Latest commit metadata for a repository.
+     *
+     * @param shortSha short commit SHA
+     * @param epochSeconds commit timestamp in epoch seconds
+     * @param message commit message subject
+     */
+    public record CommitMetadata(String shortSha, long epochSeconds, String message) {
     }
 }

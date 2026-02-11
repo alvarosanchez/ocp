@@ -112,7 +112,7 @@ class ProfileServiceTest {
     private void writeConfig(List<RepositoryEntry> repositories) throws IOException {
         Path configDir = Path.of(System.getProperty("ocp.config.dir"));
         Files.createDirectories(configDir);
-        OcpConfigFile configFile = new OcpConfigFile(new OcpConfigOptions(true), repositories);
+        OcpConfigFile configFile = new OcpConfigFile(new OcpConfigOptions(), repositories);
         Files.writeString(configDir.resolve("config.json"), objectMapper.writeValueAsString(configFile));
     }
 

@@ -5,6 +5,7 @@ micronaut-platform = "4.10.7"
 testcontainers = "1.21.3"
 testcontainers-gitserver = "0.8.0"
 commons-codec = "1.18.0"
+clique = "v2.0.0"
 
 [libraries]
 micronaut-inject-java = { module = "io.micronaut:micronaut-inject-java" }
@@ -19,6 +20,7 @@ testcontainers-bom = { module = "org.testcontainers:testcontainers-bom", version
 testcontainers-junit-jupiter = { module = "org.testcontainers:junit-jupiter" }
 testcontainers-gitserver = { module = "io.github.sparsick.testcontainers.gitserver:testcontainers-gitserver", version.ref = "testcontainers-gitserver" }
 commons-codec = { module = "commons-codec:commons-codec", version.ref = "commons-codec" }
+clique = { module = "com.github.kusoroadeolu:Clique", version.ref = "clique" }
 
 [plugins]
 micronaut-application = { id = "io.micronaut.application", version.ref = "micronaut-plugin" }

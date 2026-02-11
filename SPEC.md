@@ -60,7 +60,6 @@ ocp profile use my-company
 ```json
 {
   "config": {
-    "profileVersionCheck": true,
     "activeProfile": "my-company"
   },
   "repositories": [
@@ -75,7 +74,6 @@ ocp profile use my-company
 
 Rules:
 
-- `config.profileVersionCheck` defaults to `true`.
 - `config.activeProfile` defaults to `null` (no active profile selected).
 - `repositories[*].uri` is required.
 - `repositories[*].name` may be omitted; when omitted, name is derived from URI basename without `.git`.
@@ -135,11 +133,11 @@ oss/opencode.json
 | --- | --- | --- |
 | `ocp` | Implemented | Print root usage when no subcommand is provided. |
 | `ocp help <command>` | Implemented | Print help for command/subcommand. |
-| `ocp profile list` | Implemented | List profiles from all repositories in sorted order; fail on duplicate names. |
+| `ocp profile list` | Implemented | Print a table of profiles with repository URI, local commit metadata, and non-fatal remote update hints. |
 | `ocp profile` | Implemented | Print currently active profile. |
 | `ocp profile create <name>` | Implemented | Create profile folder and register it in repository metadata. |
 | `ocp profile use <name>` | Implemented | Switch active profile by linking profile files to OpenCode config location. |
-| `ocp profile refresh <name>` | Implemented | Pull latest changes for profile repository. |
+| `ocp profile refresh [name]` | Implemented | Pull latest changes for a specific profile repository, or for all repositories when no name is provided. |
 | `ocp repository add <uri>` | Implemented | Clone repository into local cache and register it in `config.json`. |
 | `ocp repository delete <name>` | Implemented | Remove repository entry from registry and delete local clone. |
 | `ocp repository create <name> [--profile-name <profile>]` | Implemented | Initialize new profile repository with `repository.json` and initial profile. |
@@ -159,10 +157,9 @@ oss/opencode.json
 
 ### Profile version checks
 
-- Controlled by `config.profileVersionCheck`.
-- Default is enabled.
-- Target behavior: on each invocation, check whether local repository state is behind remote and print a non-fatal update hint.
-- Version-check failures (for example offline network) must not block normal command execution.
+- Executed only during `ocp profile list`.
+- `VERSION` displays the latest local short SHA; when remote has newer commits, a footnote is printed and table rows include a `❄` marker.
+- Version-check failures (for example offline network) must not block profile listing and are reported as non-fatal notes.
 
 ### Profile switching and backups (target behavior)
 
@@ -199,7 +196,7 @@ oss/opencode.json
   - output contains `Usage: ocp`
 - `ocp profile list`
   - with no repositories/profiles: exits `0`, prints helpful empty-state message
-  - with multiple repositories: outputs sorted profile names
+  - with multiple repositories: outputs a table sorted by profile name with columns `NAME`, `REPOSITORY`, `VERSION`, `LAST UPDATED`, `MESSAGE`
   - with duplicate profile names: exits `1`, prints duplicate-name error on stderr
 - Repository config loading
   - missing `config.json`: treated as empty repository list

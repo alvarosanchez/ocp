@@ -11,6 +11,7 @@ val micronautPlatformVersion = libs.versions.micronaut.platform.get()
 
 repositories {
     mavenCentral()
+    maven("https://jitpack.io")
 }
 
 dependencies {
@@ -20,6 +21,7 @@ dependencies {
 
     implementation(libs.micronaut.picocli)
     implementation(libs.micronaut.serde.jackson)
+    implementation(libs.clique)
 
     runtimeOnly(libs.logback.classic)
 

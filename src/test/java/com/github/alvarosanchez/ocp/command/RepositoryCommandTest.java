@@ -107,7 +107,7 @@ class RepositoryCommandTest {
 
         writeOcpConfig(
             new OcpConfigFile(
-                new OcpConfigOptions(true),
+                new OcpConfigOptions(),
                 List.of(new RepositoryEntry("repo-one", "git@github.com:acme/repo-one.git", localClone.toString()))
             )
         );

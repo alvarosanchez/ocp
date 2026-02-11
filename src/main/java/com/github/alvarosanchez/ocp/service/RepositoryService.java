@@ -145,7 +145,7 @@ public final class RepositoryService {
     OcpConfigFile loadConfigFile() {
         Path file = repositoriesFile();
         if (!Files.exists(file)) {
-            return new OcpConfigFile(new OcpConfigOptions(true), List.of());
+            return new OcpConfigFile(new OcpConfigOptions(), List.of());
         }
         try {
             String content = Files.readString(file);
