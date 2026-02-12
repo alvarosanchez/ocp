@@ -14,7 +14,9 @@ import io.micronaut.configuration.picocli.PicocliRunner;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.serde.ObjectMapper;
 import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -299,6 +301,53 @@ class ProfileCommandTest {
     }
 
     @Test
+    void refreshPromptsWhenRepositoryHasLocalChangesAndCanDiscardThenRefresh() throws IOException, InterruptedException {
+        RemoteRepositoryState state = createRemoteProfileRepository("ops");
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-refresh", state.remoteUri(), null))
+            )
+        );
+
+        runCommand(List.of("git", "clone", state.remoteUri(), state.localClone().toString()));
+        Path localProfileFile = state.localClone().resolve("ops").resolve("opencode.json");
+        Files.writeString(localProfileFile, "local-edit");
+
+        CommandResult result = executeWithInput("1\n", "profile", "refresh", "ops");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("Choose how to proceed"));
+        assertTrue(result.stdout().contains("Diff:"));
+        assertTrue(result.stdout().contains("Refreshed profile `ops`"));
+        assertEquals("{}", Files.readString(localProfileFile));
+    }
+
+    @Test
+    void refreshPromptsWhenRepositoryHasLocalChangesAndCanAbortWithoutChanges() throws IOException, InterruptedException {
+        RemoteRepositoryState state = createRemoteProfileRepository("ops");
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-refresh", state.remoteUri(), null))
+            )
+        );
+
+        runCommand(List.of("git", "clone", state.remoteUri(), state.localClone().toString()));
+        Path localProfileFile = state.localClone().resolve("ops").resolve("opencode.json");
+        Files.writeString(localProfileFile, "local-edit");
+
+        CommandResult result = executeWithInput("3\n", "profile", "refresh", "ops");
+
+        assertEquals(1, result.exitCode());
+        assertTrue(result.stdout().contains("Choose how to proceed"));
+        assertTrue(result.stderr().contains("Refresh cancelled"));
+        assertEquals("local-edit", Files.readString(localProfileFile));
+    }
+
+    @Test
     void listShowsTableWithCommitMetadataAndUpdateFootnote() throws IOException, InterruptedException {
         RemoteRepositoryState state = createRemoteProfileRepository("ops");
 
@@ -494,19 +543,26 @@ class ProfileCommandTest {
     }
 
     private CommandResult execute(String... args) {
+        return executeWithInput("", args);
+    }
+
+    private CommandResult executeWithInput(String input, String... args) {
         ByteArrayOutputStream stdout = new ByteArrayOutputStream();
         ByteArrayOutputStream stderr = new ByteArrayOutputStream();
         PrintStream originalOut = System.out;
         PrintStream originalErr = System.err;
+        InputStream originalIn = System.in;
 
         try {
             System.setOut(new PrintStream(stdout));
             System.setErr(new PrintStream(stderr));
+            System.setIn(new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)));
             int exitCode = PicocliRunner.execute(OcpCommand.class, args);
             return new CommandResult(exitCode, stdout.toString(), stderr.toString());
         } finally {
             System.setOut(originalOut);
             System.setErr(originalErr);
+            System.setIn(originalIn);
         }
     }
 

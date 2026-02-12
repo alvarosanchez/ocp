@@ -119,6 +119,54 @@ class GitRepositoryClientTest {
     }
 
     @Test
+    void hasLocalChangesReturnsFalseWhenStatusIsEmpty() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(List.of(new StubProcess(0, "")));
+        Path localPath = tempDir.resolve("repositories/repo-eight");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        boolean hasLocalChanges = client.hasLocalChanges(localPath);
+
+        assertEquals(false, hasLocalChanges);
+        assertEquals(
+            List.of(List.of("git", "-C", localPath.toString(), "status", "--porcelain")),
+            processExecutor.commands()
+        );
+    }
+
+    @Test
+    void localDiffReturnsCapturedDiffOutput() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(List.of(new StubProcess(0, "diff --git a/opencode.json b/opencode.json\n")));
+        Path localPath = tempDir.resolve("repositories/repo-nine");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        String diff = client.localDiff(localPath);
+
+        assertTrue(diff.contains("diff --git"));
+    }
+
+    @Test
+    void discardLocalChangesRunsResetAndClean() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(
+            List.of(new StubProcess(0, ""), new StubProcess(0, ""))
+        );
+        Path localPath = tempDir.resolve("repositories/repo-ten");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        client.discardLocalChanges(localPath);
+
+        assertEquals(
+            List.of(
+                List.of("git", "-C", localPath.toString(), "reset", "--hard", "HEAD"),
+                List.of("git", "-C", localPath.toString(), "clean", "-fd")
+            ),
+            processExecutor.commands()
+        );
+    }
+
+    @Test
     void latestCommitParsesShaTimestampAndMessage() {
         StubProcessExecutor processExecutor = new StubProcessExecutor(List.of(new StubProcess(0, "abc1234\u001f1739382350\u001ffeat: test\n")));
         Path localPath = tempDir.resolve("repositories/repo-six");

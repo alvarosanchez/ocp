@@ -19,8 +19,12 @@ public final class Cli {
     private Cli() {
     }
 
+    public static void print(String message) {
+        Clique.parser().print(message);
+    }
+
     public static void info(String message) {
-        Clique.parser().print("[tokyo_blue]" + message + "[/");
+        Clique.parser().print("[tokyo_blue]" + message + "[/]");
     }
 
     public static void success(String message) {

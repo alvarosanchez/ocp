@@ -58,6 +58,41 @@ public final class GitRepositoryClient {
         runInRepository(localPath, "pull", List.of("git", "-C", localPath.toString(), "pull", "--ff-only", "--quiet"));
     }
 
+    public boolean hasLocalChanges(Path localPath) {
+        String output = runAndCapture(localPath, "status", List.of("git", "-C", localPath.toString(), "status", "--porcelain"));
+        return !output.trim().isEmpty();
+    }
+
+    public String localDiff(Path localPath) {
+        return runAndCapture(localPath, "diff", List.of("git", "-C", localPath.toString(), "diff"));
+    }
+
+    public void discardLocalChanges(Path localPath) {
+        runInRepository(localPath, "reset", List.of("git", "-C", localPath.toString(), "reset", "--hard", "HEAD"));
+        runInRepository(localPath, "clean", List.of("git", "-C", localPath.toString(), "clean", "-fd"));
+    }
+
+    public void commitLocalChangesAndForcePush(Path localPath) {
+        runInRepository(localPath, "add", List.of("git", "-C", localPath.toString(), "add", "-A"));
+        runInRepository(
+            localPath,
+            "commit",
+            List.of(
+                "git",
+                "-C",
+                localPath.toString(),
+                "-c",
+                "user.email=ocp@local",
+                "-c",
+                "user.name=ocp",
+                "commit",
+                "-m",
+                "chore: persist local opencode configuration changes"
+            )
+        );
+        runInRepository(localPath, "push", List.of("git", "-C", localPath.toString(), "push", "--force-with-lease"));
+    }
+
     /**
      * Returns whether local HEAD differs from the upstream tracked branch tip.
      *

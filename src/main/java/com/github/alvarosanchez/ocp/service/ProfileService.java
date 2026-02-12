@@ -143,13 +143,25 @@ public final class ProfileService {
             throw new IllegalStateException("Profile `" + normalizedProfileName + "` was not found.");
         }
 
-        gitRepositoryClient.pull(Path.of(repositoryEntry.localPath()));
+        refreshRepository(repositoryEntry);
         return true;
     }
 
     public boolean refreshAllProfiles() {
         for (RepositoryEntry repositoryEntry : repositoryService.load()) {
-            gitRepositoryClient.pull(Path.of(repositoryEntry.localPath()));
+            refreshRepository(repositoryEntry);
+        }
+        return true;
+    }
+
+    public boolean resolveRefreshConflict(ProfileRefreshConflictException conflict, RefreshConflictResolution resolution) {
+        Path localPath = Path.of(conflict.repositoryPath());
+        if (resolution == RefreshConflictResolution.DISCARD_AND_REFRESH) {
+            gitRepositoryClient.discardLocalChanges(localPath);
+        } else if (resolution == RefreshConflictResolution.COMMIT_AND_FORCE_PUSH) {
+            gitRepositoryClient.commitLocalChangesAndForcePush(localPath);
+        } else {
+            return false;
         }
         return true;
     }
@@ -302,6 +314,18 @@ public final class ProfileService {
 
     private Path profilePathFor(String profileName, RepositoryEntry repositoryEntry) {
         return Path.of(repositoryEntry.localPath()).resolve(profileName);
+    }
+
+    private void refreshRepository(RepositoryEntry repositoryEntry) {
+        Path localPath = Path.of(repositoryEntry.localPath());
+        if (gitRepositoryClient.hasLocalChanges(localPath)) {
+            throw new ProfileRefreshConflictException(
+                repositoryEntry.name(),
+                repositoryEntry.localPath(),
+                gitRepositoryClient.localDiff(localPath)
+            );
+        }
+        gitRepositoryClient.pull(localPath);
     }
 
     private RepositoryStatus repositoryStatusFor(RepositoryEntry repositoryEntry) {
@@ -519,6 +543,40 @@ public final class ProfileService {
 
         public Set<String> duplicateProfileNames() {
             return duplicateProfileNames;
+        }
+    }
+
+    public enum RefreshConflictResolution {
+        DISCARD_AND_REFRESH,
+        COMMIT_AND_FORCE_PUSH,
+        DO_NOTHING
+    }
+
+    public static final class ProfileRefreshConflictException extends RuntimeException {
+
+        private static final long serialVersionUID = 1L;
+
+        private final String repositoryName;
+        private final String repositoryPath;
+        private final String diff;
+
+        ProfileRefreshConflictException(String repositoryName, String repositoryPath, String diff) {
+            super("Local changes detected in repository `" + repositoryName + "`.");
+            this.repositoryName = repositoryName;
+            this.repositoryPath = repositoryPath;
+            this.diff = diff == null ? "" : diff;
+        }
+
+        public String repositoryName() {
+            return repositoryName;
+        }
+
+        public String repositoryPath() {
+            return repositoryPath;
+        }
+
+        public String diff() {
+            return diff;
         }
     }
 }
