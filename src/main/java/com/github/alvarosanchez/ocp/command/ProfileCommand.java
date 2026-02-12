@@ -36,9 +36,14 @@ public class ProfileCommand implements Callable<Integer> {
      */
     @Override
     public Integer call() {
+        boolean checkingLatestVersions = false;
         try {
+            checkingLatestVersions = Cli.beginTransientInfo("Checking latest versions...");
             Profile activeProfile = profileService.getActiveProfile();
             List<Profile> profiles = List.of(activeProfile);
+
+            Cli.endTransientInfo(checkingLatestVersions);
+            checkingLatestVersions = false;
             ProfileTableRenderer.printWithWarnings(profiles);
             return 0;
         } catch (ProfileService.NoActiveProfileException e) {
@@ -50,6 +55,8 @@ public class ProfileCommand implements Callable<Integer> {
         } catch (RuntimeException e) {
             Cli.error(e.getMessage());
             return 1;
+        } finally {
+            Cli.endTransientInfo(checkingLatestVersions);
         }
     }
 }

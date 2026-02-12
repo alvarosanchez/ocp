@@ -9,6 +9,8 @@ import picocli.CommandLine;
 
 public final class Cli {
 
+    private static final String CLEAR_LINE = "\r\u001B[2K";
+
     public static final TableConfiguration TABLE_CFG = TableConfiguration
             .immutableBuilder()
             .borderStyle(borderStyle())
@@ -46,6 +48,23 @@ public final class Cli {
     public static void init() {
         Clique.enableCliqueColors(CommandLine.Help.Ansi.AUTO.enabled());
         Clique.registerTheme("tokyo-night");
+    }
+
+    public static boolean beginTransientInfo(String message) {
+        if (System.console() == null) {
+            return false;
+        }
+        System.out.print("\r" + Clique.parser().parse("[tokyo_blue]" + message + "[/]"));
+        System.out.flush();
+        return true;
+    }
+
+    public static void endTransientInfo(boolean shown) {
+        if (!shown) {
+            return;
+        }
+        System.out.print(CLEAR_LINE);
+        System.out.flush();
     }
 
     private static BorderStyle borderStyle() {
