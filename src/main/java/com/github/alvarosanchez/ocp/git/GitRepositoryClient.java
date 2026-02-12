@@ -58,11 +58,23 @@ public final class GitRepositoryClient {
         runInRepository(localPath, "pull", List.of("git", "-C", localPath.toString(), "pull", "--ff-only", "--quiet"));
     }
 
+    /**
+     * Returns whether a local repository has uncommitted changes.
+     *
+     * @param localPath local repository path
+     * @return {@code true} when there are local uncommitted changes
+     */
     public boolean hasLocalChanges(Path localPath) {
         String output = runAndCapture(localPath, "status", List.of("git", "-C", localPath.toString(), "status", "--porcelain"));
         return !output.trim().isEmpty();
     }
 
+    /**
+     * Returns the colored local diff for a repository.
+     *
+     * @param localPath local repository path
+     * @return ANSI-colored diff output
+     */
     public String localDiff(Path localPath) {
         return runAndCapture(
             localPath,
@@ -71,11 +83,21 @@ public final class GitRepositoryClient {
         );
     }
 
+    /**
+     * Discards local modifications and untracked files in a repository.
+     *
+     * @param localPath local repository path
+     */
     public void discardLocalChanges(Path localPath) {
         runInRepository(localPath, "reset", List.of("git", "-C", localPath.toString(), "reset", "--hard", "HEAD"));
         runInRepository(localPath, "clean", List.of("git", "-C", localPath.toString(), "clean", "-fd"));
     }
 
+    /**
+     * Commits all local changes and force-pushes them to the tracked branch.
+     *
+     * @param localPath local repository path
+     */
     public void commitLocalChangesAndForcePush(Path localPath) {
         runInRepository(localPath, "add", List.of("git", "-C", localPath.toString(), "add", "-A"));
         runInRepository(

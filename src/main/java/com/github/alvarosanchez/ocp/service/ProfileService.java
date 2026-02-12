@@ -28,6 +28,9 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
+/**
+ * Service that manages profile discovery, activation, and repository refresh operations.
+ */
 @Singleton
 public final class ProfileService {
 
@@ -45,6 +48,11 @@ public final class ProfileService {
         this.gitRepositoryClient = gitRepositoryClient;
     }
 
+    /**
+     * Returns the currently active profile with repository metadata.
+     *
+     * @return active profile
+     */
     public Profile getActiveProfile() {
         String activeProfileName = currentActiveProfileName();
         if (activeProfileName == null || activeProfileName.isBlank()) {
@@ -62,6 +70,11 @@ public final class ProfileService {
         return toProfile(activeProfileName, repositoryEntry, repositoryStatus, true);
     }
 
+    /**
+     * Discovers all available profiles across configured repositories.
+     *
+     * @return profiles sorted by name
+     */
     public List<Profile> getAllProfiles() {
         Map<String, RepositoryEntry> profilesByName = discoverProfilesByName();
         Map<String, RepositoryStatus> statusesByRepository = new HashMap<>();
@@ -86,6 +99,12 @@ public final class ProfileService {
         return profiles;
     }
 
+    /**
+     * Creates a profile scaffold in the current working repository.
+     *
+     * @param profileName profile name to create
+     * @return {@code true} when the profile is created
+     */
     public boolean createProfile(String profileName) {
         String normalizedProfileName = normalizeProfileName(profileName);
         Path repositoryPath = workingDirectory();
@@ -109,6 +128,12 @@ public final class ProfileService {
         }
     }
 
+    /**
+     * Switches the active profile and updates symlinks in the OpenCode config directory.
+     *
+     * @param profileName profile name to activate
+     * @return {@code true} when the switch is applied
+     */
     public boolean useProfile(String profileName) {
         String normalizedProfileName = normalizeProfileName(profileName);
         Map<String, RepositoryEntry> profilesByName = discoverProfilesByName();
@@ -136,6 +161,12 @@ public final class ProfileService {
         return true;
     }
 
+    /**
+     * Refreshes the repository that contains the specified profile.
+     *
+     * @param profileName profile name whose repository should be refreshed
+     * @return {@code true} when refresh completes successfully
+     */
     public boolean refreshProfile(String profileName) {
         String normalizedProfileName = normalizeProfileName(profileName);
         RepositoryEntry repositoryEntry = repositoryForProfile(normalizedProfileName);
@@ -147,6 +178,11 @@ public final class ProfileService {
         return true;
     }
 
+    /**
+     * Refreshes all configured repositories.
+     *
+     * @return {@code true} when all refresh operations complete successfully
+     */
     public boolean refreshAllProfiles() {
         for (RepositoryEntry repositoryEntry : repositoryService.load()) {
             refreshRepository(repositoryEntry);
@@ -154,6 +190,13 @@ public final class ProfileService {
         return true;
     }
 
+    /**
+     * Applies a selected conflict resolution strategy and retries refresh.
+     *
+     * @param conflict detected refresh conflict
+     * @param resolution selected conflict resolution
+     * @return {@code true} when changes were applied, {@code false} when no action was taken
+     */
     public boolean resolveRefreshConflict(ProfileRefreshConflictException conflict, RefreshConflictResolution resolution) {
         Path localPath = Path.of(conflict.repositoryPath());
         if (resolution == RefreshConflictResolution.DISCARD_AND_REFRESH) {
@@ -521,6 +564,9 @@ public final class ProfileService {
         }
     }
 
+    /**
+     * Raised when no active profile is configured.
+     */
     public static final class NoActiveProfileException extends RuntimeException {
 
         private static final long serialVersionUID = 1L;
@@ -530,6 +576,9 @@ public final class ProfileService {
         }
     }
 
+    /**
+     * Raised when duplicate profile names are discovered across repositories.
+     */
     public static final class DuplicateProfilesException extends RuntimeException {
 
         private static final long serialVersionUID = 1L;
@@ -541,17 +590,37 @@ public final class ProfileService {
             this.duplicateProfileNames = Set.copyOf(duplicateProfileNames);
         }
 
+        /**
+         * Returns duplicate profile names.
+         *
+         * @return immutable set of duplicate names
+         */
         public Set<String> duplicateProfileNames() {
             return duplicateProfileNames;
         }
     }
 
+    /**
+     * Refresh conflict resolution options.
+     */
     public enum RefreshConflictResolution {
+        /**
+         * Discard local uncommitted changes and continue refresh.
+         */
         DISCARD_AND_REFRESH,
+        /**
+         * Commit local changes, force-push, and continue refresh.
+         */
         COMMIT_AND_FORCE_PUSH,
+        /**
+         * Do not apply automatic conflict resolution.
+         */
         DO_NOTHING
     }
 
+    /**
+     * Raised when a repository has local changes that block refresh.
+     */
     public static final class ProfileRefreshConflictException extends RuntimeException {
 
         private static final long serialVersionUID = 1L;
@@ -567,14 +636,29 @@ public final class ProfileService {
             this.diff = diff == null ? "" : diff;
         }
 
+        /**
+         * Returns the repository name that caused the conflict.
+         *
+         * @return repository name
+         */
         public String repositoryName() {
             return repositoryName;
         }
 
+        /**
+         * Returns the repository local path that caused the conflict.
+         *
+         * @return repository local path
+         */
         public String repositoryPath() {
             return repositoryPath;
         }
 
+        /**
+         * Returns the local diff captured at conflict time.
+         *
+         * @return textual diff output
+         */
         public String diff() {
             return diff;
         }
