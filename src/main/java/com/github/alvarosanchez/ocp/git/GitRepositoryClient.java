@@ -59,27 +59,14 @@ public final class GitRepositoryClient {
     }
 
     /**
-     * Returns the number of commits the local repository is behind upstream.
+     * Returns whether local HEAD differs from the upstream tracked branch tip.
      *
      * @param localPath local repository path
-     * @return number of commits behind upstream
+     * @return {@code true} when local and upstream tips differ, {@code false} otherwise
      */
-    public int commitsBehindRemote(Path localPath) {
+    public boolean differsFromUpstream(Path localPath) {
         runInRepository(localPath, "fetch", List.of("git", "-C", localPath.toString(), "fetch", "--quiet"));
-        String output = runAndCapture(
-            localPath,
-            "rev-list",
-            List.of("git", "-C", localPath.toString(), "rev-list", "--count", "HEAD..@{upstream}")
-        );
-        String trimmedOutput = output.trim();
-        if (trimmedOutput.isBlank()) {
-            return 0;
-        }
-        try {
-            return Integer.parseInt(trimmedOutput);
-        } catch (NumberFormatException e) {
-            throw new IllegalStateException("Failed to parse git rev-list output for " + localPath + ": " + output, e);
-        }
+        return runDiffQuiet(localPath, List.of("git", "-C", localPath.toString(), "diff", "--quiet", "HEAD", "@{upstream}"));
     }
 
     /**
@@ -123,6 +110,26 @@ public final class GitRepositoryClient {
 
     private void runInRepository(Path localPath, String operation, List<String> command) {
         runAndCapture(localPath, operation, command);
+    }
+
+    private boolean runDiffQuiet(Path localPath, List<String> command) {
+        try {
+            Process process = processExecutor.start(command);
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            int exitCode = process.waitFor();
+            if (exitCode == 0) {
+                return false;
+            }
+            if (exitCode == 1) {
+                return true;
+            }
+            throw new IllegalStateException("git diff failed for " + localPath + " (exit code " + exitCode + "): " + output);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to diff git repository " + localPath, e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while running git diff for " + localPath, e);
+        }
     }
 
     private String runAndCapture(Path localPath, String operation, List<String> command) {

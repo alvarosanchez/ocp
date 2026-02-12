@@ -70,38 +70,52 @@ class GitRepositoryClientTest {
     }
 
     @Test
-    void commitsBehindRemoteRunsFetchAndParsesRevListOutput() {
+    void differsFromUpstreamRunsFetchAndDiffQuiet() {
         StubProcessExecutor processExecutor = new StubProcessExecutor(
-            List.of(new StubProcess(0, ""), new StubProcess(0, "3\n"))
+            List.of(new StubProcess(0, ""), new StubProcess(0, ""))
         );
         Path localPath = tempDir.resolve("repositories/repo-four");
 
         GitRepositoryClient client = new GitRepositoryClient(processExecutor);
 
-        int commitsBehind = client.commitsBehindRemote(localPath);
+        boolean differsFromUpstream = client.differsFromUpstream(localPath);
 
-        assertEquals(3, commitsBehind);
+        assertEquals(false, differsFromUpstream);
         assertEquals(
             List.of(
                 List.of("git", "-C", localPath.toString(), "fetch", "--quiet"),
-                List.of("git", "-C", localPath.toString(), "rev-list", "--count", "HEAD..@{upstream}")
+                List.of("git", "-C", localPath.toString(), "diff", "--quiet", "HEAD", "@{upstream}")
             ),
             processExecutor.commands()
         );
     }
 
     @Test
-    void commitsBehindRemoteThrowsWhenRevListIsNotNumeric() {
+    void differsFromUpstreamReturnsTrueWhenDiffExitCodeIsOne() {
         StubProcessExecutor processExecutor = new StubProcessExecutor(
-            List.of(new StubProcess(0, ""), new StubProcess(0, "not-a-number"))
+            List.of(new StubProcess(0, ""), new StubProcess(1, ""))
         );
         Path localPath = tempDir.resolve("repositories/repo-five");
 
         GitRepositoryClient client = new GitRepositoryClient(processExecutor);
 
-        IllegalStateException thrown = assertThrows(IllegalStateException.class, () -> client.commitsBehindRemote(localPath));
+        boolean differsFromUpstream = client.differsFromUpstream(localPath);
 
-        assertTrue(thrown.getMessage().contains("Failed to parse git rev-list output"));
+        assertTrue(differsFromUpstream);
+    }
+
+    @Test
+    void differsFromUpstreamThrowsWhenDiffReturnsUnexpectedExitCode() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(
+            List.of(new StubProcess(0, ""), new StubProcess(2, "fatal: ambiguous argument"))
+        );
+        Path localPath = tempDir.resolve("repositories/repo-five");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        IllegalStateException thrown = assertThrows(IllegalStateException.class, () -> client.differsFromUpstream(localPath));
+
+        assertTrue(thrown.getMessage().contains("git diff failed"));
     }
 
     @Test

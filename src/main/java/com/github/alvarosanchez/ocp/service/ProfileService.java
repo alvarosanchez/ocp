@@ -85,7 +85,7 @@ public final class ProfileService {
             if (snapshot == null) {
                 continue;
             }
-            boolean updateAvailable = snapshot.commitsBehindRemote() > 0;
+            boolean updateAvailable = snapshot.differsFromUpstream();
             hasUpdates = hasUpdates || updateAvailable;
             rows.add(
                 new ProfileListRow(
@@ -357,14 +357,14 @@ public final class ProfileService {
             message = "No local commits";
         }
 
-        int commitsBehindRemote = 0;
+        boolean differsFromUpstream = false;
         try {
-            commitsBehindRemote = gitRepositoryClient.commitsBehindRemote(localPath);
+            differsFromUpstream = gitRepositoryClient.differsFromUpstream(localPath);
         } catch (RuntimeException e) {
             failedVersionChecks.add(repositoryEntry.name());
         }
 
-        return new RepositorySnapshot(shortSha, commitEpochSeconds, message, commitsBehindRemote);
+        return new RepositorySnapshot(shortSha, commitEpochSeconds, message, differsFromUpstream);
     }
 
     private String humanizeInstant(long epochSeconds) {
@@ -470,7 +470,7 @@ public final class ProfileService {
     private record DiscoveredProfile(String profileName, RepositoryEntry repositoryEntry) {
     }
 
-    private record RepositorySnapshot(String shortSha, long commitEpochSeconds, String message, int commitsBehindRemote) {
+    private record RepositorySnapshot(String shortSha, long commitEpochSeconds, String message, boolean differsFromUpstream) {
     }
 
     private record ResolvedProfile(RepositoryEntry repositoryEntry, String profileName) {
