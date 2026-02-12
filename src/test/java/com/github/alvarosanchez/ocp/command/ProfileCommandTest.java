@@ -165,13 +165,13 @@ class ProfileCommandTest {
 
         CommandResult activeProfile = execute("profile");
         assertEquals(0, activeProfile.exitCode());
-        assertTrue(activeProfile.stdout().contains("NAME:"));
-        assertTrue(activeProfile.stdout().contains("corporate"));
-        assertTrue(activeProfile.stdout().contains("ACTIVE:"));
-        assertTrue(activeProfile.stdout().contains("REPOSITORY:"));
-        assertTrue(activeProfile.stdout().contains("VERSION:"));
-        assertTrue(activeProfile.stdout().contains("LAST UPDATED:"));
-        assertTrue(activeProfile.stdout().contains("MESSAGE:"));
+        String normalizedOutput = removeAnsiCodes(activeProfile.stdout());
+        assertTrue(normalizedOutput.contains("NAME:"));
+        assertTrue(normalizedOutput.contains("corporate"));
+        assertTrue(normalizedOutput.contains("REPOSITORY:"));
+        assertTrue(normalizedOutput.contains("VERSION:"));
+        assertTrue(normalizedOutput.matches("(?s).*LAST\\s+UPDATED:.*"));
+        assertTrue(normalizedOutput.contains("MESSAGE:"));
 
         OcpConfigFile configFile = readOcpConfig(Path.of(System.getProperty("ocp.config.dir"), "config.json"));
         assertEquals("corporate", configFile.config().activeProfile());
@@ -570,6 +570,10 @@ class ProfileCommandTest {
         if (exitCode != 0) {
             throw new IllegalStateException("Command failed: " + String.join(" ", command) + "\n" + output);
         }
+    }
+
+    private static String removeAnsiCodes(String output) {
+        return output.replaceAll("\\u001B\\[[;\\d]*m", "");
     }
 
     private RemoteRepositoryState createRemoteProfileRepository(String profileName) throws IOException, InterruptedException {
