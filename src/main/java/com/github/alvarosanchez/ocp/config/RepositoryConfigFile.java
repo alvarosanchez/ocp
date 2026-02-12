@@ -1,4 +1,4 @@
-package com.github.alvarosanchez.ocp.model;
+package com.github.alvarosanchez.ocp.config;
 
 import io.micronaut.serde.annotation.Serdeable;
 import java.util.List;

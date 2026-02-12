@@ -1,10 +1,10 @@
 package com.github.alvarosanchez.ocp.service;
 
 import com.github.alvarosanchez.ocp.git.GitRepositoryClient;
-import com.github.alvarosanchez.ocp.model.OcpConfigFile;
-import com.github.alvarosanchez.ocp.model.OcpConfigFile.OcpConfigOptions;
-import com.github.alvarosanchez.ocp.model.OcpConfigFile.RepositoryEntry;
-import com.github.alvarosanchez.ocp.model.RepositoryConfigFile.ProfileEntry;
+import com.github.alvarosanchez.ocp.config.OcpConfigFile;
+import com.github.alvarosanchez.ocp.config.OcpConfigFile.OcpConfigOptions;
+import com.github.alvarosanchez.ocp.config.OcpConfigFile.RepositoryEntry;
+import com.github.alvarosanchez.ocp.config.RepositoryConfigFile.ProfileEntry;
 import io.micronaut.serde.ObjectMapper;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -133,7 +133,7 @@ public final class RepositoryService {
                 Files.createDirectories(repositoryPath.resolve(normalizedProfileName));
             }
 
-            String content = objectMapper.writeValueAsString(new com.github.alvarosanchez.ocp.model.RepositoryConfigFile(profiles));
+            String content = objectMapper.writeValueAsString(new com.github.alvarosanchez.ocp.config.RepositoryConfigFile(profiles));
             Files.writeString(repositoryPath.resolve("repository.json"), content);
             gitRepositoryClient.init(repositoryPath);
             return repositoryPath;

@@ -4,11 +4,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-import com.github.alvarosanchez.ocp.model.OcpConfigFile;
-import com.github.alvarosanchez.ocp.model.OcpConfigFile.OcpConfigOptions;
-import com.github.alvarosanchez.ocp.model.OcpConfigFile.RepositoryEntry;
-import com.github.alvarosanchez.ocp.model.RepositoryConfigFile;
-import com.github.alvarosanchez.ocp.model.RepositoryConfigFile.ProfileEntry;
+import com.github.alvarosanchez.ocp.config.OcpConfigFile;
+import com.github.alvarosanchez.ocp.config.OcpConfigFile.OcpConfigOptions;
+import com.github.alvarosanchez.ocp.config.OcpConfigFile.RepositoryEntry;
+import com.github.alvarosanchez.ocp.config.RepositoryConfigFile;
+import com.github.alvarosanchez.ocp.config.RepositoryConfigFile.ProfileEntry;
 import com.github.sparsick.testcontainers.gitserver.http.GitHttpServerContainer;
 import io.micronaut.configuration.picocli.PicocliRunner;
 import io.micronaut.context.ApplicationContext;
@@ -165,7 +165,13 @@ class ProfileCommandTest {
 
         CommandResult activeProfile = execute("profile");
         assertEquals(0, activeProfile.exitCode());
-        assertEquals("corporate", activeProfile.stdout().trim());
+        assertTrue(activeProfile.stdout().contains("NAME:"));
+        assertTrue(activeProfile.stdout().contains("corporate"));
+        assertTrue(activeProfile.stdout().contains("ACTIVE:"));
+        assertTrue(activeProfile.stdout().contains("REPOSITORY:"));
+        assertTrue(activeProfile.stdout().contains("VERSION:"));
+        assertTrue(activeProfile.stdout().contains("LAST UPDATED:"));
+        assertTrue(activeProfile.stdout().contains("MESSAGE:"));
 
         OcpConfigFile configFile = readOcpConfig(Path.of(System.getProperty("ocp.config.dir"), "config.json"));
         assertEquals("corporate", configFile.config().activeProfile());

@@ -6,11 +6,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.alvarosanchez.ocp.git.GitProcessExecutor;
 import com.github.alvarosanchez.ocp.git.GitRepositoryClient;
-import com.github.alvarosanchez.ocp.model.OcpConfigFile;
-import com.github.alvarosanchez.ocp.model.OcpConfigFile.OcpConfigOptions;
-import com.github.alvarosanchez.ocp.model.OcpConfigFile.RepositoryEntry;
-import com.github.alvarosanchez.ocp.model.RepositoryConfigFile;
-import com.github.alvarosanchez.ocp.model.RepositoryConfigFile.ProfileEntry;
+import com.github.alvarosanchez.ocp.config.OcpConfigFile;
+import com.github.alvarosanchez.ocp.config.OcpConfigFile.OcpConfigOptions;
+import com.github.alvarosanchez.ocp.config.OcpConfigFile.RepositoryEntry;
+import com.github.alvarosanchez.ocp.config.RepositoryConfigFile;
+import com.github.alvarosanchez.ocp.config.RepositoryConfigFile.ProfileEntry;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.serde.ObjectMapper;
 import java.io.IOException;

@@ -1,6 +1,6 @@
 package com.github.alvarosanchez.ocp.command;
 
-import com.github.alvarosanchez.ocp.model.OcpConfigFile.RepositoryEntry;
+import com.github.alvarosanchez.ocp.config.OcpConfigFile.RepositoryEntry;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
 import jakarta.inject.Inject;
 import java.nio.file.Path;
@@ -55,10 +55,10 @@ public class RepositoryCommand implements Runnable {
         public Integer call() {
             try {
                 RepositoryEntry added = repositoryService.add(repositoryUri);
-                System.out.println("Added repository `" + added.name() + "`.");
+                Cli.success("Added repository `" + added.name() + "`.");
                 return 0;
             } catch (RuntimeException e) {
-                System.err.println("Error: " + e.getMessage());
+                Cli.error(e.getMessage());
                 return 1;
             }
         }
@@ -86,10 +86,10 @@ public class RepositoryCommand implements Runnable {
         public Integer call() {
             try {
                 RepositoryEntry deleted = repositoryService.delete(repositoryName);
-                System.out.println("Deleted repository `" + deleted.name() + "`.");
+                Cli.success("Deleted repository `" + deleted.name() + "`.");
                 return 0;
             } catch (RuntimeException e) {
-                System.err.println("Error: " + e.getMessage());
+                Cli.error(e.getMessage());
                 return 1;
             }
         }
@@ -120,10 +120,10 @@ public class RepositoryCommand implements Runnable {
         public Integer call() {
             try {
                 Path createdRepository = repositoryService.create(repositoryName, profileName);
-                System.out.println("Created repository at " + createdRepository);
+                Cli.success("Created repository at " + createdRepository);
                 return 0;
             } catch (RuntimeException e) {
-                System.err.println("Error: " + e.getMessage());
+                Cli.error(e.getMessage());
                 return 1;
             }
         }

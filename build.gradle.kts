@@ -22,6 +22,7 @@ dependencies {
     implementation(libs.micronaut.picocli)
     implementation(libs.micronaut.serde.jackson)
     implementation(libs.clique)
+    implementation(libs.clique.themes)
 
     runtimeOnly(libs.logback.classic)
 
@@ -63,9 +64,11 @@ graalvmNative {
             imageName.set("ocp")
             mainClass.set("com.github.alvarosanchez.ocp.command.OcpCommand")
             buildArgs.add("--no-fallback")
+            quickBuild.set(true)
         }
         named("test") {
             buildArgs.add("--initialize-at-build-time=org.junit.platform.commons.logging.LoggerFactory\$DelegatingLogger")
+            quickBuild.set(true)
         }
     }
 }

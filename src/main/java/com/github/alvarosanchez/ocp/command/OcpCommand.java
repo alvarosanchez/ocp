@@ -24,11 +24,12 @@ public class OcpCommand implements Runnable {
      *
      * @param args command-line arguments
      */
-    public static void main(String[] args) {
+    static void main(String[] args) {
+        Cli.init();
         try {
             SystemDependencies.verifyAll();
         } catch (IllegalStateException e) {
-            System.err.println(e.getMessage());
+            Cli.error(e.getMessage());
             System.exit(1);
             return;
         }
