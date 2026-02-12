@@ -4,7 +4,6 @@ import com.github.alvarosanchez.ocp.service.ProfileService;
 import jakarta.inject.Inject;
 import picocli.CommandLine;
 
-import java.nio.file.Path;
 import java.util.concurrent.Callable;
 
 @CommandLine.Command(name = "create", description = "Create a new profile scaffold in the current directory.")
@@ -28,21 +27,12 @@ class ProfileCreateCommand implements Callable<Integer> {
     @Override
     public Integer call() {
         try {
-            Path repositoryPath = workingDirectory();
-            profileService.createProfile(repositoryPath, profileName);
+            profileService.createProfile(profileName);
             Cli.success("Created profile `" + profileName + "`.");
             return 0;
         } catch (RuntimeException e) {
             Cli.error(e.getMessage());
             return 1;
         }
-    }
-
-    private static Path workingDirectory() {
-        String configuredPath = System.getProperty("ocp.working.dir");
-        if (configuredPath != null && !configuredPath.isBlank()) {
-            return Path.of(configuredPath);
-        }
-        return Path.of(System.getProperty("user.dir")).toAbsolutePath();
     }
 }

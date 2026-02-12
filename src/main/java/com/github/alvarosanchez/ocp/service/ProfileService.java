@@ -7,6 +7,7 @@ import com.github.alvarosanchez.ocp.config.OcpConfigFile.OcpConfigOptions;
 import com.github.alvarosanchez.ocp.config.OcpConfigFile.RepositoryEntry;
 import com.github.alvarosanchez.ocp.config.RepositoryConfigFile;
 import com.github.alvarosanchez.ocp.config.RepositoryConfigFile.ProfileEntry;
+import com.github.alvarosanchez.ocp.model.Profile;
 import io.micronaut.serde.ObjectMapper;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -19,7 +20,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import jakarta.inject.Singleton;
@@ -28,9 +28,6 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-/**
- * Service that discovers available profile names across configured repositories.
- */
 @Singleton
 public final class ProfileService {
 
@@ -48,72 +45,50 @@ public final class ProfileService {
         this.gitRepositoryClient = gitRepositoryClient;
     }
 
-    /**
-     * Lists all known profiles from configured repositories.
-     *
-     * @return sorted, unique profiles discovered from repository metadata
-     */
-    public List<ProfileEntry> listProfiles() {
-        List<ProfileEntry> profiles = new ArrayList<>();
-        for (DiscoveredProfile profile : discoverProfiles()) {
-            profiles.add(new ProfileEntry(profile.profileName()));
+    public Profile getActiveProfile() {
+        String activeProfileName = currentActiveProfileName();
+        if (activeProfileName == null || activeProfileName.isBlank()) {
+            throw new NoActiveProfileException("No active profile selected yet.");
         }
+
+        RepositoryEntry repositoryEntry = repositoryForProfile(activeProfileName);
+        if (repositoryEntry == null) {
+            throw new IllegalStateException(
+                "Active profile `" + activeProfileName + "` is not available in configured repositories."
+            );
+        }
+
+        RepositoryStatus repositoryStatus = repositoryStatusFor(repositoryEntry);
+        return toProfile(activeProfileName, repositoryEntry, repositoryStatus, true);
+    }
+
+    public List<Profile> getAllProfiles() {
+        Map<String, RepositoryEntry> profilesByName = discoverProfilesByName();
+        Map<String, RepositoryStatus> statusesByRepository = new HashMap<>();
+        for (RepositoryEntry repositoryEntry : repositoryService.load()) {
+            statusesByRepository.put(repositoryEntry.name(), repositoryStatusFor(repositoryEntry));
+        }
+
+        List<String> sortedProfileNames = new ArrayList<>(profilesByName.keySet());
+        sortedProfileNames.sort(String::compareTo);
+
+        String activeProfileName = currentActiveProfileName();
+        List<Profile> profiles = new ArrayList<>();
+        for (String profileName : sortedProfileNames) {
+            RepositoryEntry repositoryEntry = profilesByName.get(profileName);
+            RepositoryStatus repositoryStatus = statusesByRepository.get(repositoryEntry.name());
+            if (repositoryStatus == null) {
+                continue;
+            }
+            profiles.add(toProfile(profileName, repositoryEntry, repositoryStatus, profileName.equals(activeProfileName)));
+        }
+
         return profiles;
     }
 
-    /**
-     * Lists profiles with repository and commit metadata for tabular CLI output.
-     *
-     * @return profile table data with optional update footnotes
-     */
-    public ProfileListResult listProfilesTable() {
-        List<DiscoveredProfile> discoveredProfiles = discoverProfiles();
-        Map<String, RepositorySnapshot> snapshotsByRepository = new HashMap<>();
-        Set<String> failedVersionChecks = new TreeSet<>();
-
-        for (RepositoryEntry repositoryEntry : repositoryService.load()) {
-            snapshotsByRepository.put(
-                repositoryEntry.name(),
-                snapshotForRepository(repositoryEntry, failedVersionChecks)
-            );
-        }
-
-        List<ProfileListRow> rows = new ArrayList<>();
-        boolean hasUpdates = false;
-        for (DiscoveredProfile discoveredProfile : discoveredProfiles) {
-            RepositorySnapshot snapshot = snapshotsByRepository.get(discoveredProfile.repositoryEntry().name());
-            if (snapshot == null) {
-                continue;
-            }
-            boolean updateAvailable = snapshot.differsFromUpstream();
-            hasUpdates = hasUpdates || updateAvailable;
-            rows.add(
-                new ProfileListRow(
-                    discoveredProfile.profileName(),
-                    discoveredProfile.repositoryEntry().uri(),
-                    snapshot.shortSha(),
-                    humanizeInstant(snapshot.commitEpochSeconds()),
-                    snapshot.message(),
-                    updateAvailable
-                )
-            );
-        }
-
-        return new ProfileListResult(rows, hasUpdates, List.copyOf(failedVersionChecks));
-    }
-
-    /**
-     * Creates a profile directory and registers it in repository metadata.
-     *
-     * @param repositoryPath repository root path
-     * @param profileName profile name to create
-     */
-    public void createProfile(Path repositoryPath, String profileName) {
-        String normalizedProfileName = profileName == null ? "" : profileName.trim();
-        if (normalizedProfileName.isBlank()) {
-            throw new IllegalStateException("Profile name is required.");
-        }
-
+    public boolean createProfile(String profileName) {
+        String normalizedProfileName = normalizeProfileName(profileName);
+        Path repositoryPath = workingDirectory();
         Path metadataFile = repositoryPath.resolve("repository.json");
         RepositoryConfigFile repositoryConfigFile = readRepositoryConfigFile(metadataFile);
 
@@ -128,63 +103,65 @@ public final class ProfileService {
             List<ProfileEntry> profiles = new ArrayList<>(repositoryConfigFile.profiles());
             profiles.add(new ProfileEntry(normalizedProfileName));
             writeRepositoryConfigFile(metadataFile, new RepositoryConfigFile(profiles));
+            return true;
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to create profile `" + normalizedProfileName + "` in " + repositoryPath, e);
         }
     }
 
-    /**
-     * Switches the active profile by linking its files into the OpenCode config directory.
-     *
-     * @param profileName profile name to activate
-     */
-    public void useProfile(String profileName) {
-        ResolvedProfile resolvedProfile = resolveProfile(profileName);
-        Path profilePath = Path.of(resolvedProfile.repositoryEntry().localPath()).resolve(resolvedProfile.profileName());
+    public boolean useProfile(String profileName) {
+        String normalizedProfileName = normalizeProfileName(profileName);
+        Map<String, RepositoryEntry> profilesByName = discoverProfilesByName();
+        RepositoryEntry repositoryEntry = profilesByName.get(normalizedProfileName);
+        if (repositoryEntry == null) {
+            throw new IllegalStateException("Profile `" + normalizedProfileName + "` was not found.");
+        }
+
+        Path profilePath = profilePathFor(normalizedProfileName, repositoryEntry);
         if (!Files.isDirectory(profilePath)) {
             throw new IllegalStateException("Profile directory does not exist: " + profilePath);
         }
 
-        Optional<Path> previousProfilePath = activeProfileName()
-            .filter(previousProfileName -> !previousProfileName.equals(resolvedProfile.profileName()))
-            .flatMap(this::profilePathByName);
+        Path previousProfilePath = null;
+        String previousProfileName = currentActiveProfileName();
+        if (previousProfileName != null && !previousProfileName.equals(normalizedProfileName)) {
+            RepositoryEntry previousRepository = profilesByName.get(previousProfileName);
+            if (previousRepository != null) {
+                previousProfilePath = profilePathFor(previousProfileName, previousRepository);
+            }
+        }
 
-        switchProfileFiles(profilePath, previousProfilePath.orElse(null), openCodeDirectory());
-        writeActiveProfile(resolvedProfile.profileName());
+        switchProfileFiles(profilePath, previousProfilePath, openCodeDirectory());
+        writeActiveProfile(normalizedProfileName);
+        return true;
     }
 
-    /**
-     * Pulls latest changes for the repository containing the requested profile.
-     *
-     * @param profileName profile name used to resolve repository
-     */
-    public void refreshProfile(String profileName) {
-        ResolvedProfile resolvedProfile = resolveProfile(profileName);
-        gitRepositoryClient.pull(Path.of(resolvedProfile.repositoryEntry().localPath()));
+    public boolean refreshProfile(String profileName) {
+        String normalizedProfileName = normalizeProfileName(profileName);
+        RepositoryEntry repositoryEntry = repositoryForProfile(normalizedProfileName);
+        if (repositoryEntry == null) {
+            throw new IllegalStateException("Profile `" + normalizedProfileName + "` was not found.");
+        }
+
+        gitRepositoryClient.pull(Path.of(repositoryEntry.localPath()));
+        return true;
     }
 
-    /**
-     * Pulls latest changes for all configured repositories.
-     */
-    public void refreshAllProfiles() {
+    public boolean refreshAllProfiles() {
         for (RepositoryEntry repositoryEntry : repositoryService.load()) {
             gitRepositoryClient.pull(Path.of(repositoryEntry.localPath()));
         }
-    }
-
-    /**
-     * Returns the currently active profile name when available.
-     *
-     * @return active profile name, or empty when no profile is active
-     */
-    public Optional<String> activeProfileName() {
-        return Optional.ofNullable(repositoryService.loadConfigFile().config().activeProfile());
+        return true;
     }
 
     private void writeActiveProfile(String profileName) {
         OcpConfigFile currentConfig = repositoryService.loadConfigFile();
         OcpConfigOptions nextOptions = new OcpConfigOptions(profileName);
         repositoryService.saveConfig(new OcpConfigFile(nextOptions, currentConfig.repositories()));
+    }
+
+    private String currentActiveProfileName() {
+        return repositoryService.loadConfigFile().config().activeProfile();
     }
 
     private void switchProfileFiles(Path sourceDirectory, Path previousSourceDirectory, Path targetDirectory) {
@@ -253,18 +230,6 @@ public final class ProfileService {
         }
     }
 
-    private Optional<Path> profilePathByName(String profileName) {
-        for (RepositoryEntry repositoryEntry : repositoryService.load()) {
-            Path localPath = Path.of(repositoryEntry.localPath());
-            for (ProfileEntry profileEntry : readProfiles(localPath.resolve("repository.json"))) {
-                if (profileName.equals(profileEntry.name())) {
-                    return Optional.of(localPath.resolve(profileName));
-                }
-            }
-        }
-        return Optional.empty();
-    }
-
     private IOException rollbackSwitch(List<FileSwitchState> switchStates) {
         List<FileSwitchState> rollbackStates = new ArrayList<>(switchStates);
         rollbackStates.sort(Comparator.comparing((FileSwitchState state) -> state.target().toString()).reversed());
@@ -302,34 +267,29 @@ public final class ProfileService {
         }
     }
 
-    private ResolvedProfile resolveProfile(String profileName) {
+    private String normalizeProfileName(String profileName) {
         String normalizedProfileName = profileName == null ? "" : profileName.trim();
         if (normalizedProfileName.isBlank()) {
             throw new IllegalStateException("Profile name is required.");
         }
-
-        for (DiscoveredProfile profile : discoverProfiles()) {
-            if (normalizedProfileName.equals(profile.profileName())) {
-                return new ResolvedProfile(profile.repositoryEntry(), normalizedProfileName);
-            }
-        }
-
-        throw new IllegalStateException("Profile `" + normalizedProfileName + "` was not found.");
+        return normalizedProfileName;
     }
 
-    private List<DiscoveredProfile> discoverProfiles() {
-        Set<String> seen = new HashSet<>();
+    private RepositoryEntry repositoryForProfile(String profileName) {
+        return discoverProfilesByName().get(profileName);
+    }
+
+    private Map<String, RepositoryEntry> discoverProfilesByName() {
+        Map<String, RepositoryEntry> profilesByName = new HashMap<>();
         Set<String> duplicates = new TreeSet<>();
-        List<DiscoveredProfile> discoveredProfiles = new ArrayList<>();
 
         for (RepositoryEntry repositoryEntry : repositoryService.load()) {
             Path localPath = Path.of(repositoryEntry.localPath());
             for (ProfileEntry profileEntry : readProfiles(localPath.resolve("repository.json"))) {
-                if (!seen.add(profileEntry.name())) {
+                RepositoryEntry existing = profilesByName.putIfAbsent(profileEntry.name(), repositoryEntry);
+                if (existing != null) {
                     duplicates.add(profileEntry.name());
-                    continue;
                 }
-                discoveredProfiles.add(new DiscoveredProfile(profileEntry.name(), repositoryEntry));
             }
         }
 
@@ -337,16 +297,19 @@ public final class ProfileService {
             throw new DuplicateProfilesException(duplicates);
         }
 
-        discoveredProfiles.sort(Comparator.comparing(DiscoveredProfile::profileName));
-        return discoveredProfiles;
+        return profilesByName;
     }
 
-    private RepositorySnapshot snapshotForRepository(RepositoryEntry repositoryEntry, Set<String> failedVersionChecks) {
+    private Path profilePathFor(String profileName, RepositoryEntry repositoryEntry) {
+        return Path.of(repositoryEntry.localPath()).resolve(profileName);
+    }
+
+    private RepositoryStatus repositoryStatusFor(RepositoryEntry repositoryEntry) {
         Path localPath = Path.of(repositoryEntry.localPath());
 
         String shortSha = "-";
         long commitEpochSeconds = 0L;
-        String message = "-";
+        String message = "No local commits";
 
         try {
             CommitMetadata latestCommit = gitRepositoryClient.latestCommit(localPath);
@@ -354,17 +317,39 @@ public final class ProfileService {
             commitEpochSeconds = latestCommit.epochSeconds();
             message = latestCommit.message();
         } catch (RuntimeException e) {
+            shortSha = "-";
+            commitEpochSeconds = 0L;
             message = "No local commits";
         }
 
-        boolean differsFromUpstream = false;
+        boolean updateAvailable = false;
+        boolean versionCheckFailed = false;
         try {
-            differsFromUpstream = gitRepositoryClient.differsFromUpstream(localPath);
+            updateAvailable = gitRepositoryClient.differsFromUpstream(localPath);
         } catch (RuntimeException e) {
-            failedVersionChecks.add(repositoryEntry.name());
+            versionCheckFailed = true;
         }
 
-        return new RepositorySnapshot(shortSha, commitEpochSeconds, message, differsFromUpstream);
+        return new RepositoryStatus(shortSha, commitEpochSeconds, message, updateAvailable, versionCheckFailed);
+    }
+
+    private Profile toProfile(
+        String profileName,
+        RepositoryEntry repositoryEntry,
+        RepositoryStatus repositoryStatus,
+        boolean active
+    ) {
+        return new Profile(
+            profileName,
+            repositoryEntry.name(),
+            repositoryEntry.uri(),
+            repositoryStatus.shortSha(),
+            humanizeInstant(repositoryStatus.commitEpochSeconds()),
+            repositoryStatus.message(),
+            repositoryStatus.updateAvailable(),
+            active,
+            repositoryStatus.versionCheckFailed()
+        );
     }
 
     private String humanizeInstant(long epochSeconds) {
@@ -460,6 +445,14 @@ public final class ProfileService {
         return Path.of(System.getProperty("user.home"), ".config", "opencode");
     }
 
+    private Path workingDirectory() {
+        String configuredPath = System.getProperty("ocp.working.dir");
+        if (configuredPath != null && !configuredPath.isBlank()) {
+            return Path.of(configuredPath);
+        }
+        return Path.of(System.getProperty("user.dir")).toAbsolutePath();
+    }
+
     private String timestamp() {
         return DateTimeFormatter.ofPattern("yyyyMMddHHmmss").format(LocalDateTime.now());
     }
@@ -467,60 +460,52 @@ public final class ProfileService {
     private record FileSwitchState(Path target, Path backupPath, Path previousSymlinkTarget) {
     }
 
-    private record DiscoveredProfile(String profileName, RepositoryEntry repositoryEntry) {
-    }
+    private static final class RepositoryStatus {
 
-    private record RepositorySnapshot(String shortSha, long commitEpochSeconds, String message, boolean differsFromUpstream) {
-    }
+        private final String shortSha;
+        private final long commitEpochSeconds;
+        private final String message;
+        private final boolean updateAvailable;
+        private final boolean versionCheckFailed;
 
-    private record ResolvedProfile(RepositoryEntry repositoryEntry, String profileName) {
-    }
+        RepositoryStatus(String shortSha, long commitEpochSeconds, String message, boolean updateAvailable, boolean versionCheckFailed) {
+            this.shortSha = shortSha;
+            this.commitEpochSeconds = commitEpochSeconds;
+            this.message = message;
+            this.updateAvailable = updateAvailable;
+            this.versionCheckFailed = versionCheckFailed;
+        }
 
-    /**
-     * Row data for `ocp profile list` table output.
-     *
-     * @param name profile name
-     * @param repository repository URI
-     * @param version short local commit SHA, optionally with update marker
-     * @param lastUpdated humanized relative local commit time
-     * @param message latest local commit message
-     * @param updateAvailable whether remote has newer commits
-     */
-    public record ProfileListRow(
-        String name,
-        String repository,
-        String version,
-        String lastUpdated,
-        String message,
-        boolean updateAvailable
-    ) {
-    }
+        String shortSha() {
+            return shortSha;
+        }
 
-    /**
-     * Result for profile table rendering, including update footnotes.
-     *
-     * @param rows rows to render in table output
-     * @param hasUpdates whether at least one row has updates available
-     * @param failedVersionChecks repositories where remote checks failed
-     */
-    public record ProfileListResult(List<ProfileListRow> rows, boolean hasUpdates, List<String> failedVersionChecks) {
+        long commitEpochSeconds() {
+            return commitEpochSeconds;
+        }
 
-        /**
-         * Creates a profile list result.
-         *
-         * @param rows rows to render in table output
-         * @param hasUpdates whether at least one row has updates available
-         * @param failedVersionChecks repositories where remote checks failed
-         */
-        public ProfileListResult {
-            rows = List.copyOf(rows);
-            failedVersionChecks = List.copyOf(failedVersionChecks);
+        String message() {
+            return message;
+        }
+
+        boolean updateAvailable() {
+            return updateAvailable;
+        }
+
+        boolean versionCheckFailed() {
+            return versionCheckFailed;
         }
     }
 
-    /**
-     * Exception thrown when duplicate profile names are found across repositories.
-     */
+    public static final class NoActiveProfileException extends RuntimeException {
+
+        private static final long serialVersionUID = 1L;
+
+        NoActiveProfileException(String message) {
+            super(message);
+        }
+    }
+
     public static final class DuplicateProfilesException extends RuntimeException {
 
         private static final long serialVersionUID = 1L;
@@ -532,11 +517,6 @@ public final class ProfileService {
             this.duplicateProfileNames = Set.copyOf(duplicateProfileNames);
         }
 
-        /**
-         * Returns duplicate profile names discovered while listing profiles.
-         *
-         * @return duplicate profile names
-         */
         public Set<String> duplicateProfileNames() {
             return duplicateProfileNames;
         }

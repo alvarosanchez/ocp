@@ -11,6 +11,7 @@ import com.github.alvarosanchez.ocp.config.OcpConfigFile.OcpConfigOptions;
 import com.github.alvarosanchez.ocp.config.OcpConfigFile.RepositoryEntry;
 import com.github.alvarosanchez.ocp.config.RepositoryConfigFile;
 import com.github.alvarosanchez.ocp.config.RepositoryConfigFile.ProfileEntry;
+import com.github.alvarosanchez.ocp.model.Profile;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.serde.ObjectMapper;
 import java.io.IOException;
@@ -64,7 +65,7 @@ class ProfileServiceTest {
     }
 
     @Test
-    void listProfilesReturnsSortedUniqueNames() throws IOException {
+    void getAllProfilesReturnsSortedUniqueNames() throws IOException {
         writeRepositoryMetadata("repo-one", List.of("beta", "alpha"));
         writeRepositoryMetadata("repo-two", List.of("gamma", "alpha2"));
         writeConfig(List.of(
@@ -74,13 +75,13 @@ class ProfileServiceTest {
 
         profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
 
-        List<ProfileEntry> profiles = profileService.listProfiles();
+        List<Profile> profiles = profileService.getAllProfiles();
 
-        assertEquals(List.of("alpha", "alpha2", "beta", "gamma"), profiles.stream().map(ProfileEntry::name).toList());
+        assertEquals(List.of("alpha", "alpha2", "beta", "gamma"), profiles.stream().map(Profile::name).toList());
     }
 
     @Test
-    void listProfilesThrowsWhenDuplicateNamesExistAcrossRepositories() throws IOException {
+    void getAllProfilesThrowsWhenDuplicateNamesExistAcrossRepositories() throws IOException {
         writeRepositoryMetadata("repo-one", List.of("shared", "alpha"));
         writeRepositoryMetadata("repo-two", List.of("shared", "beta"));
         writeConfig(List.of(
@@ -92,19 +93,19 @@ class ProfileServiceTest {
 
         ProfileService.DuplicateProfilesException thrown = assertThrows(
             ProfileService.DuplicateProfilesException.class,
-            profileService::listProfiles
+            profileService::getAllProfiles
         );
 
         assertTrue(thrown.duplicateProfileNames().contains("shared"));
     }
 
     @Test
-    void listProfilesIgnoresRepositoriesWithoutRepositoryJson() throws IOException {
+    void getAllProfilesIgnoresRepositoriesWithoutRepositoryJson() throws IOException {
         writeConfig(List.of(new RepositoryEntry("repo-missing", "git@github.com:acme/repo-missing.git", null)));
 
         profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
 
-        List<ProfileEntry> profiles = profileService.listProfiles();
+        List<Profile> profiles = profileService.getAllProfiles();
 
         assertTrue(profiles.isEmpty());
     }

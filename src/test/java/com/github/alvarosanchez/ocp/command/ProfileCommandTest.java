@@ -166,12 +166,14 @@ class ProfileCommandTest {
         CommandResult activeProfile = execute("profile");
         assertEquals(0, activeProfile.exitCode());
         String normalizedOutput = removeAnsiCodes(activeProfile.stdout());
-        assertTrue(normalizedOutput.contains("NAME:"));
+        assertTrue(normalizedOutput.contains("NAME"));
+        assertTrue(normalizedOutput.contains("ACTIVE"));
+        assertTrue(normalizedOutput.contains("✓"));
         assertTrue(normalizedOutput.contains("corporate"));
-        assertTrue(normalizedOutput.contains("REPOSITORY:"));
-        assertTrue(normalizedOutput.contains("VERSION:"));
-        assertTrue(normalizedOutput.matches("(?s).*LAST\\s+UPDATED:.*"));
-        assertTrue(normalizedOutput.contains("MESSAGE:"));
+        assertTrue(normalizedOutput.contains("REPOSITORY"));
+        assertTrue(normalizedOutput.contains("VERSION"));
+        assertTrue(normalizedOutput.matches("(?s).*LAST\\s+UPDATED.*"));
+        assertTrue(normalizedOutput.contains("MESSAGE"));
 
         OcpConfigFile configFile = readOcpConfig(Path.of(System.getProperty("ocp.config.dir"), "config.json"));
         assertEquals("corporate", configFile.config().activeProfile());
