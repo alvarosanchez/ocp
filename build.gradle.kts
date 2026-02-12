@@ -6,6 +6,8 @@ plugins {
 version = "0.1.0"
 group = "com.github.alvarosanchez"
 
+val generatedResourcesDir = layout.buildDirectory.dir("generated/resources/main")
+
 val javaVersion = 25
 val micronautPlatformVersion = libs.versions.micronaut.platform.get()
 
@@ -48,6 +50,23 @@ tasks.test {
     useJUnitPlatform()
 }
 
+val generateVersionResource by tasks.registering {
+    val outputFile = generatedResourcesDir.map { it.file("META-INF/ocp/version.txt") }
+
+    outputs.file(outputFile)
+
+    doLast {
+        val versionFile = outputFile.get().asFile
+        versionFile.parentFile.mkdirs()
+        versionFile.writeText(project.version.toString())
+    }
+}
+
+tasks.processResources {
+    dependsOn(generateVersionResource)
+    from(generatedResourcesDir)
+}
+
 micronaut {
     version(micronautPlatformVersion)
     runtime("none")
@@ -64,6 +83,7 @@ graalvmNative {
             imageName.set("ocp")
             mainClass.set("com.github.alvarosanchez.ocp.command.OcpCommand")
             buildArgs.add("--no-fallback")
+            buildArgs.add("-H:IncludeResources=META-INF/ocp/version.txt")
             quickBuild.set(true)
         }
         named("test") {

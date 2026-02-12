@@ -11,6 +11,7 @@ import picocli.CommandLine.Command;
     name = "ocp",
     description = "OpenCode configuration profiles manager.",
     mixinStandardHelpOptions = true,
+    versionProvider = OcpVersionProvider.class,
     subcommands = {
         CommandLine.HelpCommand.class,
         ProfileCommand.class,
