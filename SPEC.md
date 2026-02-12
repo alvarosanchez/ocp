@@ -134,8 +134,8 @@ oss/opencode.json
 | `ocp` | Implemented | Print root usage when no subcommand is provided. |
 | `ocp help <command>` | Implemented | Print help for command/subcommand. |
 | `ocp profile list` | Implemented | Print a table of profiles with repository URI, local commit metadata, and non-fatal remote update hints. |
-| `ocp profile` | Implemented | Print currently active profile. |
-| `ocp profile create <name>` | Implemented | Create profile folder and register it in repository metadata. |
+| `ocp profile` | Implemented | Print currently active profile with repository/version metadata and update hints. |
+| `ocp profile create [name]` | Implemented | Create profile folder and register it in repository metadata. Defaults to `default` when no name is provided. |
 | `ocp profile use <name>` | Implemented | Switch active profile by linking profile files to OpenCode config location. |
 | `ocp profile refresh [name]` | Implemented | Pull latest changes for a specific profile repository, or for all repositories when no name is provided. |
 | `ocp repository add <uri>` | Implemented | Clone repository into local cache and register it in `config.json`. |
@@ -157,9 +157,9 @@ oss/opencode.json
 
 ### Profile version checks
 
-- Executed only during `ocp profile list`.
+- Executed during `ocp profile list` and `ocp profile` (active profile view).
 - `VERSION` displays the latest local short SHA; when remote has newer commits, a footnote is printed and table rows include a `❄` marker.
-- Version-check failures (for example offline network) must not block profile listing and are reported as non-fatal notes.
+- Version-check failures (for example offline network) must not block profile output and are reported as non-fatal notes.
 
 ### Profile switching and backups (target behavior)
 
@@ -196,7 +196,7 @@ oss/opencode.json
   - output contains `Usage: ocp`
 - `ocp profile list`
   - with no repositories/profiles: exits `0`, prints helpful empty-state message
-  - with multiple repositories: outputs a table sorted by profile name with columns `NAME`, `REPOSITORY`, `VERSION`, `LAST UPDATED`, `MESSAGE`
+  - with multiple repositories: outputs a table sorted by profile name with columns `NAME`, `ACTIVE`, `REPOSITORY`, `VERSION`, `LAST UPDATED`, `MESSAGE`
   - with duplicate profile names: exits `1`, prints duplicate-name error on stderr
 - Repository config loading
   - missing `config.json`: treated as empty repository list

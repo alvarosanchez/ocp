@@ -1,6 +1,7 @@
 package com.github.alvarosanchez.ocp.command;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -23,6 +24,7 @@ import java.net.URI;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -85,6 +87,20 @@ class ProfileCommandTest {
 
         assertEquals(0, result.exitCode());
         assertTrue(result.stdout().contains("No profiles available yet"));
+    }
+
+    @Test
+    void listHandlesInvalidRegistryWithoutBubblingExceptionStackTrace() throws IOException {
+        Path configDir = Path.of(System.getProperty("ocp.config.dir"));
+        Files.createDirectories(configDir);
+        Files.writeString(configDir.resolve("config.json"), "not-json");
+
+        CommandResult result = execute("profile", "list");
+
+        assertEquals(1, result.exitCode());
+        assertTrue(result.stderr().contains("Failed to read repository registry"));
+        assertFalse(result.stderr().contains("UncheckedIOException"));
+        assertFalse(result.stderr().contains("at com.github.alvarosanchez.ocp"));
     }
 
     @Test
@@ -218,6 +234,41 @@ class ProfileCommandTest {
         assertTrue(Files.notExists(openCodeDir.resolve("legacy.json")));
         assertTrue(Files.isSymbolicLink(openCodeDir.resolve("opencode.json")));
         assertEquals(ossDir.resolve("opencode.json").toAbsolutePath(), Files.readSymbolicLink(openCodeDir.resolve("opencode.json")));
+    }
+
+    @Test
+    void useRestoresAlreadyProcessedFilesWhenSwitchFailsMidway() throws IOException {
+        writeRepositoryMetadata("repo-local", new RepositoryConfigFile(List.of(new ProfileEntry("broken"))));
+        Path sourceProfileDir = repositoriesCacheDir().resolve("repo-local").resolve("broken");
+        Files.createDirectories(sourceProfileDir.resolve("nested"));
+        Files.writeString(sourceProfileDir.resolve("aaa.json"), "{\"profile\":\"broken\"}");
+        Files.writeString(sourceProfileDir.resolve("nested").resolve("config.json"), "{\"nested\":true}");
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null))
+            )
+        );
+
+        Path openCodeDir = Path.of(System.getProperty("ocp.opencode.config.dir"));
+        Files.createDirectories(openCodeDir);
+        Path existingTargetFile = openCodeDir.resolve("aaa.json");
+        Files.writeString(existingTargetFile, "legacy-content");
+        Files.writeString(openCodeDir.resolve("nested"), "this blocks nested directory creation");
+
+        CommandResult result = execute("profile", "use", "broken");
+
+        assertEquals(1, result.exitCode());
+        assertTrue(result.stderr().contains("Failed to switch active profile files"));
+        assertTrue(Files.exists(existingTargetFile));
+        assertTrue(Files.isRegularFile(existingTargetFile, LinkOption.NOFOLLOW_LINKS));
+        assertFalse(Files.isSymbolicLink(existingTargetFile));
+        assertEquals("legacy-content", Files.readString(existingTargetFile));
+        assertTrue(Files.isRegularFile(openCodeDir.resolve("nested"), LinkOption.NOFOLLOW_LINKS));
+
+        OcpConfigFile configFile = readOcpConfig(Path.of(System.getProperty("ocp.config.dir"), "config.json"));
+        assertEquals(null, configFile.config().activeProfile());
     }
 
     @Test

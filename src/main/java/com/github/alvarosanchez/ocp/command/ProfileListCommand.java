@@ -43,6 +43,9 @@ class ProfileListCommand implements Callable<Integer> {
         } catch (ProfileService.DuplicateProfilesException e) {
             Cli.error("duplicate profile names found: " + String.join(", ", e.duplicateProfileNames()));
             return 1;
+        } catch (RuntimeException e) {
+            Cli.error(e.getMessage());
+            return 1;
         } finally {
             Cli.endTransientInfo(checkingLatestVersions);
         }

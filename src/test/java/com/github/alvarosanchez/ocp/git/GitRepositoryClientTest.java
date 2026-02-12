@@ -70,6 +70,68 @@ class GitRepositoryClientTest {
     }
 
     @Test
+    void cloneRestoresInterruptFlagWhenWaitForIsInterrupted() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(new InterruptingProcess());
+        Path localPath = tempDir.resolve("repositories/repo-interrupted-clone");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        try {
+            IllegalStateException thrown = assertThrows(
+                IllegalStateException.class,
+                () -> client.clone("git@github.com:acme/repo-interrupted.git", localPath)
+            );
+
+            assertTrue(thrown.getMessage().contains("Interrupted while cloning git repository"));
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void pullRestoresInterruptFlagWhenWaitForIsInterrupted() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(new InterruptingProcess());
+        Path localPath = tempDir.resolve("repositories/repo-interrupted-pull");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        try {
+            IllegalStateException thrown = assertThrows(
+                IllegalStateException.class,
+                () -> client.pull(localPath)
+            );
+
+            assertTrue(thrown.getMessage().contains("Interrupted while running git pull"));
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void differsFromUpstreamRestoresInterruptFlagWhenDiffIsInterrupted() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(
+            List.<Process>of(new StubProcess(0, ""), new InterruptingProcess())
+        );
+        Path localPath = tempDir.resolve("repositories/repo-interrupted-diff");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        try {
+            IllegalStateException thrown = assertThrows(
+                IllegalStateException.class,
+                () -> client.differsFromUpstream(localPath)
+            );
+
+            assertTrue(thrown.getMessage().contains("Interrupted while running git diff"));
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
     void differsFromUpstreamRunsFetchAndDiffQuiet() {
         StubProcessExecutor processExecutor = new StubProcessExecutor(
             List.of(new StubProcess(0, ""), new StubProcess(0, ""))
@@ -237,7 +299,7 @@ class GitRepositoryClientTest {
         }
     }
 
-    private static final class StubProcess extends Process {
+    private static class StubProcess extends Process {
 
         private final int exitCode;
         private final String output;
@@ -267,7 +329,7 @@ class GitRepositoryClientTest {
         }
 
         @Override
-        public int waitFor() {
+        public int waitFor() throws InterruptedException {
             return exitCode;
         }
 
@@ -298,6 +360,18 @@ class GitRepositoryClientTest {
         @Override
         public boolean supportsNormalTermination() {
             return true;
+        }
+    }
+
+    private static final class InterruptingProcess extends StubProcess {
+
+        InterruptingProcess() {
+            super(0, "");
+        }
+
+        @Override
+        public int waitFor() throws InterruptedException {
+            throw new InterruptedException("Interrupted for test");
         }
     }
 }
