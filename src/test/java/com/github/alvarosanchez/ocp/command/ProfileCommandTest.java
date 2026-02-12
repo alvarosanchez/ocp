@@ -320,8 +320,32 @@ class ProfileCommandTest {
         assertEquals(0, result.exitCode());
         assertTrue(result.stdout().contains("Choose how to proceed"));
         assertTrue(result.stdout().contains("Diff:"));
-        assertTrue(result.stdout().contains("Refreshed profile `ops`"));
+        assertTrue(result.stdout().contains("Discarding local changes in repository `repo-refresh` and retrying refresh"));
+        assertTrue(result.stdout().contains("Discarded local changes and refreshed profile `ops`."));
         assertEquals("{}", Files.readString(localProfileFile));
+    }
+
+    @Test
+    void refreshPromptsWhenRepositoryHasLocalChangesAndCanCommitForcePushThenRefresh() throws IOException, InterruptedException {
+        RemoteRepositoryState state = createRemoteProfileRepository("ops");
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-refresh", state.remoteUri(), null))
+            )
+        );
+
+        runCommand(List.of("git", "clone", state.remoteUri(), state.localClone().toString()));
+        Path localProfileFile = state.localClone().resolve("ops").resolve("opencode.json");
+        Files.writeString(localProfileFile, "local-edit");
+
+        CommandResult result = executeWithInput("2\n", "profile", "refresh", "ops");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("Choose how to proceed"));
+        assertTrue(result.stdout().contains("Committing local changes and force-pushing repository `repo-refresh`"));
+        assertTrue(result.stdout().contains("Committed local changes, force-pushed, and refreshed profile `ops`."));
     }
 
     @Test
