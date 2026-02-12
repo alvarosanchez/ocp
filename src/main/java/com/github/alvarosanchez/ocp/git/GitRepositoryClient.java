@@ -64,7 +64,11 @@ public final class GitRepositoryClient {
     }
 
     public String localDiff(Path localPath) {
-        return runAndCapture(localPath, "diff", List.of("git", "-C", localPath.toString(), "diff"));
+        return runAndCapture(
+            localPath,
+            "diff",
+            List.of("git", "-c", "color.ui=always", "-C", localPath.toString(), "diff", "--color=always")
+        );
     }
 
     public void discardLocalChanges(Path localPath) {
