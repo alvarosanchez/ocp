@@ -222,8 +222,16 @@ public final class ProfileService {
     private void switchProfileFiles(Path sourceDirectory, Path previousSourceDirectory, Path targetDirectory) {
         List<Path> sourceFiles = profileFiles(sourceDirectory);
         Set<Path> sourceFileRelativePaths = new HashSet<>();
+        Set<Path> sourceLogicalRelativePaths = new HashSet<>();
         for (Path sourceFile : sourceFiles) {
-            sourceFileRelativePaths.add(sourceDirectory.relativize(sourceFile));
+            Path relativePath = sourceDirectory.relativize(sourceFile);
+            sourceFileRelativePaths.add(relativePath);
+            Path logicalRelativePath = logicalRelativePath(relativePath);
+            if (!sourceLogicalRelativePaths.add(logicalRelativePath)) {
+                throw new IllegalStateException(
+                    "Profile contains conflicting config file variants for " + logicalRelativePath
+                );
+            }
         }
 
         Path backupRoot = backupsDirectory().resolve(timestamp());
@@ -233,7 +241,7 @@ public final class ProfileService {
             if (previousSourceDirectory != null) {
                 for (Path previousSourceFile : profileFiles(previousSourceDirectory)) {
                     Path relativePath = previousSourceDirectory.relativize(previousSourceFile);
-                    if (sourceFileRelativePaths.contains(relativePath)) {
+                    if (sourceFileRelativePaths.contains(relativePath) || sourceLogicalRelativePaths.contains(logicalRelativePath(relativePath))) {
                         continue;
                     }
 
@@ -258,22 +266,33 @@ public final class ProfileService {
 
                 Files.createDirectories(targetFile.getParent());
 
-                Path backupPath = null;
-                Path previousSymlinkTarget = null;
-                boolean existedBefore = Files.exists(targetFile, LinkOption.NOFOLLOW_LINKS);
+                boolean targetFileHadState = false;
+                for (Path occupiedTarget : occupiedTargetFiles(relativePath, targetDirectory)) {
+                    if (!Files.exists(occupiedTarget, LinkOption.NOFOLLOW_LINKS)) {
+                        continue;
+                    }
 
-                if (existedBefore) {
-                    if (Files.isSymbolicLink(targetFile)) {
-                        previousSymlinkTarget = Files.readSymbolicLink(targetFile);
-                        Files.delete(targetFile);
+                    Path backupPath = null;
+                    Path previousSymlinkTarget = null;
+                    if (Files.isSymbolicLink(occupiedTarget)) {
+                        previousSymlinkTarget = Files.readSymbolicLink(occupiedTarget);
+                        Files.delete(occupiedTarget);
                     } else {
-                        backupPath = backupRoot.resolve(relativePath);
+                        Path occupiedRelativePath = targetDirectory.relativize(occupiedTarget);
+                        backupPath = backupRoot.resolve(occupiedRelativePath);
                         Files.createDirectories(backupPath.getParent());
-                        Files.move(targetFile, backupPath);
+                        Files.move(occupiedTarget, backupPath);
+                    }
+
+                    switchStates.add(new FileSwitchState(occupiedTarget, backupPath, previousSymlinkTarget));
+                    if (occupiedTarget.equals(targetFile)) {
+                        targetFileHadState = true;
                     }
                 }
 
-                switchStates.add(new FileSwitchState(targetFile, backupPath, previousSymlinkTarget));
+                if (!targetFileHadState) {
+                    switchStates.add(new FileSwitchState(targetFile, null, null));
+                }
                 Files.createSymbolicLink(targetFile, sourceFile.toAbsolutePath());
             }
         } catch (IOException e) {
@@ -283,6 +302,43 @@ public final class ProfileService {
             }
             throw new IllegalStateException("Failed to switch active profile files", e);
         }
+    }
+
+    private List<Path> occupiedTargetFiles(Path relativePath, Path targetDirectory) {
+        List<Path> targets = new ArrayList<>();
+        targets.add(targetDirectory.resolve(relativePath));
+
+        String fileName = relativePath.getFileName().toString();
+        String alternateFileName = alternateJsonVariant(fileName);
+        if (alternateFileName == null) {
+            return targets;
+        }
+
+        Path parent = relativePath.getParent();
+        Path alternateRelativePath = parent == null ? Path.of(alternateFileName) : parent.resolve(alternateFileName);
+        targets.add(targetDirectory.resolve(alternateRelativePath));
+        return targets;
+    }
+
+    private Path logicalRelativePath(Path relativePath) {
+        String fileName = relativePath.getFileName().toString();
+        if (!fileName.endsWith(".jsonc")) {
+            return relativePath;
+        }
+
+        String normalizedFileName = fileName.substring(0, fileName.length() - 1);
+        Path parent = relativePath.getParent();
+        return parent == null ? Path.of(normalizedFileName) : parent.resolve(normalizedFileName);
+    }
+
+    private String alternateJsonVariant(String fileName) {
+        if (fileName.endsWith(".jsonc")) {
+            return fileName.substring(0, fileName.length() - 1);
+        }
+        if (fileName.endsWith(".json")) {
+            return fileName + "c";
+        }
+        return null;
     }
 
     private IOException rollbackSwitch(List<FileSwitchState> switchStates) {

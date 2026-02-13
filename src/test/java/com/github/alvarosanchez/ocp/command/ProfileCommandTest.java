@@ -237,6 +237,98 @@ class ProfileCommandTest {
     }
 
     @Test
+    void useTreatsJsonAndJsoncAsSameLogicalFileAcrossProfiles() throws IOException {
+        writeRepositoryMetadata(
+            "repo-local",
+            new RepositoryConfigFile(List.of(new ProfileEntry("corporate"), new ProfileEntry("oss")))
+        );
+
+        Path repositoryDir = repositoriesCacheDir().resolve("repo-local");
+        Path corporateDir = repositoryDir.resolve("corporate");
+        Path ossDir = repositoryDir.resolve("oss");
+        Files.createDirectories(corporateDir);
+        Files.createDirectories(ossDir);
+
+        Files.writeString(corporateDir.resolve("opencode.json"), "{\"profile\":\"corporate\"}");
+        Files.writeString(corporateDir.resolve("oh-my-opencode.jsonc"), "{\"profile\":\"corporate\"}");
+        Files.writeString(ossDir.resolve("opencode.jsonc"), "{\"profile\":\"oss\"}");
+        Files.writeString(ossDir.resolve("oh-my-opencode.json"), "{\"profile\":\"oss\"}");
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null))
+            )
+        );
+
+        Path openCodeDir = Path.of(System.getProperty("ocp.opencode.config.dir"));
+        Files.createDirectories(openCodeDir);
+
+        CommandResult firstSwitch = execute("profile", "use", "corporate");
+        assertEquals(0, firstSwitch.exitCode());
+
+        CommandResult secondSwitch = execute("profile", "use", "oss");
+
+        assertEquals(0, secondSwitch.exitCode());
+        assertTrue(Files.notExists(openCodeDir.resolve("opencode.json")));
+        assertTrue(Files.isSymbolicLink(openCodeDir.resolve("opencode.jsonc")));
+        assertEquals(ossDir.resolve("opencode.jsonc").toAbsolutePath(), Files.readSymbolicLink(openCodeDir.resolve("opencode.jsonc")));
+        assertTrue(Files.notExists(openCodeDir.resolve("oh-my-opencode.jsonc")));
+        assertTrue(Files.isSymbolicLink(openCodeDir.resolve("oh-my-opencode.json")));
+        assertEquals(
+            ossDir.resolve("oh-my-opencode.json").toAbsolutePath(),
+            Files.readSymbolicLink(openCodeDir.resolve("oh-my-opencode.json"))
+        );
+    }
+
+    @Test
+    void useBacksUpJsonAndJsoncVariantsAsTheSameLogicalFile() throws IOException {
+        writeRepositoryMetadata("repo-local", new RepositoryConfigFile(List.of(new ProfileEntry("corporate"))));
+
+        Path sourceProfileDir = repositoriesCacheDir().resolve("repo-local").resolve("corporate");
+        Files.createDirectories(sourceProfileDir);
+        Files.writeString(sourceProfileDir.resolve("opencode.jsonc"), "{\"profile\":\"corporate\"}");
+        Files.writeString(sourceProfileDir.resolve("oh-my-opencode.json"), "{\"profile\":\"corporate\"}");
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null))
+            )
+        );
+
+        Path openCodeDir = Path.of(System.getProperty("ocp.opencode.config.dir"));
+        Files.createDirectories(openCodeDir);
+        Files.writeString(openCodeDir.resolve("opencode.json"), "legacy-json");
+        Files.writeString(openCodeDir.resolve("oh-my-opencode.jsonc"), "legacy-jsonc");
+
+        CommandResult result = execute("profile", "use", "corporate");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(Files.notExists(openCodeDir.resolve("opencode.json")));
+        assertTrue(Files.isSymbolicLink(openCodeDir.resolve("opencode.jsonc")));
+        assertEquals(
+            sourceProfileDir.resolve("opencode.jsonc").toAbsolutePath(),
+            Files.readSymbolicLink(openCodeDir.resolve("opencode.jsonc"))
+        );
+
+        assertTrue(Files.notExists(openCodeDir.resolve("oh-my-opencode.jsonc")));
+        assertTrue(Files.isSymbolicLink(openCodeDir.resolve("oh-my-opencode.json")));
+        assertEquals(
+            sourceProfileDir.resolve("oh-my-opencode.json").toAbsolutePath(),
+            Files.readSymbolicLink(openCodeDir.resolve("oh-my-opencode.json"))
+        );
+
+        Path backupsDir = Path.of(System.getProperty("ocp.config.dir")).resolve("backups");
+        assertTrue(Files.exists(backupsDir));
+        try (var backupEntries = Files.list(backupsDir)) {
+            Path backupRoot = backupEntries.findFirst().orElseThrow();
+            assertEquals("legacy-json", Files.readString(backupRoot.resolve("opencode.json")));
+            assertEquals("legacy-jsonc", Files.readString(backupRoot.resolve("oh-my-opencode.jsonc")));
+        }
+    }
+
+    @Test
     void useRestoresAlreadyProcessedFilesWhenSwitchFailsMidway() throws IOException {
         writeRepositoryMetadata("repo-local", new RepositoryConfigFile(List.of(new ProfileEntry("broken"))));
         Path sourceProfileDir = repositoriesCacheDir().resolve("repo-local").resolve("broken");
