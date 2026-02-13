@@ -161,7 +161,7 @@ jobs:
           echo "macos_arm_sha=${macos_arm_sha}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout tap repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: alvarosanchez/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
