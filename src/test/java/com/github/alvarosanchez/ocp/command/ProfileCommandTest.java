@@ -282,6 +282,34 @@ class ProfileCommandTest {
     }
 
     @Test
+    void useFailsWhenInheritedJsonExtensionDoesNotMatchParent() throws IOException {
+        writeRepositoryMetadata(
+            "repo-local",
+            new RepositoryConfigFile(List.of(new ProfileEntry("base"), new ProfileEntry("child", "base")))
+        );
+
+        Path repositoryDir = repositoriesCacheDir().resolve("repo-local");
+        Path baseDir = repositoryDir.resolve("base");
+        Path childDir = repositoryDir.resolve("child");
+        Files.createDirectories(baseDir);
+        Files.createDirectories(childDir);
+        Files.writeString(baseDir.resolve("opencode.jsonc"), "{\"base\":true}");
+        Files.writeString(childDir.resolve("opencode.json"), "{\"child\":true}");
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null))
+            )
+        );
+
+        CommandResult result = execute("profile", "use", "child");
+
+        assertEquals(1, result.exitCode());
+        assertTrue(result.stderr().contains("must use the same extension as its parent"));
+    }
+
+    @Test
     void useBacksUpJsonAndJsoncVariantsAsTheSameLogicalFile() throws IOException {
         writeRepositoryMetadata("repo-local", new RepositoryConfigFile(List.of(new ProfileEntry("corporate"))));
 
