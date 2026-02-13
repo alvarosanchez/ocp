@@ -44,6 +44,7 @@ ocp profile refresh
 - Each profile is a folder containing files to link into `~/.config/opencode`.
 - On `ocp profile use <name>`, `ocp` updates symlinks to the selected profile.
 - Existing non-symlink target files are backed up before linking.
+- Hosted repository names are derived from URI path segments (for example `acme-opencode-config`).
 
 ## Repository format
 
@@ -88,7 +89,7 @@ Default paths:
 
 - Registry: `~/.config/ocp/config.json`
 - Cache root: `~/.cache/ocp`
-- Local clones: `~/.cache/ocp/repositories/<repo-name>`
+- Local clones: `~/.cache/ocp/repositories/<repo-name>` (namespaced for hosted remotes)
 - Backups: `~/.config/ocp/backups/<timestamp>/...`
 - OpenCode config target: `~/.config/opencode`
 

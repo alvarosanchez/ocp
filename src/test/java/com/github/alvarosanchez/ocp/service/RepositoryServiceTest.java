@@ -73,6 +73,7 @@ class RepositoryServiceTest {
                 List.of(
                     new RepositoryEntry("", " git@github.com:acme/alpha.git ", null),
                     new RepositoryEntry("custom", "https://github.com/acme/beta.git", null),
+                    new RepositoryEntry("", "ssh://git@mycompany.com:7999/~alsansan/opencode-configs.git", null),
                     new RepositoryEntry("ignored", "  ", null)
                 )
             )
@@ -80,11 +81,11 @@ class RepositoryServiceTest {
 
         List<RepositoryEntry> repositories = repositoryService.load();
 
-        assertEquals(2, repositories.size());
-        assertEquals("alpha", repositories.get(0).name());
+        assertEquals(3, repositories.size());
+        assertEquals("acme-alpha", repositories.get(0).name());
         assertEquals("git@github.com:acme/alpha.git", repositories.get(0).uri());
         assertEquals(
-            Path.of(System.getProperty("ocp.cache.dir"), "repositories", "alpha").toString(),
+            Path.of(System.getProperty("ocp.cache.dir"), "repositories", "acme-alpha").toString(),
             repositories.get(0).localPath()
         );
         assertEquals("custom", repositories.get(1).name());
@@ -92,6 +93,31 @@ class RepositoryServiceTest {
         assertEquals(
             Path.of(System.getProperty("ocp.cache.dir"), "repositories", "custom").toString(),
             repositories.get(1).localPath()
+        );
+        assertEquals("alsansan-opencode-configs", repositories.get(2).name());
+        assertEquals("ssh://git@mycompany.com:7999/~alsansan/opencode-configs.git", repositories.get(2).uri());
+        assertEquals(
+            Path.of(System.getProperty("ocp.cache.dir"), "repositories", "alsansan-opencode-configs").toString(),
+            repositories.get(2).localPath()
+        );
+    }
+
+    @Test
+    void loadKeepsBasenameForLocalFileUris() throws IOException {
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("", "file:///tmp/remote.git", null))
+            )
+        );
+
+        List<RepositoryEntry> repositories = repositoryService.load();
+
+        assertEquals(1, repositories.size());
+        assertEquals("remote", repositories.get(0).name());
+        assertEquals(
+            Path.of(System.getProperty("ocp.cache.dir"), "repositories", "remote").toString(),
+            repositories.get(0).localPath()
         );
     }
 

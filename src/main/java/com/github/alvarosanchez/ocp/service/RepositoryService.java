@@ -57,6 +57,9 @@ public final class RepositoryService {
 
         List<RepositoryEntry> repositories = new ArrayList<>(load());
         for (RepositoryEntry repository : repositories) {
+            if (repository.uri().equals(uri)) {
+                throw new IllegalStateException("Repository URI `" + uri + "` is already configured.");
+            }
             if (repository.name().equals(repositoryName)) {
                 throw new IllegalStateException("Repository `" + repositoryName + "` is already configured.");
             }
@@ -172,6 +175,9 @@ public final class RepositoryService {
                 continue;
             }
             String name = entry.name() == null || entry.name().isBlank() ? repositoryNameFromUri(uri) : entry.name();
+            if (name.isBlank()) {
+                continue;
+            }
             Path localPath = repositoriesDirectory().resolve(name);
             normalized.add(
                 new RepositoryEntry(
@@ -206,13 +212,165 @@ public final class RepositoryService {
     }
 
     private String repositoryNameFromUri(String uri) {
-        String normalizedUri = uri;
-        while (normalizedUri.endsWith("/") || normalizedUri.endsWith("\\")) {
-            normalizedUri = normalizedUri.substring(0, normalizedUri.length() - 1);
+        String normalizedUri = trimTrailingSeparators(uri);
+        if (normalizedUri.isBlank()) {
+            return "";
         }
-        int separator = Math.max(normalizedUri.lastIndexOf('/'), normalizedUri.lastIndexOf(':'));
-        String raw = separator >= 0 ? normalizedUri.substring(separator + 1) : normalizedUri;
-        return raw.endsWith(".git") ? raw.substring(0, raw.length() - 4) : raw;
+
+        RepositoryPathInfo repositoryPathInfo = repositoryPathInfoFromUri(normalizedUri);
+        if (repositoryPathInfo.segments().isEmpty()) {
+            return "";
+        }
+
+        String repositorySegment = normalizeSegment(
+            stripGitSuffix(repositoryPathInfo.segments().get(repositoryPathInfo.segments().size() - 1))
+        );
+        if (repositorySegment.isBlank()) {
+            return "";
+        }
+
+        if (!repositoryPathInfo.namespaced() || repositoryPathInfo.segments().size() == 1) {
+            return repositorySegment;
+        }
+
+        List<String> namespaceSegments = new ArrayList<>();
+        for (int index = 0; index < repositoryPathInfo.segments().size() - 1; index++) {
+            String namespaceSegment = normalizeSegment(repositoryPathInfo.segments().get(index));
+            if (!namespaceSegment.isBlank()) {
+                namespaceSegments.add(namespaceSegment);
+            }
+        }
+
+        if (namespaceSegments.isEmpty()) {
+            return repositorySegment;
+        }
+
+        return String.join("-", namespaceSegments) + "-" + repositorySegment;
+    }
+
+    private String trimTrailingSeparators(String value) {
+        String normalizedValue = value == null ? "" : value.trim();
+        while (normalizedValue.endsWith("/") || normalizedValue.endsWith("\\")) {
+            normalizedValue = normalizedValue.substring(0, normalizedValue.length() - 1);
+        }
+        return normalizedValue;
+    }
+
+    private RepositoryPathInfo repositoryPathInfoFromUri(String uri) {
+        if (isScpLikeUri(uri)) {
+            int separator = uri.indexOf(':');
+            return new RepositoryPathInfo(pathSegments(uri.substring(separator + 1)), true);
+        }
+
+        int schemeSeparator = uri.indexOf("://");
+        if (schemeSeparator > 0 && isUriScheme(uri.substring(0, schemeSeparator))) {
+            String scheme = uri.substring(0, schemeSeparator);
+            String authorityAndPath = uri.substring(schemeSeparator + 3);
+            int pathSeparator = authorityAndPath.indexOf('/');
+            if (pathSeparator < 0) {
+                return new RepositoryPathInfo(List.of(), false);
+            }
+
+            String path = authorityAndPath.substring(pathSeparator + 1);
+            boolean namespaced = !"file".equalsIgnoreCase(scheme);
+            return new RepositoryPathInfo(pathSegments(path), namespaced);
+        }
+
+        return new RepositoryPathInfo(pathSegments(uri), false);
+    }
+
+    private boolean isScpLikeUri(String uri) {
+        if (uri.contains("://")) {
+            return false;
+        }
+        if (isWindowsDrivePath(uri)) {
+            return false;
+        }
+
+        int separator = uri.indexOf(':');
+        if (separator <= 0 || separator == uri.length() - 1) {
+            return false;
+        }
+
+        String candidateHost = uri.substring(0, separator);
+        if (candidateHost.contains("/") || candidateHost.contains("\\")) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private boolean isWindowsDrivePath(String value) {
+        return value.length() >= 3
+            && Character.isLetter(value.charAt(0))
+            && value.charAt(1) == ':'
+            && (value.charAt(2) == '\\' || value.charAt(2) == '/');
+    }
+
+    private boolean isUriScheme(String value) {
+        if (value.isBlank() || !Character.isLetter(value.charAt(0))) {
+            return false;
+        }
+
+        for (int index = 1; index < value.length(); index++) {
+            char character = value.charAt(index);
+            if (!Character.isLetterOrDigit(character) && character != '+' && character != '-' && character != '.') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private List<String> pathSegments(String path) {
+        String normalizedPath = path.replace('\\', '/');
+        String[] rawSegments = normalizedPath.split("/");
+        List<String> segments = new ArrayList<>();
+        for (String rawSegment : rawSegments) {
+            String segment = rawSegment.trim();
+            if (!segment.isBlank()) {
+                segments.add(segment);
+            }
+        }
+        return segments;
+    }
+
+    private String stripGitSuffix(String value) {
+        return value.endsWith(".git") ? value.substring(0, value.length() - 4) : value;
+    }
+
+    private String normalizeSegment(String value) {
+        String segment = value == null ? "" : value.trim();
+        while (segment.startsWith("~")) {
+            segment = segment.substring(1);
+        }
+        if (segment.isBlank()) {
+            return "";
+        }
+
+        StringBuilder normalized = new StringBuilder();
+        boolean lastWasDash = false;
+        for (int index = 0; index < segment.length(); index++) {
+            char character = segment.charAt(index);
+            if (Character.isLetterOrDigit(character) || character == '-' || character == '_' || character == '.') {
+                normalized.append(character);
+                lastWasDash = false;
+            } else if (!lastWasDash) {
+                normalized.append('-');
+                lastWasDash = true;
+            }
+        }
+
+        String normalizedSegment = normalized.toString();
+        while (normalizedSegment.startsWith("-")) {
+            normalizedSegment = normalizedSegment.substring(1);
+        }
+        while (normalizedSegment.endsWith("-")) {
+            normalizedSegment = normalizedSegment.substring(0, normalizedSegment.length() - 1);
+        }
+        return normalizedSegment;
+    }
+
+    private record RepositoryPathInfo(List<String> segments, boolean namespaced) {
     }
 
     private Path repositoriesFile() {

@@ -75,7 +75,9 @@ Rules:
 
 - `config.activeProfile` defaults to `null` (no active profile selected).
 - `repositories[*].uri` is required.
-- `repositories[*].name` may be omitted; when omitted, name is derived from URI basename without `.git`.
+- `repositories[*].name` may be omitted; when omitted, name is derived from URI path.
+  - Hosted remotes use namespace + repository (for example `acme-opencode-config`).
+  - Local file paths keep basename behavior (for example `remote`).
 - `repositories[*].localPath` is derived from cache directory and repository name.
 
 ### `repository.json` schema
@@ -146,7 +148,9 @@ oss/opencode.json
 
 ### Repository name normalization
 
-- Derive repository name from URI basename split by `/` or `:`.
+- Derive repository name from URI path segments.
+- For hosted/scp remotes, include namespace segments plus repository segment (joined by `-`).
+- For local file paths, use repository basename.
 - Strip `.git` suffix when present.
 - Trim URI whitespace before parsing.
 
