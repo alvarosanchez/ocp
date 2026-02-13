@@ -14,6 +14,10 @@ It helps you switch between different OpenCode setups (for example, work vs pers
 brew install alvarosanchez/tap/ocp
 ```
 
+Requirements:
+
+- `git` available in your `PATH`
+
 ## Quick start
 
 ```bash
