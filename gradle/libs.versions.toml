@@ -2,6 +2,7 @@
 micronaut-plugin = "4.6.2"
 graalvm-native-plugin = "0.11.1"
 micronaut-platform = "4.10.7"
+test-logger-plugin = "4.0.0"
 testcontainers = "1.21.3"
 testcontainers-gitserver = "0.8.0"
 commons-codec = "1.18.0"
@@ -27,3 +28,4 @@ clique-themes = { module = "com.github.kusoroadeolu:clique-themes", version.ref 
 [plugins]
 micronaut-application = { id = "io.micronaut.application", version.ref = "micronaut-plugin" }
 graalvm-native = { id = "org.graalvm.buildtools.native", version.ref = "graalvm-native-plugin" }
+test-logger = { id = "com.adarshr.test-logger", version.ref = "test-logger-plugin" }

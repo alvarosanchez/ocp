@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.micronaut.application)
     alias(libs.plugins.graalvm.native)
+    alias(libs.plugins.test.logger)
 }
 
 val defaultVersion = "0.1.0"
