@@ -25,7 +25,9 @@ jobs:
           java-version: "25"
           github-token: ${{ secrets.GITHUB_TOKEN }}
           cache: gradle
-          components: "native-image"
 
-      - name: Run build and tests
-        run: ./gradlew --no-daemon test nativeTest build
+      - name: Run build
+        run: ./gradlew --no-daemon build
+
+      - name: Run native tests
+        run: ./gradlew --no-daemon nativeTest

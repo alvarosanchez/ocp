@@ -40,7 +40,6 @@ jobs:
           distribution: "graalvm"
           github-token: ${{ secrets.GITHUB_TOKEN }}
           cache: gradle
-          components: "native-image"
           native-image-job-reports: "true"
 
       - name: Derive version from tag
@@ -52,9 +51,17 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and test before native compile
+      - name: Run build
         shell: bash
-        run: ./gradlew --no-daemon -PreleaseVersion="${{ steps.version.outputs.version }}" test build nativeCompile
+        run: ./gradlew --no-daemon -PreleaseVersion="${{ steps.version.outputs.version }}" build
+
+      - name: Run native tests
+        shell: bash
+        run: ./gradlew --no-daemon -PreleaseVersion="${{ steps.version.outputs.version }}" nativeTest
+
+      - name: Build native executable
+        shell: bash
+        run: ./gradlew --no-daemon -PreleaseVersion="${{ steps.version.outputs.version }}" nativeCompile
 
       - name: Package artifact
         shell: bash
