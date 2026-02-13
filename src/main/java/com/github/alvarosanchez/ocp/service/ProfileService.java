@@ -18,7 +18,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -60,15 +59,15 @@ public final class ProfileService {
             throw new NoActiveProfileException("No active profile selected yet.");
         }
 
-        ProfileDefinition profileDefinition = profileForName(activeProfileName);
-        if (profileDefinition == null) {
+        DiscoveredProfile discoveredProfile = discoverProfilesByName().get(activeProfileName);
+        if (discoveredProfile == null) {
             throw new IllegalStateException(
                 "Active profile `" + activeProfileName + "` is not available in configured repositories."
             );
         }
 
-        RepositoryStatus repositoryStatus = repositoryStatusFor(profileDefinition.repositoryEntry());
-        return toProfile(activeProfileName, profileDefinition.repositoryEntry(), repositoryStatus, true);
+        RepositoryStatus repositoryStatus = repositoryStatusFor(discoveredProfile.repositoryEntry());
+        return toProfile(discoveredProfile, repositoryStatus, true);
     }
 
     /**
@@ -77,7 +76,7 @@ public final class ProfileService {
      * @return profiles sorted by name
      */
     public List<Profile> getAllProfiles() {
-        Map<String, ProfileDefinition> profilesByName = discoverProfilesByName();
+        Map<String, DiscoveredProfile> profilesByName = discoverProfilesByName();
         Map<String, RepositoryStatus> statusesByRepository = new HashMap<>();
         for (RepositoryEntry repositoryEntry : repositoryService.load()) {
             statusesByRepository.put(repositoryEntry.name(), repositoryStatusFor(repositoryEntry));
@@ -89,12 +88,12 @@ public final class ProfileService {
         String activeProfileName = currentActiveProfileName();
         List<Profile> profiles = new ArrayList<>();
         for (String profileName : sortedProfileNames) {
-            ProfileDefinition profileDefinition = profilesByName.get(profileName);
-            RepositoryStatus repositoryStatus = statusesByRepository.get(profileDefinition.repositoryEntry().name());
+            DiscoveredProfile discoveredProfile = profilesByName.get(profileName);
+            RepositoryStatus repositoryStatus = statusesByRepository.get(discoveredProfile.repositoryEntry().name());
             if (repositoryStatus == null) {
                 continue;
             }
-            profiles.add(toProfile(profileName, profileDefinition.repositoryEntry(), repositoryStatus, profileName.equals(activeProfileName)));
+            profiles.add(toProfile(discoveredProfile, repositoryStatus, profileName.equals(activeProfileName)));
         }
 
         return profiles;
@@ -137,24 +136,28 @@ public final class ProfileService {
      */
     public boolean useProfile(String profileName) {
         String normalizedProfileName = normalizeProfileName(profileName);
-        Map<String, ProfileDefinition> profilesByName = discoverProfilesByName();
-        ProfileDefinition profileDefinition = profilesByName.get(normalizedProfileName);
-        if (profileDefinition == null) {
+        Map<String, DiscoveredProfile> profilesByName = discoverProfilesByName();
+        DiscoveredProfile discoveredProfile = profilesByName.get(normalizedProfileName);
+        if (discoveredProfile == null) {
             throw new IllegalStateException("Profile `" + normalizedProfileName + "` was not found.");
         }
+        RepositoryEntry repositoryEntry = discoveredProfile.repositoryEntry();
 
-        List<ResolvedProfileFile> resolvedFiles = resolveProfileFiles(normalizedProfileName, profilesByName, true);
-        List<ResolvedProfileFile> previousResolvedFiles = List.of();
+        Path profilePath = profilePathFor(normalizedProfileName, repositoryEntry);
+        if (!Files.isDirectory(profilePath)) {
+            throw new IllegalStateException("Profile directory does not exist: " + profilePath);
+        }
 
+        Path previousProfilePath = null;
         String previousProfileName = currentActiveProfileName();
         if (previousProfileName != null && !previousProfileName.equals(normalizedProfileName)) {
-            ProfileDefinition previousProfileDefinition = profilesByName.get(previousProfileName);
-            if (previousProfileDefinition != null) {
-                previousResolvedFiles = resolveProfileFiles(previousProfileName, profilesByName, false);
+            DiscoveredProfile previousProfile = profilesByName.get(previousProfileName);
+            if (previousProfile != null) {
+                previousProfilePath = profilePathFor(previousProfileName, previousProfile.repositoryEntry());
             }
         }
 
-        switchProfileFiles(resolvedFiles, previousResolvedFiles, openCodeDirectory());
+        switchProfileFiles(profilePath, previousProfilePath, openCodeDirectory());
         writeActiveProfile(normalizedProfileName);
         return true;
     }
@@ -167,12 +170,12 @@ public final class ProfileService {
      */
     public boolean refreshProfile(String profileName) {
         String normalizedProfileName = normalizeProfileName(profileName);
-        ProfileDefinition profileDefinition = profileForName(normalizedProfileName);
-        if (profileDefinition == null) {
+        RepositoryEntry repositoryEntry = repositoryForProfile(normalizedProfileName);
+        if (repositoryEntry == null) {
             throw new IllegalStateException("Profile `" + normalizedProfileName + "` was not found.");
         }
 
-        refreshRepository(profileDefinition.repositoryEntry());
+        refreshRepository(repositoryEntry);
         return true;
     }
 
@@ -217,15 +220,12 @@ public final class ProfileService {
         return repositoryService.loadConfigFile().config().activeProfile();
     }
 
-    private void switchProfileFiles(
-        List<ResolvedProfileFile> sourceFiles,
-        List<ResolvedProfileFile> previousSourceFiles,
-        Path targetDirectory
-    ) {
+    private void switchProfileFiles(Path sourceDirectory, Path previousSourceDirectory, Path targetDirectory) {
+        List<Path> sourceFiles = profileFiles(sourceDirectory);
         Set<Path> sourceFileRelativePaths = new HashSet<>();
         Set<Path> sourceLogicalRelativePaths = new HashSet<>();
-        for (ResolvedProfileFile sourceFile : sourceFiles) {
-            Path relativePath = sourceFile.relativePath();
+        for (Path sourceFile : sourceFiles) {
+            Path relativePath = sourceDirectory.relativize(sourceFile);
             sourceFileRelativePaths.add(relativePath);
             Path logicalRelativePath = logicalRelativePath(relativePath);
             if (!sourceLogicalRelativePaths.add(logicalRelativePath)) {
@@ -239,28 +239,30 @@ public final class ProfileService {
         List<FileSwitchState> switchStates = new ArrayList<>();
 
         try {
-            for (ResolvedProfileFile previousSourceFile : previousSourceFiles) {
-                Path relativePath = previousSourceFile.relativePath();
-                if (sourceFileRelativePaths.contains(relativePath) || sourceLogicalRelativePaths.contains(logicalRelativePath(relativePath))) {
-                    continue;
-                }
+            if (previousSourceDirectory != null) {
+                for (Path previousSourceFile : profileFiles(previousSourceDirectory)) {
+                    Path relativePath = previousSourceDirectory.relativize(previousSourceFile);
+                    if (sourceFileRelativePaths.contains(relativePath) || sourceLogicalRelativePaths.contains(logicalRelativePath(relativePath))) {
+                        continue;
+                    }
 
-                Path targetFile = targetDirectory.resolve(relativePath);
-                if (!Files.isSymbolicLink(targetFile)) {
-                    continue;
-                }
+                    Path targetFile = targetDirectory.resolve(relativePath);
+                    if (!Files.isSymbolicLink(targetFile)) {
+                        continue;
+                    }
 
-                Path currentSymlinkTarget = Files.readSymbolicLink(targetFile);
-                if (!currentSymlinkTarget.equals(previousSourceFile.sourcePath().toAbsolutePath())) {
-                    continue;
-                }
+                    Path currentSymlinkTarget = Files.readSymbolicLink(targetFile);
+                    if (!currentSymlinkTarget.equals(previousSourceFile.toAbsolutePath())) {
+                        continue;
+                    }
 
-                switchStates.add(new FileSwitchState(targetFile, null, currentSymlinkTarget));
-                Files.delete(targetFile);
+                    switchStates.add(new FileSwitchState(targetFile, null, currentSymlinkTarget));
+                    Files.delete(targetFile);
+                }
             }
 
-            for (ResolvedProfileFile sourceFile : sourceFiles) {
-                Path relativePath = sourceFile.relativePath();
+            for (Path sourceFile : sourceFiles) {
+                Path relativePath = sourceDirectory.relativize(sourceFile);
                 Path targetFile = targetDirectory.resolve(relativePath);
 
                 Files.createDirectories(targetFile.getParent());
@@ -292,7 +294,7 @@ public final class ProfileService {
                 if (!targetFileHadState) {
                     switchStates.add(new FileSwitchState(targetFile, null, null));
                 }
-                Files.createSymbolicLink(targetFile, sourceFile.sourcePath().toAbsolutePath());
+                Files.createSymbolicLink(targetFile, sourceFile.toAbsolutePath());
             }
         } catch (IOException e) {
             IOException rollbackFailure = rollbackSwitch(switchStates);
@@ -363,188 +365,6 @@ public final class ProfileService {
         return rollbackFailure;
     }
 
-    private ProfileDefinition profileForName(String profileName) {
-        return discoverProfilesByName().get(profileName);
-    }
-
-    private List<ResolvedProfileFile> resolveProfileFiles(
-        String profileName,
-        Map<String, ProfileDefinition> profilesByName,
-        boolean materializeMergedFiles
-    ) {
-        List<ProfileDefinition> lineage = profileLineageFor(profileName, profilesByName);
-        Map<Path, EffectiveProfileFile> filesByLogicalRelativePath = new LinkedHashMap<>();
-
-        for (ProfileDefinition profileDefinition : lineage) {
-            Path profilePath = profilePathFor(profileDefinition);
-            if (!Files.isDirectory(profilePath)) {
-                throw new IllegalStateException("Profile directory does not exist: " + profilePath);
-            }
-
-            Set<Path> profileLogicalPaths = new HashSet<>();
-            for (Path sourceFile : profileFiles(profilePath)) {
-                Path relativePath = profilePath.relativize(sourceFile);
-                Path logicalRelativePath = logicalRelativePath(relativePath);
-                if (!profileLogicalPaths.add(logicalRelativePath)) {
-                    throw new IllegalStateException(
-                        "Profile contains conflicting config file variants for " + logicalRelativePath
-                    );
-                }
-
-                EffectiveProfileFile existing = filesByLogicalRelativePath.get(logicalRelativePath);
-                boolean currentIsJson = isMergeableJsonFile(relativePath);
-                if (existing != null && existing.jsonMergeCandidate() && currentIsJson) {
-                    String existingExtension = jsonExtension(existing.relativePath());
-                    String currentExtension = jsonExtension(relativePath);
-                    if (!existingExtension.equals(currentExtension)) {
-                        throw new IllegalStateException(
-                            "Profile `" + profileDefinition.name()
-                                + "` must use the same extension as its parent for `"
-                                + logicalRelativePath
-                                + "`: found `"
-                                + relativePath.getFileName()
-                                + "` but parent defines `"
-                                + existing.relativePath().getFileName()
-                                + "`."
-                        );
-                    }
-                    Object parentJson = existing.jsonValue() != null ? existing.jsonValue() : parseJsonFile(existing.sourcePath());
-                    Object childJson = parseJsonFile(sourceFile);
-                    Object merged = mergeJsonValues(parentJson, childJson);
-                    filesByLogicalRelativePath.put(
-                        logicalRelativePath,
-                        new EffectiveProfileFile(relativePath, sourceFile, true, merged, true)
-                    );
-                } else if (currentIsJson) {
-                    filesByLogicalRelativePath.put(
-                        logicalRelativePath,
-                        new EffectiveProfileFile(relativePath, sourceFile, true, null, false)
-                    );
-                } else {
-                    filesByLogicalRelativePath.put(
-                        logicalRelativePath,
-                        new EffectiveProfileFile(relativePath, sourceFile, false, null, false)
-                    );
-                }
-            }
-        }
-
-        Path resolvedDirectory = resolvedProfileDirectory(profileName);
-        if (materializeMergedFiles) {
-            deleteRecursively(resolvedDirectory);
-        }
-
-        List<ResolvedProfileFile> resolvedFiles = new ArrayList<>();
-        for (EffectiveProfileFile effectiveFile : filesByLogicalRelativePath.values()) {
-            if (effectiveFile.mergedJson()) {
-                Path resolvedFile = resolvedDirectory.resolve(effectiveFile.relativePath());
-                if (materializeMergedFiles) {
-                    try {
-                        Files.createDirectories(resolvedFile.getParent());
-                        Files.writeString(resolvedFile, objectMapper.writeValueAsString(effectiveFile.jsonValue()));
-                    } catch (IOException e) {
-                        throw new IllegalStateException(
-                            "Failed to materialize merged profile file " + effectiveFile.relativePath(),
-                            e
-                        );
-                    }
-                }
-                resolvedFiles.add(new ResolvedProfileFile(effectiveFile.relativePath(), resolvedFile));
-            } else {
-                resolvedFiles.add(new ResolvedProfileFile(effectiveFile.relativePath(), effectiveFile.sourcePath()));
-            }
-        }
-
-        resolvedFiles.sort(Comparator.comparing(file -> file.relativePath().toString()));
-        return resolvedFiles;
-    }
-
-    private List<ProfileDefinition> profileLineageFor(
-        String profileName,
-        Map<String, ProfileDefinition> profilesByName
-    ) {
-        List<ProfileDefinition> lineage = new ArrayList<>();
-        collectProfileLineage(profileName, profilesByName, new ArrayList<>(), new HashSet<>(), lineage);
-        return lineage;
-    }
-
-    private void collectProfileLineage(
-        String profileName,
-        Map<String, ProfileDefinition> profilesByName,
-        List<String> traversalPath,
-        Set<String> visiting,
-        List<ProfileDefinition> lineage
-    ) {
-        ProfileDefinition profileDefinition = profilesByName.get(profileName);
-        if (profileDefinition == null) {
-            throw new IllegalStateException("Profile `" + profileName + "` was not found.");
-        }
-        if (!visiting.add(profileName)) {
-            List<String> cycle = new ArrayList<>(traversalPath);
-            cycle.add(profileName);
-            throw new IllegalStateException("Profile inheritance cycle detected: " + String.join(" -> ", cycle));
-        }
-
-        traversalPath.add(profileName);
-        String parentProfileName = profileDefinition.extendsFrom();
-        if (parentProfileName != null) {
-            if (parentProfileName.equals(profileName)) {
-                throw new IllegalStateException("Profile `" + profileName + "` cannot extend itself.");
-            }
-            if (!profilesByName.containsKey(parentProfileName)) {
-                throw new IllegalStateException(
-                    "Profile `" + profileName + "` extends unknown profile `" + parentProfileName + "`."
-                );
-            }
-            collectProfileLineage(parentProfileName, profilesByName, traversalPath, visiting, lineage);
-        }
-
-        lineage.add(profileDefinition);
-        traversalPath.remove(traversalPath.size() - 1);
-        visiting.remove(profileName);
-    }
-
-    private Object parseJsonFile(Path jsonFile) {
-        try {
-            return objectMapper.readValue(Files.readString(jsonFile), Object.class);
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to parse JSON/JSONC profile file: " + jsonFile, e);
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private Object mergeJsonValues(Object parent, Object child) {
-        if (parent instanceof Map<?, ?> parentMap && child instanceof Map<?, ?> childMap) {
-            Map<String, Object> merged = new LinkedHashMap<>((Map<String, Object>) parentMap);
-            for (Map.Entry<?, ?> entry : childMap.entrySet()) {
-                String key = String.valueOf(entry.getKey());
-                if (merged.containsKey(key)) {
-                    merged.put(key, mergeJsonValues(merged.get(key), entry.getValue()));
-                } else {
-                    merged.put(key, entry.getValue());
-                }
-            }
-            return merged;
-        }
-        return child;
-    }
-
-    private boolean isMergeableJsonFile(Path relativePath) {
-        String fileName = relativePath.getFileName().toString();
-        return fileName.endsWith(".json") || fileName.endsWith(".jsonc");
-    }
-
-    private String jsonExtension(Path relativePath) {
-        String fileName = relativePath.getFileName().toString();
-        if (fileName.endsWith(".jsonc")) {
-            return ".jsonc";
-        }
-        if (fileName.endsWith(".json")) {
-            return ".json";
-        }
-        return "";
-    }
-
     private List<Path> profileFiles(Path sourceDirectory) {
         if (!Files.exists(sourceDirectory)) {
             return List.of();
@@ -567,19 +387,27 @@ public final class ProfileService {
         return normalizedProfileName;
     }
 
-    private Map<String, ProfileDefinition> discoverProfilesByName() {
-        Map<String, ProfileDefinition> profilesByName = new HashMap<>();
+    private RepositoryEntry repositoryForProfile(String profileName) {
+        DiscoveredProfile discoveredProfile = discoverProfilesByName().get(profileName);
+        if (discoveredProfile == null) {
+            return null;
+        }
+        return discoveredProfile.repositoryEntry();
+    }
+
+    private Map<String, DiscoveredProfile> discoverProfilesByName() {
+        Map<String, DiscoveredProfile> profilesByName = new HashMap<>();
         Set<String> duplicates = new TreeSet<>();
 
         for (RepositoryEntry repositoryEntry : repositoryService.load()) {
             Path localPath = Path.of(repositoryEntry.localPath());
             for (ProfileEntry profileEntry : readProfiles(localPath.resolve("repository.json"))) {
-                ProfileDefinition profileDefinition = new ProfileDefinition(
+                DiscoveredProfile discoveredProfile = new DiscoveredProfile(
                     profileEntry.name(),
-                    repositoryEntry,
-                    profileEntry.extendsFrom()
+                    profileEntry.description(),
+                    repositoryEntry
                 );
-                ProfileDefinition existing = profilesByName.putIfAbsent(profileEntry.name(), profileDefinition);
+                DiscoveredProfile existing = profilesByName.putIfAbsent(profileEntry.name(), discoveredProfile);
                 if (existing != null) {
                     duplicates.add(profileEntry.name());
                 }
@@ -593,8 +421,8 @@ public final class ProfileService {
         return profilesByName;
     }
 
-    private Path profilePathFor(ProfileDefinition profileDefinition) {
-        return Path.of(profileDefinition.repositoryEntry().localPath()).resolve(profileDefinition.name());
+    private Path profilePathFor(String profileName, RepositoryEntry repositoryEntry) {
+        return Path.of(repositoryEntry.localPath()).resolve(profileName);
     }
 
     private void refreshRepository(RepositoryEntry repositoryEntry) {
@@ -638,16 +466,12 @@ public final class ProfileService {
         return new RepositoryStatus(shortSha, commitEpochSeconds, message, updateAvailable, versionCheckFailed);
     }
 
-    private Profile toProfile(
-        String profileName,
-        RepositoryEntry repositoryEntry,
-        RepositoryStatus repositoryStatus,
-        boolean active
-    ) {
+    private Profile toProfile(DiscoveredProfile discoveredProfile, RepositoryStatus repositoryStatus, boolean active) {
         return new Profile(
-            profileName,
-            repositoryEntry.name(),
-            repositoryEntry.uri(),
+            discoveredProfile.name(),
+            discoveredProfile.description(),
+            discoveredProfile.repositoryEntry().name(),
+            discoveredProfile.repositoryEntry().uri(),
             repositoryStatus.shortSha(),
             humanizeInstant(repositoryStatus.commitEpochSeconds()),
             repositoryStatus.message(),
@@ -727,39 +551,7 @@ public final class ProfileService {
             .profiles()
             .stream()
             .filter(entry -> entry.name() != null && !entry.name().isBlank())
-            .map(entry -> new ProfileEntry(entry.name().trim(), entry.extendsFrom()))
             .toList();
-    }
-
-    private Path resolvedProfileDirectory(String profileName) {
-        return cacheDirectory().resolve("resolved-profiles").resolve(profileName);
-    }
-
-    private void deleteRecursively(Path path) {
-        if (!Files.exists(path)) {
-            return;
-        }
-        try (var paths = Files.walk(path)) {
-            paths
-                .sorted(Comparator.reverseOrder())
-                .forEach(candidate -> {
-                    try {
-                        Files.deleteIfExists(candidate);
-                    } catch (IOException e) {
-                        throw new UncheckedIOException("Failed to delete " + candidate, e);
-                    }
-                });
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to delete " + path, e);
-        }
-    }
-
-    private Path cacheDirectory() {
-        String configuredPath = System.getProperty("ocp.cache.dir");
-        if (configuredPath != null && !configuredPath.isBlank()) {
-            return Path.of(configuredPath);
-        }
-        return Path.of(System.getProperty("user.home"), ".cache", "ocp");
     }
 
     private Path configDirectory() {
@@ -794,22 +586,10 @@ public final class ProfileService {
         return DateTimeFormatter.ofPattern("yyyyMMddHHmmss").format(LocalDateTime.now());
     }
 
-    private record ProfileDefinition(String name, RepositoryEntry repositoryEntry, String extendsFrom) {
-    }
-
-    private record EffectiveProfileFile(
-        Path relativePath,
-        Path sourcePath,
-        boolean jsonMergeCandidate,
-        Object jsonValue,
-        boolean mergedJson
-    ) {
-    }
-
-    private record ResolvedProfileFile(Path relativePath, Path sourcePath) {
-    }
-
     private record FileSwitchState(Path target, Path backupPath, Path previousSymlinkTarget) {
+    }
+
+    private record DiscoveredProfile(String name, String description, RepositoryEntry repositoryEntry) {
     }
 
     private static final class RepositoryStatus {

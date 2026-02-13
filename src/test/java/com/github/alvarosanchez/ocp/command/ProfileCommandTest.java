@@ -185,10 +185,11 @@ class ProfileCommandTest {
         assertEquals(0, activeProfile.exitCode());
         String normalizedOutput = removeAnsiCodes(activeProfile.stdout());
         assertTrue(normalizedOutput.contains("NAME"));
+        assertTrue(normalizedOutput.contains("DESCRIPTION"));
         assertTrue(normalizedOutput.contains("ACTIVE"));
         assertTrue(normalizedOutput.contains("✓"));
         assertTrue(normalizedOutput.contains("corporate"));
-        assertTrue(normalizedOutput.contains("REPOSITORY"));
+        assertFalse(normalizedOutput.contains("REPOSITORY"));
         assertTrue(normalizedOutput.contains("VERSION"));
         assertTrue(normalizedOutput.matches("(?s).*LAST\\s+UPDATED.*"));
         assertTrue(normalizedOutput.contains("MESSAGE"));
@@ -577,12 +578,13 @@ class ProfileCommandTest {
 
         assertEquals(0, result.exitCode());
         assertTrue(result.stdout().contains("NAME"));
-        assertTrue(result.stdout().contains("REPOSITORY"));
+        assertTrue(result.stdout().contains("DESCRIPTION"));
+        assertFalse(result.stdout().contains("REPOSITORY"));
         assertTrue(result.stdout().contains("VERSION"));
         assertTrue(result.stdout().contains("LAST UPDATED"));
         assertTrue(result.stdout().contains("MESSAGE"));
         assertTrue(result.stdout().contains("ops"));
-        assertTrue(result.stdout().contains(state.remoteUri()));
+        assertFalse(result.stdout().contains(state.remoteUri()));
         assertTrue(result.stdout().contains("❄"));
         assertTrue(result.stdout().contains("❄ Newer commits are available in remote repositories."));
     }
@@ -594,7 +596,7 @@ class ProfileCommandTest {
             new RepositoryConfigFile(
                 List.of(
                     new ProfileEntry("corporate"),
-                    new ProfileEntry("oss")
+                    new ProfileEntry("oss", "Open source setup")
                 )
             )
         );
@@ -610,9 +612,12 @@ class ProfileCommandTest {
 
         assertEquals(0, result.exitCode());
         assertTrue(result.stdout().contains("NAME"));
+        assertTrue(result.stdout().contains("DESCRIPTION"));
         assertTrue(result.stdout().contains("corporate"));
         assertTrue(result.stdout().contains("oss"));
-        assertTrue(result.stdout().contains("git@github.com:acme/repo-local.git"));
+        assertTrue(result.stdout().contains("Open source"));
+        assertTrue(result.stdout().contains("setup"));
+        assertFalse(result.stdout().contains("git@github.com:acme/repo-local.git"));
     }
 
     @Test

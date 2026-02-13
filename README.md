@@ -62,13 +62,11 @@ oss/opencode.json
 ```json
 {
   "profiles": [
-    { "name": "my-company" },
-    { "name": "oss", "extends_from": "my-company" }
+    { "name": "my-company", "description": "Company defaults" },
+    { "name": "oss", "description": "Open-source profile" }
   ]
 }
 ```
-
-When `extends_from` is set, `ocp profile use` resolves parent profiles first. For JSON and JSONC files (`*.json`, `*.jsonc`) present in both parent and child, keys are merged recursively and child values override parent values. Children must keep the same extension as their parent for the same logical file.
 
 ## Commands
 

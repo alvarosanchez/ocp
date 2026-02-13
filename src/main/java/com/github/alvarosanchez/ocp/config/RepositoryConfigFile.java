@@ -1,6 +1,5 @@
 package com.github.alvarosanchez.ocp.config;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import io.micronaut.serde.annotation.Serdeable;
 import java.util.List;
 
@@ -25,28 +24,18 @@ public record RepositoryConfigFile(List<ProfileEntry> profiles) {
      * Profile definition entry from profile metadata.
      *
      * @param name profile name
-     * @param extendsFrom optional parent profile name
+     * @param description optional profile description
      */
     @Serdeable
-    public record ProfileEntry(String name, @JsonProperty("extends_from") String extendsFrom) {
-
-        /**
-         * Creates a profile entry with no parent profile.
-         *
-         * @param name profile name
-         */
+    public record ProfileEntry(String name, String description) {
         public ProfileEntry(String name) {
             this(name, null);
         }
 
-        /**
-         * Creates a profile entry.
-         *
-         * @param name profile name
-         * @param extendsFrom optional parent profile name
-         */
         public ProfileEntry {
-            extendsFrom = extendsFrom == null || extendsFrom.isBlank() ? null : extendsFrom;
+            if (description != null && description.isBlank()) {
+                description = null;
+            }
         }
     }
 }

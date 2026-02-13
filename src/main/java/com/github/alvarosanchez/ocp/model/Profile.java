@@ -4,6 +4,7 @@ package com.github.alvarosanchez.ocp.model;
  * Render-ready profile view model used by CLI commands.
  *
  * @param name profile name
+ * @param description profile description from repository metadata
  * @param repositoryName repository identifier in local configuration
  * @param repository repository URI
  * @param version latest known local short commit SHA
@@ -15,6 +16,7 @@ package com.github.alvarosanchez.ocp.model;
  */
 public record Profile(
     String name,
+    String description,
     String repositoryName,
     String repository,
     String version,

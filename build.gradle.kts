@@ -90,7 +90,6 @@ graalvmNative {
             mainClass.set("com.github.alvarosanchez.ocp.command.OcpCommand")
             buildArgs.add("--no-fallback")
             buildArgs.add("-H:IncludeResources=META-INF/ocp/version.txt")
-            quickBuild.set(true)
         }
         named("test") {
             buildArgs.add("--initialize-at-build-time=org.junit.platform.commons.logging.LoggerFactory\$DelegatingLogger")

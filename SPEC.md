@@ -23,6 +23,7 @@ Many users need to switch between different model/provider setups depending on c
 
 - Managing secrets directly.
 - Editing OpenCode JSON contents.
+- Supporting profile inheritance/templating.
 
 ## Key terms
 
@@ -85,8 +86,8 @@ Rules:
 ```json
 {
   "profiles": [
-    { "name": "my-company" },
-    { "name": "oss", "extends_from": "my-company" }
+    { "name": "my-company", "description": "Company defaults" },
+    { "name": "oss", "description": "Open-source profile" }
   ]
 }
 ```
@@ -95,8 +96,8 @@ Rules:
 
 - `profiles` defaults to an empty list.
 - Empty/blank profile names are ignored.
+- `description` is optional and may be omitted or null.
 - Profile names must be globally unique across all configured repositories.
-- `profiles[*].extends_from` is optional and references another profile name.
 
 ## Repository structure
 
@@ -135,7 +136,7 @@ oss/opencode.json
 | --- | --- | --- |
 | `ocp` | Implemented | Print root usage when no subcommand is provided. |
 | `ocp help <command>` | Implemented | Print help for command/subcommand. |
-| `ocp profile list` | Implemented | Print a table of profiles with repository URI, local commit metadata, and non-fatal remote update hints. |
+| `ocp profile list` | Implemented | Print a table of profiles with name, description, local commit metadata, and non-fatal remote update hints; include repository URI when width budget allows. |
 | `ocp profile` | Implemented | Print currently active profile with repository/version metadata and update hints. |
 | `ocp profile create [name]` | Implemented | Create profile folder and register it in repository metadata. Defaults to `default` when no name is provided. |
 | `ocp profile use <name>` | Implemented | Switch active profile by linking profile files to OpenCode config location. |
@@ -164,6 +165,10 @@ oss/opencode.json
 - Executed during `ocp profile list` and `ocp profile` (active profile view).
 - `VERSION` displays the latest local short SHA; when remote has newer commits, a footnote is printed and table rows include a `❄` marker.
 - Version-check failures (for example offline network) must not block profile output and are reported as non-fatal notes.
+- Profile tables use width from `$COLUMNS` when exported.
+- If `$COLUMNS` is unavailable, interactive sessions use detected terminal width; otherwise rendering falls back to 120 columns.
+- When profile tables exceed the width budget, `DESCRIPTION` and `MESSAGE` cells are wrapped to fit.
+- If the table still cannot fit, the `REPOSITORY` column is omitted.
 
 ### Profile switching and backups (target behavior)
 
@@ -176,17 +181,6 @@ oss/opencode.json
 - Backup location: `~/.config/ocp/backups/<timestamp>/<filename>`
 - Switching must be transactional at file level:
   - If linking one file fails, already-processed files must be restored from backups.
-- Profile inheritance:
-  - A profile may inherit from another profile using `extends_from`.
-  - Inheritance may span multiple levels and is resolved parent-first.
-  - Cycles and missing parents are runtime validation errors.
-  - Non-JSON files are inherited by path and overridden by child files.
-  - JSON files (`*.json`) and JSONC files (`*.jsonc`) with the same relative path are deep-merged recursively.
-    - Missing keys are inherited from parent.
-    - Existing keys are overridden by child values.
-    - Nested objects follow the same merge rule.
-    - Non-object values (including arrays) are replaced by child values.
-  - When overriding a JSON/JSONC file from a parent, the child must use the same extension (`.json` or `.jsonc`) as the parent.
 
 ## Technology stack
 
@@ -211,7 +205,7 @@ oss/opencode.json
   - output contains `Usage: ocp`
 - `ocp profile list`
   - with no repositories/profiles: exits `0`, prints helpful empty-state message
-  - with multiple repositories: outputs a table sorted by profile name with columns `NAME`, `ACTIVE`, `REPOSITORY`, `VERSION`, `LAST UPDATED`, `MESSAGE`
+  - with multiple repositories: outputs a table sorted by profile name with columns `NAME`, `DESCRIPTION`, `ACTIVE`, `VERSION`, `LAST UPDATED`, `MESSAGE`, and includes `REPOSITORY` when it fits within the width budget
   - with duplicate profile names: exits `1`, prints duplicate-name error on stderr
 - Repository config loading
   - missing `config.json`: treated as empty repository list
