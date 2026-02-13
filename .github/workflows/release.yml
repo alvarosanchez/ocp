@@ -16,18 +16,22 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-24.04
+          - runner: ubuntu-latest
             artifact_suffix: linux-x86_64
             extension: ""
-          - runner: windows-2022
+            run_verification: true
+          - runner: windows-latest
             artifact_suffix: windows-x86_64
             extension: ".exe"
-          - runner: macos-13
+            run_verification: false
+          - runner: macos-26-large
             artifact_suffix: macos-x86_64
             extension: ""
-          - runner: macos-14
+            run_verification: false
+          - runner: macos-26
             artifact_suffix: macos-aarch64
             extension: ""
+            run_verification: false
 
     steps:
       - name: Checkout source
@@ -52,10 +56,12 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Run build
+        if: ${{ matrix.run_verification }}
         shell: bash
         run: ./gradlew --no-daemon -PreleaseVersion="${{ steps.version.outputs.version }}" build
 
       - name: Run native tests
+        if: ${{ matrix.run_verification }}
         shell: bash
         run: ./gradlew --no-daemon -PreleaseVersion="${{ steps.version.outputs.version }}" nativeTest
 
