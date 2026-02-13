@@ -166,12 +166,14 @@ public final class ProfileService {
      */
     public boolean refreshProfile(String profileName) {
         String normalizedProfileName = normalizeProfileName(profileName);
-        DiscoveredProfile discoveredProfile = discoverProfilesByName().get(normalizedProfileName);
+        Map<String, DiscoveredProfile> profilesByName = discoverProfilesByName();
+        DiscoveredProfile discoveredProfile = profilesByName.get(normalizedProfileName);
         if (discoveredProfile == null) {
             throw new IllegalStateException("Profile `" + normalizedProfileName + "` was not found.");
         }
 
         refreshRepository(discoveredProfile.repositoryEntry());
+        refreshActiveProfileIfAffected(normalizedProfileName);
         return true;
     }
 
@@ -184,6 +186,7 @@ public final class ProfileService {
         for (RepositoryEntry repositoryEntry : repositoryService.load()) {
             refreshRepository(repositoryEntry);
         }
+        refreshActiveProfileIfConfigured();
         return true;
     }
 
@@ -635,6 +638,49 @@ public final class ProfileService {
             throw new IllegalStateException("Profile name is required.");
         }
         return normalizedProfileName;
+    }
+
+    private void refreshActiveProfileIfAffected(String refreshedProfileName) {
+        String activeProfileName = currentActiveProfileName();
+        if (activeProfileName == null || activeProfileName.isBlank()) {
+            return;
+        }
+
+        Map<String, DiscoveredProfile> profilesByName = discoverProfilesByName();
+        if (!profilesByName.containsKey(activeProfileName)) {
+            return;
+        }
+
+        if (isProfileInLineage(activeProfileName, refreshedProfileName, profilesByName)) {
+            useProfile(activeProfileName);
+        }
+    }
+
+    private void refreshActiveProfileIfConfigured() {
+        String activeProfileName = currentActiveProfileName();
+        if (activeProfileName == null || activeProfileName.isBlank()) {
+            return;
+        }
+
+        Map<String, DiscoveredProfile> profilesByName = discoverProfilesByName();
+        if (!profilesByName.containsKey(activeProfileName)) {
+            return;
+        }
+
+        useProfile(activeProfileName);
+    }
+
+    private boolean isProfileInLineage(
+        String profileName,
+        String targetProfileName,
+        Map<String, DiscoveredProfile> profilesByName
+    ) {
+        for (DiscoveredProfile discoveredProfile : profileLineageFor(profileName, profilesByName)) {
+            if (discoveredProfile.name().equals(targetProfileName)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Map<String, DiscoveredProfile> discoverProfilesByName() {

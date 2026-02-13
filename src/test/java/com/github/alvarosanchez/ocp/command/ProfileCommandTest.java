@@ -579,6 +579,58 @@ class ProfileCommandTest {
     }
 
     @Test
+    void refreshParentReappliesActiveChildResolvedConfiguration() throws IOException, InterruptedException {
+        RemoteRepositoryState state = createRemoteInheritedProfileRepository("oca", "oca-personal");
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-refresh-inherited", state.remoteUri(), null))
+            )
+        );
+
+        runCommand(List.of("git", "clone", state.remoteUri(), state.localClone().toString()));
+
+        CommandResult useResult = execute("profile", "use", "oca-personal");
+        assertEquals(0, useResult.exitCode());
+
+        Path opencodeFile = Path.of(System.getProperty("ocp.opencode.config.dir")).resolve("opencode.json");
+        Map<String, Object> initial = readJsonMap(opencodeFile);
+        assertEquals("v1", initial.get("some_parent"));
+        assertEquals("child", initial.get("shared"));
+
+        Path updateWorktree = tempDir.resolve("update-worktree-inherited-refresh");
+        runCommand(List.of("git", "clone", state.remoteUri(), updateWorktree.toString()));
+        Files.writeString(
+            updateWorktree.resolve("oca").resolve("opencode.json"),
+            "{\"some_parent\":\"v2\",\"parent_added\":\"yes\",\"shared\":\"parent\"}"
+        );
+        runCommand(List.of("git", "-C", updateWorktree.toString(), "add", "oca/opencode.json"));
+        runCommand(List.of(
+            "git",
+            "-C",
+            updateWorktree.toString(),
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "user.name=test",
+            "commit",
+            "-m",
+            "update-parent"
+        ));
+        runCommand(List.of("git", "-C", updateWorktree.toString(), "push", "origin", "HEAD"));
+
+        CommandResult refreshResult = execute("profile", "refresh", "oca");
+
+        assertEquals(0, refreshResult.exitCode());
+        assertTrue(refreshResult.stdout().contains("Refreshed profile `oca`"));
+        Map<String, Object> refreshed = readJsonMap(opencodeFile);
+        assertEquals("v2", refreshed.get("some_parent"));
+        assertEquals("yes", refreshed.get("parent_added"));
+        assertEquals("child", refreshed.get("shared"));
+    }
+
+    @Test
     void refreshPromptsWhenRepositoryHasLocalChangesAndCanDiscardThenRefresh() throws IOException, InterruptedException {
         RemoteRepositoryState state = createRemoteProfileRepository("ops");
 
@@ -976,6 +1028,60 @@ class ProfileCommandTest {
         runCommand(List.of("git", "-C", seedRepository.toString(), "push", "origin", "HEAD"));
 
         return new RemoteRepositoryState(remoteRepository.toUri().toString(), repositoriesCacheDir().resolve("repo-refresh"));
+    }
+
+    private RemoteRepositoryState createRemoteInheritedProfileRepository(String parent, String child) throws IOException, InterruptedException {
+        Path seedRepository = tempDir.resolve("seed-refresh-inherited");
+        runCommand(List.of("git", "init", seedRepository.toString()));
+        Files.createDirectories(seedRepository.resolve(parent));
+        Files.createDirectories(seedRepository.resolve(child));
+        Files.writeString(
+            seedRepository.resolve("repository.json"),
+            serializeAsJson(
+                new RepositoryConfigFile(
+                    List.of(
+                        new ProfileEntry(parent),
+                        new ProfileEntry(child, null, parent)
+                    )
+                )
+            )
+        );
+        Files.writeString(
+            seedRepository.resolve(parent).resolve("opencode.json"),
+            "{\"some_parent\":\"v1\",\"shared\":\"parent\"}"
+        );
+        Files.writeString(seedRepository.resolve(child).resolve("opencode.json"), "{\"shared\":\"child\"}");
+        runCommand(List.of(
+            "git",
+            "-C",
+            seedRepository.toString(),
+            "add",
+            "repository.json",
+            parent + "/opencode.json",
+            child + "/opencode.json"
+        ));
+        runCommand(List.of(
+            "git",
+            "-C",
+            seedRepository.toString(),
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "user.name=test",
+            "commit",
+            "-m",
+            "seed"
+        ));
+
+        Path remoteRepository = tempDir.resolve("repo-refresh-inherited.git");
+        runCommand(List.of("git", "init", "--bare", remoteRepository.toString()));
+        runCommand(List.of("git", "-C", seedRepository.toString(), "remote", "add", "origin", remoteRepository.toString()));
+        runCommand(List.of("git", "-C", seedRepository.toString(), "push", "origin", "HEAD"));
+
+        return new RemoteRepositoryState(
+            remoteRepository.toUri().toString(),
+            repositoriesCacheDir().resolve("repo-refresh-inherited")
+        );
     }
 
     private record CommandResult(int exitCode, String stdout, String stderr) {

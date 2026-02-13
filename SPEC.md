@@ -140,7 +140,7 @@ oss/opencode.json
 | `ocp profile` | Implemented | Print currently active profile with repository/version metadata and update hints. |
 | `ocp profile create [name]` | Implemented | Create profile folder and register it in repository metadata. Defaults to `default` when no name is provided. |
 | `ocp profile use <name>` | Implemented | Switch active profile by linking profile files to OpenCode config location. |
-| `ocp profile refresh [name]` | Implemented | Pull latest changes for a specific profile repository, or for all repositories when no name is provided. |
+| `ocp profile refresh [name]` | Implemented | Pull latest changes for a specific profile repository, or for all repositories when no name is provided. Reapplies active profile resolution when refreshed data affects the active profile. |
 | `ocp repository add <uri>` | Implemented | Clone repository into local cache and register it in `config.json`. |
 | `ocp repository delete <name>` | Implemented | Remove repository entry from registry and delete local clone. |
 | `ocp repository create <name> [--profile-name <profile>]` | Implemented | Initialize new profile repository with `repository.json` and initial profile. |
