@@ -10,23 +10,9 @@ It helps you switch between different OpenCode setups (for example, work vs pers
 
 ### Homebrew (recommended)
 
-TBD. Homebrew formula/tap publishing is not ready yet.
-
-### Temporary: run from source
-
-Until Homebrew is available:
-
 ```bash
-git clone https://github.com/alvarosanchez/ocp.git
-cd ocp
-./gradlew nativeCompile
-./build/native/nativeCompile/ocp help
+brew install alvarosanchez/tap/ocp
 ```
-
-Requirements for source usage:
-
-- Java 25
-- Git
 
 ## Quick start
 
