@@ -24,11 +24,11 @@ jobs:
             artifact_suffix: windows-x86_64
             extension: ".exe"
             run_verification: false
-          - runner: macos-26-large
+          - runner: macos-15-intel
             artifact_suffix: macos-x86_64
             extension: ""
             run_verification: false
-          - runner: macos-26
+          - runner: macos-latest
             artifact_suffix: macos-aarch64
             extension: ""
             run_verification: false
