@@ -1,0 +1,126 @@
+name: Update Homebrew Tap
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+
+jobs:
+  update-formula:
+    if: ${{ github.event.release.prerelease == false && startsWith(github.event.release.tag_name, 'v') }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Derive release metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch checksums from release assets
+        id: checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.meta.outputs.tag }}"
+          VERSION="${{ steps.meta.outputs.version }}"
+
+          gh api "repos/${{ github.repository }}/releases/tags/${TAG}" > release.json
+          CHECKSUMS_URL=$(jq -r '.assets[] | select(.name == "checksums.txt") | .browser_download_url' release.json)
+
+          if [ -z "${CHECKSUMS_URL}" ] || [ "${CHECKSUMS_URL}" = "null" ]; then
+            echo "checksums.txt release asset is missing for ${TAG}" >&2
+            exit 1
+          fi
+
+          curl -fsSL "${CHECKSUMS_URL}" -o checksums.txt
+
+          linux_sha=$(awk -v version="${VERSION}" '$2 == "ocp-" version "-linux-x86_64" { print $1 }' checksums.txt)
+          macos_x86_sha=$(awk -v version="${VERSION}" '$2 == "ocp-" version "-macos-x86_64" { print $1 }' checksums.txt)
+          macos_arm_sha=$(awk -v version="${VERSION}" '$2 == "ocp-" version "-macos-aarch64" { print $1 }' checksums.txt)
+
+          if [ -z "${linux_sha}" ] || [ -z "${macos_x86_sha}" ] || [ -z "${macos_arm_sha}" ]; then
+            echo "Failed to resolve release checksums from checksums.txt" >&2
+            cat checksums.txt >&2
+            exit 1
+          fi
+
+          echo "linux_sha=${linux_sha}" >> "$GITHUB_OUTPUT"
+          echo "macos_x86_sha=${macos_x86_sha}" >> "$GITHUB_OUTPUT"
+          echo "macos_arm_sha=${macos_arm_sha}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout tap repository
+        uses: actions/checkout@v4
+        with:
+          repository: alvarosanchez/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          path: tap
+
+      - name: Update ocp formula
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          LINUX_SHA: ${{ steps.checksums.outputs.linux_sha }}
+          MACOS_X86_SHA: ${{ steps.checksums.outputs.macos_x86_sha }}
+          MACOS_ARM_SHA: ${{ steps.checksums.outputs.macos_arm_sha }}
+        run: |
+          set -euo pipefail
+          FORMULA_PATH="tap/Formula/ocp.rb"
+          export FORMULA_PATH
+
+          ruby <<'RUBY'
+          formula_path = ENV.fetch("FORMULA_PATH")
+          version = ENV.fetch("VERSION")
+          linux_sha = ENV.fetch("LINUX_SHA")
+          macos_x86_sha = ENV.fetch("MACOS_X86_SHA")
+          macos_arm_sha = ENV.fetch("MACOS_ARM_SHA")
+
+          content = File.read(formula_path)
+          updated = content.dup
+
+          version_pattern = /^  version ".*"$/
+          raise "Formula version line not found" unless updated.match?(version_pattern)
+          updated.sub!(version_pattern, "  version \"#{version}\"")
+
+          sha_rules = [
+            [%r{(ocp-\#\{version\}-macos-aarch64"\n\s+sha256 ")([^"]+)(")}, macos_arm_sha, "macOS arm64"],
+            [%r{(ocp-\#\{version\}-macos-x86_64"\n\s+sha256 ")([^"]+)(")}, macos_x86_sha, "macOS x86_64"],
+            [%r{(ocp-\#\{version\}-linux-x86_64"\n\s+sha256 ")([^"]+)(")}, linux_sha, "Linux x86_64"]
+          ]
+
+          sha_rules.each do |pattern, checksum, label|
+            replaced = updated.sub!(pattern, "\\1#{checksum}\\3")
+            raise "Could not update #{label} sha256 in formula" if replaced.nil?
+          end
+
+          File.write(formula_path, updated) if updated != content
+          RUBY
+
+      - name: Commit and push formula update
+        shell: bash
+        working-directory: tap
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- Formula/ocp.rb; then
+            echo "No formula update needed"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add Formula/ocp.rb
+          git commit -m "ocp ${VERSION}"
+          git push origin main
