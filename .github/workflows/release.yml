@@ -1,0 +1,97 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-native:
+    name: Build (${{ matrix.artifact_suffix }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            artifact_suffix: linux-x86_64
+            extension: ""
+          - runner: windows-2022
+            artifact_suffix: windows-x86_64
+            extension: ".exe"
+          - runner: macos-13
+            artifact_suffix: macos-x86_64
+            extension: ""
+          - runner: macos-14
+            artifact_suffix: macos-aarch64
+            extension: ""
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Oracle GraalVM for JDK 25
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: "25"
+          distribution: "graalvm"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: gradle
+          components: "native-image"
+          native-image-job-reports: "true"
+
+      - name: Derive version from tag
+        id: version
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and test before native compile
+        shell: bash
+        run: ./gradlew --no-daemon -PreleaseVersion="${{ steps.version.outputs.version }}" test build nativeCompile
+
+      - name: Package artifact
+        shell: bash
+        run: |
+          mkdir -p dist
+          SOURCE_BIN="build/native/nativeCompile/ocp${{ matrix.extension }}"
+          TARGET_BIN="dist/ocp-${{ steps.version.outputs.version }}-${{ matrix.artifact_suffix }}${{ matrix.extension }}"
+          cp "$SOURCE_BIN" "$TARGET_BIN"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ocp-${{ matrix.artifact_suffix }}
+          path: dist/*
+
+  publish:
+    name: Publish Release
+    needs: build-native
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          cd dist
+          shasum -a 256 * > checksums.txt
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ocp ${{ github.ref_name }}
+          generate_release_notes: true
+          files: dist/*

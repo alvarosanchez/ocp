@@ -3,7 +3,12 @@ plugins {
     alias(libs.plugins.graalvm.native)
 }
 
-version = "0.1.0"
+val defaultVersion = "0.1.0"
+val releaseVersion = providers.gradleProperty("releaseVersion")
+    .orElse(providers.environmentVariable("RELEASE_VERSION"))
+    .orNull
+
+version = releaseVersion?.removePrefix("v") ?: defaultVersion
 group = "com.github.alvarosanchez"
 
 val generatedResourcesDir = layout.buildDirectory.dir("generated/resources/main")
