@@ -63,10 +63,12 @@ oss/opencode.json
 {
   "profiles": [
     { "name": "my-company", "description": "Company defaults" },
-    { "name": "oss", "description": "Open-source profile" }
+    { "name": "oss", "description": "Open-source profile", "extends_from": "my-company" }
   ]
 }
 ```
+
+When `extends_from` is set, parent profiles are resolved first. Shared JSON/JSONC files are deep-merged recursively, while parent-only files are inherited unchanged.
 
 ## Commands
 

@@ -27,6 +27,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -283,10 +284,115 @@ class ProfileCommandTest {
     }
 
     @Test
+    void useInheritedProfileMergesSharedJsonAndKeepsParentOnlyJson() throws IOException {
+        writeRepositoryMetadata(
+            "repo-local",
+            new RepositoryConfigFile(
+                List.of(
+                    new ProfileEntry("oca"),
+                    new ProfileEntry("oca-oh-my-opencode", null, "oca")
+                )
+            )
+        );
+
+        Path repositoryDir = repositoriesCacheDir().resolve("repo-local");
+        Path baseDir = repositoryDir.resolve("oca");
+        Path childDir = repositoryDir.resolve("oca-oh-my-opencode");
+        Files.createDirectories(baseDir);
+        Files.createDirectories(childDir);
+        Files.writeString(
+            baseDir.resolve("opencode.json"),
+            "{\"some_config\":\"parent\",\"some_other_config\":\"foo\"}"
+        );
+        Files.writeString(baseDir.resolve("oh-my-opencode.json"), "{\"plugin\":\"from-parent\"}");
+        Files.writeString(
+            childDir.resolve("opencode.json"),
+            "{\"some_config\":\"child\",\"another_config\":\"bar\"}"
+        );
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null))
+            )
+        );
+
+        CommandResult result = execute("profile", "use", "oca-oh-my-opencode");
+
+        assertEquals(0, result.exitCode());
+        Path openCodeDir = Path.of(System.getProperty("ocp.opencode.config.dir"));
+        Path opencodeFile = openCodeDir.resolve("opencode.json");
+        Path ohMyFile = openCodeDir.resolve("oh-my-opencode.json");
+        assertTrue(Files.isSymbolicLink(opencodeFile));
+        assertTrue(Files.isSymbolicLink(ohMyFile));
+        Map<String, Object> merged = readJsonMap(opencodeFile);
+        assertEquals("child", merged.get("some_config"));
+        assertEquals("foo", merged.get("some_other_config"));
+        assertEquals("bar", merged.get("another_config"));
+        assertEquals(baseDir.resolve("oh-my-opencode.json").toAbsolutePath(), Files.readSymbolicLink(ohMyFile));
+    }
+
+    @Test
+    void useInheritedProfileParsesJsoncCommentsInChildFile() throws IOException {
+        writeRepositoryMetadata(
+            "repo-local",
+            new RepositoryConfigFile(
+                List.of(
+                    new ProfileEntry("oca"),
+                    new ProfileEntry("oca-personal", null, "oca")
+                )
+            )
+        );
+
+        Path repositoryDir = repositoriesCacheDir().resolve("repo-local");
+        Path baseDir = repositoryDir.resolve("oca");
+        Path childDir = repositoryDir.resolve("oca-personal");
+        Files.createDirectories(baseDir);
+        Files.createDirectories(childDir);
+        Files.writeString(baseDir.resolve("opencode.jsonc"), "{\"theme\":\"dark\",\"plugin\":[\"oh-my-opencode\"]}");
+        Files.writeString(
+            childDir.resolve("opencode.jsonc"),
+            """
+            {
+              "plugin": [
+                "oh-my-opencode",
+                "@simonwjackson/opencode-direnv",
+                "file:///Users/alvaro/Dev/numman-ali/opencode-openai-codex-auth/dist"
+                // "opencode-openai-codex-auth"
+              ]
+            }
+            """
+        );
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null))
+            )
+        );
+
+        CommandResult result = execute("profile", "use", "oca-personal");
+
+        assertEquals(0, result.exitCode());
+        Path opencodeFile = Path.of(System.getProperty("ocp.opencode.config.dir")).resolve("opencode.jsonc");
+        assertTrue(Files.isSymbolicLink(opencodeFile));
+        Map<String, Object> merged = readJsonMap(opencodeFile);
+        assertEquals("dark", merged.get("theme"));
+        assertEquals(
+            List.of(
+                "oh-my-opencode",
+                "@simonwjackson/opencode-direnv",
+                "file:///Users/alvaro/Dev/numman-ali/opencode-openai-codex-auth/dist"
+            ),
+            merged.get("plugin")
+        );
+    }
+
+    @Test
     void useFailsWhenInheritedJsonExtensionDoesNotMatchParent() throws IOException {
         writeRepositoryMetadata(
             "repo-local",
-            new RepositoryConfigFile(List.of(new ProfileEntry("base"), new ProfileEntry("child", "base")))
+            new RepositoryConfigFile(List.of(new ProfileEntry("base"), new ProfileEntry("child", null, "base")))
         );
 
         Path repositoryDir = repositoriesCacheDir().resolve("repo-local");
@@ -800,6 +906,13 @@ class ProfileCommandTest {
         try (ApplicationContext context = ApplicationContext.run()) {
             ObjectMapper objectMapper = context.getBean(ObjectMapper.class);
             return objectMapper.readValue(Files.readString(configPath), OcpConfigFile.class);
+        }
+    }
+
+    private Map<String, Object> readJsonMap(Path jsonPath) throws IOException {
+        try (ApplicationContext context = ApplicationContext.run()) {
+            ObjectMapper objectMapper = context.getBean(ObjectMapper.class);
+            return objectMapper.readValue(Files.readString(jsonPath), Map.class);
         }
     }
 

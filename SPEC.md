@@ -23,7 +23,6 @@ Many users need to switch between different model/provider setups depending on c
 
 - Managing secrets directly.
 - Editing OpenCode JSON contents.
-- Supporting profile inheritance/templating.
 
 ## Key terms
 
@@ -87,7 +86,7 @@ Rules:
 {
   "profiles": [
     { "name": "my-company", "description": "Company defaults" },
-    { "name": "oss", "description": "Open-source profile" }
+    { "name": "oss", "description": "Open-source profile", "extends_from": "my-company" }
   ]
 }
 ```
@@ -97,6 +96,7 @@ Rules:
 - `profiles` defaults to an empty list.
 - Empty/blank profile names are ignored.
 - `description` is optional and may be omitted or null.
+- `extends_from` is optional and references another profile name.
 - Profile names must be globally unique across all configured repositories.
 
 ## Repository structure
@@ -181,6 +181,13 @@ oss/opencode.json
 - Backup location: `~/.config/ocp/backups/<timestamp>/<filename>`
 - Switching must be transactional at file level:
   - If linking one file fails, already-processed files must be restored from backups.
+- Profile inheritance and merge behavior:
+  - `extends_from` profiles are resolved parent-first.
+  - Parent-only files are inherited as-is.
+  - For overlapping JSON/JSONC files (`*.json` and `*.jsonc`), the resulting file is deep-merged recursively.
+  - Child values override parent values for matching keys at any nesting level.
+  - Arrays and non-object JSON values are replaced by the child value.
+  - Child and parent must use the same extension for the same logical JSON file (`.json` vs `.jsonc`), or `profile use` fails.
 
 ## Technology stack
 
