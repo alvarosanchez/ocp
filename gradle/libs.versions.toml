@@ -19,7 +19,7 @@ logback-classic = { module = "ch.qos.logback:logback-classic" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 micronaut-test-junit5 = { module = "io.micronaut.test:micronaut-test-junit5" }
 testcontainers-bom = { module = "org.testcontainers:testcontainers-bom", version.ref = "testcontainers" }
-testcontainers-junit-jupiter = { module = "org.testcontainers:junit-jupiter" }
+testcontainers-junit-jupiter = { module = "org.testcontainers:testcontainers-junit-jupiter" }
 testcontainers-gitserver = { module = "io.github.sparsick.testcontainers.gitserver:testcontainers-gitserver", version.ref = "testcontainers-gitserver" }
 commons-codec = { module = "commons-codec:commons-codec", version.ref = "commons-codec" }
 clique = { module = "com.github.kusoroadeolu:Clique", version.ref = "clique" }
