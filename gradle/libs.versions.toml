@@ -1,11 +1,11 @@
 [versions]
 micronaut-plugin = "4.6.2"
-graalvm-native-plugin = "0.11.1"
+graalvm-native-plugin = "0.11.4"
 micronaut-platform = "4.10.7"
 test-logger-plugin = "4.0.0"
-testcontainers = "1.21.3"
-testcontainers-gitserver = "0.8.0"
-commons-codec = "1.18.0"
+testcontainers = "1.21.4"
+testcontainers-gitserver = "0.12.0"
+commons-codec = "1.21.0"
 clique = "v2.0.0"
 clique-themes = "v0.0.1"
 
