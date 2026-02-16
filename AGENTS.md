@@ -145,10 +145,12 @@ Rule of thumb: keep command classes thin; move business logic to services.
 - If wiring/build behavior changed: `./gradlew build`
 - If CLI behavior changed, update `SPEC.md` in the same change set
 - Ask the user to review the files. The user is the one who commits changes
-- Ask the user if they want to create a PR with the "gh" CLI. If granted permission,
-  upon PR creation, wait for the GitHub Copilot review, and address review comments.
-  Once all comments have been reviewed, monitor for CI checks, and if they pass, merge
-  the PR. Otherwise, investigate failures and fix them.
+- Ask the user if they want to create a PR with the "gh" CLI. If granted permission, create it.
+- Do not merge the PR until GitHub Copilot has posted its review on that PR.
+- Address every Copilot review comment, and confirm there are no unresolved Copilot comments.
+- If Copilot review is still pending or missing, keep waiting and polling; do not merge yet.
+- After Copilot comments are resolved, monitor CI checks and merge only when required checks pass.
+- If CI fails, investigate failures and fix them before merging.
 
 ## 14) Do / don't checklist
 Do:
