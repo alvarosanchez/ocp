@@ -34,7 +34,7 @@ ocp profile use my-company
 ocp profile
 
 # Refresh repository data
-ocp profile refresh
+ocp repository refresh
 ```
 
 ## How it works
@@ -78,10 +78,10 @@ When `extends_from` is set, parent profiles are resolved first. Shared JSON/JSON
 - `ocp profile` - show active profile metadata.
 - `ocp profile create [name]` - create a profile in the current repository (`default` if omitted).
 - `ocp profile use <name>` - switch to profile by name.
-- `ocp profile refresh [name]` - pull latest changes for one profile's repository or all repositories.
 - `ocp repository add <uri>` - clone and register a repository.
 - `ocp repository delete <name>` - remove repository and local clone.
 - `ocp repository create <name> [--profile-name <profile>]` - scaffold a new profile repository.
+- `ocp repository refresh [name]` - pull latest changes for one repository by name or all repositories.
 
 ## File locations
 

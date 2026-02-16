@@ -140,10 +140,10 @@ oss/opencode.json
 | `ocp profile` | Implemented | Print currently active profile with repository/version metadata and update hints. |
 | `ocp profile create [name]` | Implemented | Create profile folder and register it in repository metadata. Defaults to `default` when no name is provided. |
 | `ocp profile use <name>` | Implemented | Switch active profile by linking profile files to OpenCode config location. |
-| `ocp profile refresh [name]` | Implemented | Pull latest changes for a specific profile repository, or for all repositories when no name is provided. Reapplies active profile resolution when refreshed data affects the active profile. |
 | `ocp repository add <uri>` | Implemented | Clone repository into local cache and register it in `config.json`. |
 | `ocp repository delete <name>` | Implemented | Remove repository entry from registry and delete local clone. |
 | `ocp repository create <name> [--profile-name <profile>]` | Implemented | Initialize new profile repository with `repository.json` and initial profile. |
+| `ocp repository refresh [name]` | Implemented | Pull latest changes for a specific repository, or for all repositories when no name is provided. Reapplies active profile resolution when refreshed repository data affects the active profile lineage. |
 
 ## Operational semantics
 
@@ -222,7 +222,7 @@ oss/opencode.json
   - when files are linked/replaced/removed, notice states files were updated
   - when no file changes are needed, notice states files were processed
   - when existing files are moved, prints backup notice with backup path
-- `ocp profile refresh [name]`
+- `ocp repository refresh [name]`
   - exits `0`, prints refresh success message
   - when active profile files are reapplied, prints user-config notice (updated vs processed) and backup notice when applicable
 - Repository config loading

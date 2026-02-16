@@ -171,32 +171,33 @@ public final class ProfileService {
     }
 
     /**
-     * Refreshes the repository that contains the specified profile.
+     * Refreshes the specified repository.
      *
-     * @param profileName profile name whose repository should be refreshed
+     * @param repositoryName repository name to refresh
      * @return {@code true} when refresh completes successfully
      */
-    public boolean refreshProfile(String profileName) {
-        refreshProfileWithDetails(profileName);
+    public boolean refreshRepository(String repositoryName) {
+        refreshRepositoryWithDetails(repositoryName);
         return true;
     }
 
     /**
-     * Refreshes the repository that contains the specified profile.
+     * Refreshes the specified repository.
      *
-     * @param profileName profile name whose repository should be refreshed
+     * @param repositoryName repository name to refresh
      * @return refresh details including optional user-config changes
      */
-    public ProfileRefreshResult refreshProfileWithDetails(String profileName) {
-        String normalizedProfileName = normalizeProfileName(profileName);
-        Map<String, DiscoveredProfile> profilesByName = discoverProfilesByName();
-        DiscoveredProfile discoveredProfile = profilesByName.get(normalizedProfileName);
-        if (discoveredProfile == null) {
-            throw new IllegalStateException("Profile `" + normalizedProfileName + "` was not found.");
-        }
+    public ProfileRefreshResult refreshRepositoryWithDetails(String repositoryName) {
+        String normalizedRepositoryName = normalizeRepositoryName(repositoryName);
+        RepositoryEntry repositoryEntry = repositoryService
+            .load()
+            .stream()
+            .filter(entry -> entry.name().equals(normalizedRepositoryName))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("Repository `" + normalizedRepositoryName + "` was not found."));
 
-        refreshRepository(discoveredProfile.repositoryEntry());
-        return new ProfileRefreshResult(refreshActiveProfileIfAffected(normalizedProfileName));
+        refreshRepository(repositoryEntry);
+        return new ProfileRefreshResult(refreshActiveProfileIfAffectedByRepository(normalizedRepositoryName));
     }
 
     /**
@@ -204,8 +205,8 @@ public final class ProfileService {
      *
      * @return {@code true} when all refresh operations complete successfully
      */
-    public boolean refreshAllProfiles() {
-        refreshAllProfilesWithDetails();
+    public boolean refreshAllRepositories() {
+        refreshAllRepositoriesWithDetails();
         return true;
     }
 
@@ -214,7 +215,7 @@ public final class ProfileService {
      *
      * @return refresh details including optional user-config changes
      */
-    public ProfileRefreshResult refreshAllProfilesWithDetails() {
+    public ProfileRefreshResult refreshAllRepositoriesWithDetails() {
         for (RepositoryEntry repositoryEntry : repositoryService.load()) {
             refreshRepository(repositoryEntry);
         }
@@ -680,7 +681,15 @@ public final class ProfileService {
         return normalizedProfileName;
     }
 
-    private Optional<ProfileSwitchResult> refreshActiveProfileIfAffected(String refreshedProfileName) {
+    private String normalizeRepositoryName(String repositoryName) {
+        String normalizedRepositoryName = repositoryName == null ? "" : repositoryName.trim();
+        if (normalizedRepositoryName.isBlank()) {
+            throw new IllegalStateException("Repository name is required.");
+        }
+        return normalizedRepositoryName;
+    }
+
+    private Optional<ProfileSwitchResult> refreshActiveProfileIfAffectedByRepository(String refreshedRepositoryName) {
         String activeProfileName = currentActiveProfileName();
         if (activeProfileName == null || activeProfileName.isBlank()) {
             return Optional.empty();
@@ -691,8 +700,10 @@ public final class ProfileService {
             return Optional.empty();
         }
 
-        if (isProfileInLineage(activeProfileName, refreshedProfileName, profilesByName)) {
-            return Optional.of(useProfileWithDetails(activeProfileName));
+        for (DiscoveredProfile discoveredProfile : profileLineageFor(activeProfileName, profilesByName)) {
+            if (discoveredProfile.repositoryEntry().name().equals(refreshedRepositoryName)) {
+                return Optional.of(useProfileWithDetails(activeProfileName));
+            }
         }
         return Optional.empty();
     }
@@ -709,19 +720,6 @@ public final class ProfileService {
         }
 
         return Optional.of(useProfileWithDetails(activeProfileName));
-    }
-
-    private boolean isProfileInLineage(
-        String profileName,
-        String targetProfileName,
-        Map<String, DiscoveredProfile> profilesByName
-    ) {
-        for (DiscoveredProfile discoveredProfile : profileLineageFor(profileName, profilesByName)) {
-            if (discoveredProfile.name().equals(targetProfileName)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private Map<String, DiscoveredProfile> discoverProfilesByName() {

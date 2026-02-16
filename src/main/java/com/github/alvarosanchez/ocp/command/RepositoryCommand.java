@@ -20,7 +20,8 @@ import picocli.CommandLine.Parameters;
     subcommands = {
         RepositoryCommand.AddCommand.class,
         RepositoryCommand.DeleteCommand.class,
-        RepositoryCommand.CreateCommand.class
+        RepositoryCommand.CreateCommand.class,
+        RepositoryRefreshCommand.class
     }
 )
 public class RepositoryCommand implements Runnable {
