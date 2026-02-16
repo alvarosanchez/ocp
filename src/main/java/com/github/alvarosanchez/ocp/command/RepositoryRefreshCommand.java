@@ -5,6 +5,7 @@ import jakarta.inject.Inject;
 import picocli.CommandLine;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.concurrent.Callable;
 
 @CommandLine.Command(name = "refresh", description = "Pull latest changes for configured repositories.")
@@ -68,6 +69,13 @@ class RepositoryRefreshCommand implements Callable<Integer> {
                 }
                 applyRefreshConflictResolution(conflict, resolution);
                 appliedResolution = resolution;
+            } catch (ProfileService.ProfileRefreshUserConfigConflictException conflict) {
+                ProfileService.RefreshConflictResolution resolution = promptMergedProfileRefreshConflictResolution(conflict);
+                if (resolution == ProfileService.RefreshConflictResolution.DO_NOTHING) {
+                    throw new IllegalStateException("Refresh cancelled. Local changes were left untouched.");
+                }
+                applyMergedProfileRefreshConflictResolution(conflict, resolution);
+                appliedResolution = resolution;
             }
         }
     }
@@ -101,7 +109,39 @@ class RepositoryRefreshCommand implements Callable<Integer> {
                     || resolution == ProfileService.RefreshConflictResolution.DISCARD_AND_REFRESH;
                 forcePushedLocalChanges = forcePushedLocalChanges
                     || resolution == ProfileService.RefreshConflictResolution.COMMIT_AND_FORCE_PUSH;
+            } catch (ProfileService.ProfileRefreshUserConfigConflictException conflict) {
+                ProfileService.RefreshConflictResolution resolution = promptMergedProfileRefreshConflictResolution(conflict);
+                if (resolution == ProfileService.RefreshConflictResolution.DO_NOTHING) {
+                    throw new IllegalStateException("Refresh cancelled. Local changes were left untouched.");
+                }
+                applyMergedProfileRefreshConflictResolution(conflict, resolution);
+                discardedLocalChanges = true;
             }
+        }
+    }
+
+    private ProfileService.RefreshConflictResolution promptMergedProfileRefreshConflictResolution(
+        ProfileService.ProfileRefreshUserConfigConflictException conflict
+    ) {
+        Cli.warning("Local changes detected in merged active profile files for profile `" + conflict.profileName() + "`.");
+        Cli.info("Modified files in `" + conflict.targetDirectory() + "`:");
+        for (Path driftedFile : conflict.driftedFiles()) {
+            Cli.print("- " + driftedFile);
+        }
+        Cli.info("Choose how to proceed:");
+        Cli.warning("1) Discard local merged-file changes and refresh.");
+        Cli.warning("2) Do nothing and fix manually.");
+
+        while (true) {
+            Cli.info("Enter option [1-2]:");
+            String option = readInputLine().trim();
+            if ("1".equals(option)) {
+                return ProfileService.RefreshConflictResolution.DISCARD_AND_REFRESH;
+            }
+            if ("2".equals(option)) {
+                return ProfileService.RefreshConflictResolution.DO_NOTHING;
+            }
+            Cli.error("Invalid option. Please enter 1 or 2.");
         }
     }
 
@@ -177,6 +217,19 @@ class RepositoryRefreshCommand implements Callable<Integer> {
             return;
         }
         throw new IllegalStateException("Unsupported refresh conflict resolution: " + resolution);
+    }
+
+    private void applyMergedProfileRefreshConflictResolution(
+        ProfileService.ProfileRefreshUserConfigConflictException conflict,
+        ProfileService.RefreshConflictResolution resolution
+    ) {
+        if (resolution == ProfileService.RefreshConflictResolution.DISCARD_AND_REFRESH) {
+            Cli.info("Discarding local changes in merged user config files and retrying refresh. This may take a moment...");
+            profileService.resolveRefreshConflict(conflict, resolution);
+            Cli.success("Local changes discarded in merged user config files for profile `" + conflict.profileName() + "`.");
+            return;
+        }
+        throw new IllegalStateException("Unsupported merged-file refresh conflict resolution: " + resolution);
     }
 
     private record RefreshOutcome(String message, ProfileService.ProfileRefreshResult refreshResult) {

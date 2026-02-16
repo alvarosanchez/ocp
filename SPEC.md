@@ -226,6 +226,7 @@ oss/opencode.json
 - `ocp repository refresh [name]`
   - exits `0`, prints refresh success message
   - when active profile files are reapplied, prints user-config notice (updated vs processed) and backup notice when applicable
+  - when merged active-profile files in `~/.config/opencode/` were locally edited, prompts to discard those merged-file edits or abort; abort exits `1` and leaves files untouched
 - `ocp repository list`
   - with no repositories: exits `0`, prints helpful empty-state message
   - with configured repositories: outputs one rounded box per repository with fields `Name`, `URI`, `Local path`, and `Resolved profiles`
