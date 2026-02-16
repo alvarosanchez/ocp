@@ -18,8 +18,7 @@ import picocli.CommandLine.Command;
     subcommands = {
         ProfileListCommand.class,
         ProfileCreateCommand.class,
-        ProfileUseCommand.class,
-        ProfileRefreshCommand.class
+        ProfileUseCommand.class
     }
 )
 public class ProfileCommand implements Callable<Integer> {

@@ -7,35 +7,30 @@ import picocli.CommandLine;
 import java.io.IOException;
 import java.util.concurrent.Callable;
 
-@CommandLine.Command(name = "refresh", description = "Pull latest changes for profile repository.")
-class ProfileRefreshCommand implements Callable<Integer> {
+@CommandLine.Command(name = "refresh", description = "Pull latest changes for configured repositories.")
+class RepositoryRefreshCommand implements Callable<Integer> {
 
     private final ProfileService profileService;
 
     @Inject
-    ProfileRefreshCommand(ProfileService profileService) {
+    RepositoryRefreshCommand(ProfileService profileService) {
         this.profileService = profileService;
     }
 
-    @CommandLine.Parameters(index = "0", arity = "0..1", description = "Profile name.")
-    private String profileName;
+    @CommandLine.Parameters(index = "0", arity = "0..1", description = "Repository name.")
+    private String repositoryName;
 
-    /**
-     * Refreshes the repository for the selected profile.
-     *
-     * @return command exit code
-     */
     @Override
     public Integer call() {
         try {
-            if (profileName == null || profileName.isBlank()) {
+            if (repositoryName == null || repositoryName.isBlank()) {
                 RefreshOutcome refreshOutcome = refreshAllWithConflictResolution();
                 ProfileConfigChangeNotifier.notifyUserConfigChanges(refreshOutcome.refreshResult());
                 Cli.success(refreshOutcome.message());
                 return 0;
             }
 
-            RefreshOutcome refreshOutcome = refreshSingleWithConflictResolution(profileName);
+            RefreshOutcome refreshOutcome = refreshSingleWithConflictResolution(repositoryName);
             ProfileConfigChangeNotifier.notifyUserConfigChanges(refreshOutcome.refreshResult());
             Cli.success(refreshOutcome.message());
             return 0;
@@ -52,20 +47,20 @@ class ProfileRefreshCommand implements Callable<Integer> {
         ProfileService.RefreshConflictResolution appliedResolution = null;
         while (true) {
             try {
-                ProfileService.ProfileRefreshResult refreshResult = profileService.refreshProfileWithDetails(name);
+                ProfileService.ProfileRefreshResult refreshResult = profileService.refreshRepositoryWithDetails(name);
                 if (appliedResolution == ProfileService.RefreshConflictResolution.DISCARD_AND_REFRESH) {
                     return new RefreshOutcome(
-                        "Discarded local changes and refreshed profile `" + name + "`.",
+                        "Discarded local changes and refreshed repository `" + name + "`.",
                         refreshResult
                     );
                 }
                 if (appliedResolution == ProfileService.RefreshConflictResolution.COMMIT_AND_FORCE_PUSH) {
                     return new RefreshOutcome(
-                        "Committed local changes, force-pushed, and refreshed profile `" + name + "`.",
+                        "Committed local changes, force-pushed, and refreshed repository `" + name + "`.",
                         refreshResult
                     );
                 }
-                return new RefreshOutcome("Refreshed profile `" + name + "`.", refreshResult);
+                return new RefreshOutcome("Refreshed repository `" + name + "`.", refreshResult);
             } catch (ProfileService.ProfileRefreshConflictException conflict) {
                 ProfileService.RefreshConflictResolution resolution = promptRefreshConflictResolution(conflict);
                 if (resolution == ProfileService.RefreshConflictResolution.DO_NOTHING) {
@@ -82,7 +77,7 @@ class ProfileRefreshCommand implements Callable<Integer> {
         boolean forcePushedLocalChanges = false;
         while (true) {
             try {
-                ProfileService.ProfileRefreshResult refreshResult = profileService.refreshAllProfilesWithDetails();
+                ProfileService.ProfileRefreshResult refreshResult = profileService.refreshAllRepositoriesWithDetails();
                 if (forcePushedLocalChanges) {
                     return new RefreshOutcome(
                         "Resolved local changes (including commit + force push) and refreshed all repositories.",

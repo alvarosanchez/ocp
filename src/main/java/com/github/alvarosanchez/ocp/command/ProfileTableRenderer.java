@@ -100,7 +100,7 @@ final class ProfileTableRenderer {
         print(profiles);
 
         if (hasUpdates(profiles)) {
-            Cli.warning(UPDATE_MARKER + " Newer commits are available in remote repositories. Run `ocp profile refresh`.");
+            Cli.warning(UPDATE_MARKER + " Newer commits are available in remote repositories. Run `ocp repository refresh`.");
         }
         List<String> failedVersionChecks = failedVersionChecks(profiles);
         if (!failedVersionChecks.isEmpty()) {

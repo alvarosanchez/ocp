@@ -522,7 +522,7 @@ class ProfileCommandTest {
     }
 
     @Test
-    void refreshPullsLatestChangesForProfileRepository() throws IOException, InterruptedException {
+    void repositoryRefreshPullsLatestChangesForRepository() throws IOException, InterruptedException {
         RemoteRepositoryState state = createRemoteProfileRepository("ops");
 
         writeOcpConfig(
@@ -554,15 +554,15 @@ class ProfileCommandTest {
         ));
         runCommand(List.of("git", "-C", updateWorktree.toString(), "push", "origin", "HEAD"));
 
-        CommandResult result = execute("profile", "refresh", "ops");
+        CommandResult result = execute("repository", "refresh", "repo-refresh");
 
         assertEquals(0, result.exitCode());
-        assertTrue(result.stdout().contains("Refreshed profile `ops`"));
+        assertTrue(result.stdout().contains("Refreshed repository `repo-refresh`"));
         assertTrue(Files.exists(outdatedFile));
     }
 
     @Test
-    void refreshWithoutProfileNameRefreshesAllRepositories() throws IOException, InterruptedException {
+    void repositoryRefreshWithoutRepositoryNameRefreshesAllRepositories() throws IOException, InterruptedException {
         RemoteRepositoryState state = createRemoteProfileRepository("ops");
 
         writeOcpConfig(
@@ -594,7 +594,7 @@ class ProfileCommandTest {
         ));
         runCommand(List.of("git", "-C", updateWorktree.toString(), "push", "origin", "HEAD"));
 
-        CommandResult result = execute("profile", "refresh");
+        CommandResult result = execute("repository", "refresh");
 
         assertEquals(0, result.exitCode());
         assertTrue(result.stdout().contains("Refreshed all repositories"));
@@ -602,7 +602,7 @@ class ProfileCommandTest {
     }
 
     @Test
-    void refreshParentReappliesActiveChildResolvedConfiguration() throws IOException, InterruptedException {
+    void repositoryRefreshReappliesActiveChildResolvedConfigurationWhenLineageIsAffected() throws IOException, InterruptedException {
         RemoteRepositoryState state = createRemoteInheritedProfileRepository("oca", "oca-personal");
 
         writeOcpConfig(
@@ -643,11 +643,11 @@ class ProfileCommandTest {
         ));
         runCommand(List.of("git", "-C", updateWorktree.toString(), "push", "origin", "HEAD"));
 
-        CommandResult refreshResult = execute("profile", "refresh", "oca");
+        CommandResult refreshResult = execute("repository", "refresh", "repo-refresh-inherited");
 
         assertEquals(0, refreshResult.exitCode());
         assertTrue(refreshResult.stdout().contains("Updated user configuration files in"));
-        assertTrue(refreshResult.stdout().contains("Refreshed profile `oca`"));
+        assertTrue(refreshResult.stdout().contains("Refreshed repository `repo-refresh-inherited`"));
         Map<String, Object> refreshed = readJsonMap(opencodeFile);
         assertEquals("v2", refreshed.get("some_parent"));
         assertEquals("yes", refreshed.get("parent_added"));
@@ -655,7 +655,7 @@ class ProfileCommandTest {
     }
 
     @Test
-    void refreshPromptsWhenRepositoryHasLocalChangesAndCanDiscardThenRefresh() throws IOException, InterruptedException {
+    void repositoryRefreshPromptsWhenRepositoryHasLocalChangesAndCanDiscardThenRefresh() throws IOException, InterruptedException {
         RemoteRepositoryState state = createRemoteProfileRepository("ops");
 
         writeOcpConfig(
@@ -669,18 +669,18 @@ class ProfileCommandTest {
         Path localProfileFile = state.localClone().resolve("ops").resolve("opencode.json");
         Files.writeString(localProfileFile, "local-edit");
 
-        CommandResult result = executeWithInput("1\n", "profile", "refresh", "ops");
+        CommandResult result = executeWithInput("1\n", "repository", "refresh", "repo-refresh");
 
         assertEquals(0, result.exitCode());
         assertTrue(result.stdout().contains("Choose how to proceed"));
         assertTrue(result.stdout().contains("Diff:"));
         assertTrue(result.stdout().contains("Discarding local changes in repository `repo-refresh` and retrying refresh"));
-        assertTrue(result.stdout().contains("Discarded local changes and refreshed profile `ops`."));
+        assertTrue(result.stdout().contains("Discarded local changes and refreshed repository `repo-refresh`."));
         assertEquals("{}", Files.readString(localProfileFile));
     }
 
     @Test
-    void refreshPromptsWhenRepositoryHasLocalChangesAndCanCommitForcePushThenRefresh() throws IOException, InterruptedException {
+    void repositoryRefreshPromptsWhenRepositoryHasLocalChangesAndCanCommitForcePushThenRefresh() throws IOException, InterruptedException {
         RemoteRepositoryState state = createRemoteProfileRepository("ops");
 
         writeOcpConfig(
@@ -694,16 +694,16 @@ class ProfileCommandTest {
         Path localProfileFile = state.localClone().resolve("ops").resolve("opencode.json");
         Files.writeString(localProfileFile, "local-edit");
 
-        CommandResult result = executeWithInput("2\n", "profile", "refresh", "ops");
+        CommandResult result = executeWithInput("2\n", "repository", "refresh", "repo-refresh");
 
         assertEquals(0, result.exitCode());
         assertTrue(result.stdout().contains("Choose how to proceed"));
         assertTrue(result.stdout().contains("Committing local changes and force-pushing repository `repo-refresh`"));
-        assertTrue(result.stdout().contains("Committed local changes, force-pushed, and refreshed profile `ops`."));
+        assertTrue(result.stdout().contains("Committed local changes, force-pushed, and refreshed repository `repo-refresh`."));
     }
 
     @Test
-    void refreshPromptsWhenRepositoryHasLocalChangesAndCanAbortWithoutChanges() throws IOException, InterruptedException {
+    void repositoryRefreshPromptsWhenRepositoryHasLocalChangesAndCanAbortWithoutChanges() throws IOException, InterruptedException {
         RemoteRepositoryState state = createRemoteProfileRepository("ops");
 
         writeOcpConfig(
@@ -717,7 +717,7 @@ class ProfileCommandTest {
         Path localProfileFile = state.localClone().resolve("ops").resolve("opencode.json");
         Files.writeString(localProfileFile, "local-edit");
 
-        CommandResult result = executeWithInput("3\n", "profile", "refresh", "ops");
+        CommandResult result = executeWithInput("3\n", "repository", "refresh", "repo-refresh");
 
         assertEquals(1, result.exitCode());
         assertTrue(result.stdout().contains("Choose how to proceed"));
@@ -769,6 +769,7 @@ class ProfileCommandTest {
         assertFalse(result.stdout().contains(state.remoteUri()));
         assertTrue(result.stdout().contains("❄"));
         assertTrue(result.stdout().contains("❄ Newer commits are available in remote repositories."));
+        assertTrue(result.stdout().contains("Run `ocp repository refresh`"));
     }
 
     @Test
