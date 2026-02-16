@@ -128,12 +128,18 @@ Before coding:
 - Read nearby files in the same package
 - Read related tests before behavior changes
 - Check `SPEC.md` for expected behavior and contracts
+- Checkout a new branch for the code changes to be done
 
 After coding:
 - Minimum: `./gradlew test`
 - If startup/native-sensitive behavior changed: `./gradlew nativeTest`
 - If build/runtime wiring changed: `./gradlew build`
 - If behavior/CLI contract changed, update `SPEC.md` in the same change set
+- Ask the user to review the files. The user is the one who commits changes
+- Ask the user if they want to create a PR with the "gh" CLI. If granted permission, 
+  upon PR creation, wait for the GitHub Copilot review, and address review comments.
+  Once all comments have been reviewed, monitor for CI checks, and if they pass, merge 
+  the PR. Otherwise, investigate failures and fix them. 
 
 ## 10) Do / don't checklist
 Do:
@@ -147,3 +153,4 @@ Don't:
 - Introduce silent failure paths
 - Add dependencies without concrete need
 - Skip `SPEC.md` updates when implemented features change documented behavior
+- Commit changes yourself
