@@ -777,6 +777,86 @@ class ProfileCommandTest {
     }
 
     @Test
+    void repositoryRefreshSingleHandlesMergedAndRepositoryConflictsWhenBothDiscarded() throws IOException, InterruptedException {
+        RemoteRepositoryState state = createRemoteInheritedProfileRepository("oca", "oca-personal");
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-refresh-inherited", state.remoteUri(), null))
+            )
+        );
+
+        runCommand(List.of("git", "clone", state.remoteUri(), state.localClone().toString()));
+
+        CommandResult useResult = execute("profile", "use", "oca-personal");
+        assertEquals(0, useResult.exitCode());
+
+        Path opencodeFile = Path.of(System.getProperty("ocp.opencode.config.dir")).resolve("opencode.json");
+        Files.writeString(opencodeFile, "{\"some_parent\":\"drift\",\"shared\":\"child\",\"local\":\"edit\"}");
+
+        Path repositoryScratchFile = state.localClone().resolve("local-change.txt");
+        Files.writeString(repositoryScratchFile, "local-repository-change");
+
+        CommandResult refreshResult = executeWithInput("1\n1\n", "repository", "refresh", "repo-refresh-inherited");
+
+        assertEquals(0, refreshResult.exitCode());
+        assertTrue(refreshResult.stdout().contains("Local changes detected in merged active profile files for profile `oca-personal`"));
+        assertTrue(refreshResult.stdout().contains("Local uncommitted changes detected in repository `repo-refresh-inherited`"));
+        assertTrue(
+            refreshResult
+                .stdout()
+                .contains("Reapplied active profile, discarded repository local changes, and refreshed repository `repo-refresh-inherited`.")
+        );
+
+        Map<String, Object> refreshed = readJsonMap(opencodeFile);
+        assertEquals("v1", refreshed.get("some_parent"));
+        assertEquals("child", refreshed.get("shared"));
+        assertFalse(refreshed.containsKey("local"));
+        assertTrue(Files.notExists(repositoryScratchFile));
+    }
+
+    @Test
+    void repositoryRefreshSingleHandlesMergedAndRepositoryConflictsWhenRepositoryIsCommitted() throws IOException, InterruptedException {
+        RemoteRepositoryState state = createRemoteInheritedProfileRepository("oca", "oca-personal");
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-refresh-inherited", state.remoteUri(), null))
+            )
+        );
+
+        runCommand(List.of("git", "clone", state.remoteUri(), state.localClone().toString()));
+
+        CommandResult useResult = execute("profile", "use", "oca-personal");
+        assertEquals(0, useResult.exitCode());
+
+        Path opencodeFile = Path.of(System.getProperty("ocp.opencode.config.dir")).resolve("opencode.json");
+        Files.writeString(opencodeFile, "{\"some_parent\":\"drift\",\"shared\":\"child\",\"local\":\"edit\"}");
+
+        Path repositoryScratchFile = state.localClone().resolve("local-change.txt");
+        Files.writeString(repositoryScratchFile, "local-repository-change");
+
+        CommandResult refreshResult = executeWithInput("1\n2\n", "repository", "refresh", "repo-refresh-inherited");
+
+        assertEquals(0, refreshResult.exitCode());
+        assertTrue(refreshResult.stdout().contains("Local changes detected in merged active profile files for profile `oca-personal`"));
+        assertTrue(refreshResult.stdout().contains("Local uncommitted changes detected in repository `repo-refresh-inherited`"));
+        assertTrue(
+            refreshResult
+                .stdout()
+                .contains("Reapplied active profile, committed local changes, force-pushed, and refreshed repository `repo-refresh-inherited`.")
+        );
+
+        Map<String, Object> refreshed = readJsonMap(opencodeFile);
+        assertEquals("v1", refreshed.get("some_parent"));
+        assertEquals("child", refreshed.get("shared"));
+        assertFalse(refreshed.containsKey("local"));
+        assertEquals("local-repository-change", Files.readString(repositoryScratchFile));
+    }
+
+    @Test
     void repositoryRefreshPromptsWhenRepositoryHasLocalChangesAndCanDiscardThenRefresh() throws IOException, InterruptedException {
         RemoteRepositoryState state = createRemoteProfileRepository("ops");
 
