@@ -45,19 +45,39 @@ class RepositoryRefreshCommand implements Callable<Integer> {
     }
 
     private RefreshOutcome refreshSingleWithConflictResolution(String name) {
-        ProfileService.RefreshConflictResolution appliedResolution = null;
+        boolean discardedRepositoryLocalChanges = false;
+        boolean forcePushedLocalChanges = false;
+        boolean reappliedMergedProfileFiles = false;
         while (true) {
             try {
                 ProfileService.ProfileRefreshResult refreshResult = profileService.refreshRepositoryWithDetails(name);
-                if (appliedResolution == ProfileService.RefreshConflictResolution.DISCARD_AND_REFRESH) {
+                if (forcePushedLocalChanges && reappliedMergedProfileFiles) {
+                    return new RefreshOutcome(
+                        "Reapplied active profile, committed local changes, force-pushed, and refreshed repository `" + name + "`.",
+                        refreshResult
+                    );
+                }
+                if (forcePushedLocalChanges) {
+                    return new RefreshOutcome(
+                        "Committed local changes, force-pushed, and refreshed repository `" + name + "`.",
+                        refreshResult
+                    );
+                }
+                if (discardedRepositoryLocalChanges && reappliedMergedProfileFiles) {
+                    return new RefreshOutcome(
+                        "Reapplied active profile, discarded repository local changes, and refreshed repository `" + name + "`.",
+                        refreshResult
+                    );
+                }
+                if (discardedRepositoryLocalChanges) {
                     return new RefreshOutcome(
                         "Discarded local changes and refreshed repository `" + name + "`.",
                         refreshResult
                     );
                 }
-                if (appliedResolution == ProfileService.RefreshConflictResolution.COMMIT_AND_FORCE_PUSH) {
+                if (reappliedMergedProfileFiles) {
                     return new RefreshOutcome(
-                        "Committed local changes, force-pushed, and refreshed repository `" + name + "`.",
+                        "Reapplied active profile and refreshed repository `" + name + "`.",
                         refreshResult
                     );
                 }
@@ -68,14 +88,17 @@ class RepositoryRefreshCommand implements Callable<Integer> {
                     throw new IllegalStateException("Refresh cancelled. Local changes were left untouched.");
                 }
                 applyRefreshConflictResolution(conflict, resolution);
-                appliedResolution = resolution;
+                discardedRepositoryLocalChanges = discardedRepositoryLocalChanges
+                    || resolution == ProfileService.RefreshConflictResolution.DISCARD_AND_REFRESH;
+                forcePushedLocalChanges = forcePushedLocalChanges
+                    || resolution == ProfileService.RefreshConflictResolution.COMMIT_AND_FORCE_PUSH;
             } catch (ProfileService.ProfileRefreshUserConfigConflictException conflict) {
                 ProfileService.RefreshConflictResolution resolution = promptMergedProfileRefreshConflictResolution(conflict);
                 if (resolution == ProfileService.RefreshConflictResolution.DO_NOTHING) {
                     throw new IllegalStateException("Refresh cancelled. Local changes were left untouched.");
                 }
                 applyMergedProfileRefreshConflictResolution(conflict, resolution);
-                appliedResolution = resolution;
+                reappliedMergedProfileFiles = true;
             }
         }
     }
