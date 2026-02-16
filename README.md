@@ -22,7 +22,7 @@ Requirements:
 
 ```bash
 # Add a profile repository
-ocp repository add git@github.com:my-org/opencode-profiles.git
+ocp repository add git@github.com:my-org/opencode-profiles.git --name my-org-opencode-profiles
 
 # List configured repositories and discovered profiles
 ocp repository list
@@ -47,7 +47,7 @@ ocp repository refresh
 - Each profile is a folder containing files to link into `~/.config/opencode`.
 - On `ocp profile use <name>`, `ocp` updates symlinks to the selected profile.
 - Existing non-symlink target files are backed up before linking.
-- Hosted repository names are derived from URI path segments (for example `acme-opencode-config`).
+- Repository names are provided explicitly when adding a repository (`--name`).
 
 ## Repository format
 
@@ -81,7 +81,7 @@ When `extends_from` is set, parent profiles are resolved first. Shared JSON/JSON
 - `ocp profile` - show active profile metadata.
 - `ocp profile create [name]` - create a profile in the current repository (`default` if omitted).
 - `ocp profile use <name>` - switch to profile by name.
-- `ocp repository add <uri>` - clone and register a repository.
+- `ocp repository add <uri> --name <name>` - clone and register a repository.
 - `ocp repository list` - list configured repositories with URI, local path, and resolved profiles.
 - `ocp repository delete <name>` - remove repository and local clone.
 - `ocp repository create <name> [--profile-name <profile>]` - scaffold a new profile repository.
@@ -93,7 +93,7 @@ Default paths:
 
 - Registry: `~/.config/ocp/config.json`
 - Cache root: `~/.cache/ocp`
-- Local clones: `~/.cache/ocp/repositories/<repo-name>` (namespaced for hosted remotes)
+- Local clones: `~/.cache/ocp/repositories/<repo-name>` (using the configured repository name)
 - Backups: `~/.config/ocp/backups/<timestamp>/...`
 - OpenCode config target: `~/.config/opencode`
 

@@ -64,39 +64,51 @@ class RepositoryCommandTest {
     @Test
     void addClonesRepositoryAndRegistersItInConfig() throws IOException, InterruptedException {
         Path remote = createRemoteRepository();
+        String repositoryName = "team-configs";
 
-        CommandResult result = execute("repository", "add", remote.toUri().toString());
+        CommandResult result = execute("repository", "add", remote.toUri().toString(), "--name", repositoryName);
 
         assertEquals(0, result.exitCode());
-        assertTrue(result.stdout().contains("Added repository `remote`"));
+        assertTrue(result.stdout().contains("Added repository `team-configs`"));
 
-        Path localClone = Path.of(System.getProperty("ocp.cache.dir"), "repositories", "remote");
+        Path localClone = Path.of(System.getProperty("ocp.cache.dir"), "repositories", repositoryName);
         assertTrue(Files.exists(localClone.resolve(".git")));
 
         OcpConfigFile configFile = readOcpConfig(Path.of(System.getProperty("ocp.config.dir"), "config.json"));
         assertEquals(1, configFile.repositories().size());
-        assertEquals("remote", configFile.repositories().get(0).name());
+        assertEquals(repositoryName, configFile.repositories().get(0).name());
     }
 
     @Test
     void addRemovesUnknownCachedCloneWhenConfigIsMissing() throws IOException, InterruptedException {
         Path remote = createRemoteRepository();
-        Path localClone = Path.of(System.getProperty("ocp.cache.dir"), "repositories", "remote");
+        String repositoryName = "stale-repo";
+        Path localClone = Path.of(System.getProperty("ocp.cache.dir"), "repositories", repositoryName);
 
         runCommand(List.of("git", "clone", remote.toUri().toString(), localClone.toString()));
         Path staleMarker = localClone.resolve("stale-marker.txt");
         Files.writeString(staleMarker, "stale");
 
-        CommandResult result = execute("repository", "add", remote.toUri().toString());
+        CommandResult result = execute("repository", "add", remote.toUri().toString(), "--name", repositoryName);
 
         assertEquals(0, result.exitCode());
-        assertTrue(result.stdout().contains("Added repository `remote`"));
+        assertTrue(result.stdout().contains("Added repository `stale-repo`"));
         assertTrue(Files.exists(localClone.resolve(".git")));
         assertTrue(Files.notExists(staleMarker));
 
         OcpConfigFile configFile = readOcpConfig(Path.of(System.getProperty("ocp.config.dir"), "config.json"));
         assertEquals(1, configFile.repositories().size());
-        assertEquals("remote", configFile.repositories().get(0).name());
+        assertEquals(repositoryName, configFile.repositories().get(0).name());
+    }
+
+    @Test
+    void addRequiresRepositoryNameOption() throws IOException, InterruptedException {
+        Path remote = createRemoteRepository();
+
+        CommandResult result = execute("repository", "add", remote.toUri().toString());
+
+        assertEquals(2, result.exitCode());
+        assertTrue(result.stderr().contains("--name"));
     }
 
     @Test

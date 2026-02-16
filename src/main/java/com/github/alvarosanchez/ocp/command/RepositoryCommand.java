@@ -48,6 +48,9 @@ public class RepositoryCommand implements Runnable {
         @Parameters(index = "0", description = "Repository URI.")
         private String repositoryUri;
 
+        @Option(names = "--name", required = true, description = "Repository name.")
+        private String repositoryName;
+
         /**
          * Adds a repository to the local registry.
          *
@@ -56,7 +59,7 @@ public class RepositoryCommand implements Runnable {
         @Override
         public Integer call() {
             try {
-                RepositoryEntry added = repositoryService.add(repositoryUri);
+                RepositoryEntry added = repositoryService.add(repositoryUri, repositoryName);
                 Cli.success("Added repository `" + added.name() + "`.");
                 return 0;
             } catch (RuntimeException e) {
