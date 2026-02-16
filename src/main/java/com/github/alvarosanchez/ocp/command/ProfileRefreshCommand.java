@@ -29,11 +29,15 @@ class ProfileRefreshCommand implements Callable<Integer> {
     public Integer call() {
         try {
             if (profileName == null || profileName.isBlank()) {
-                Cli.success(refreshAllWithConflictResolution());
+                RefreshOutcome refreshOutcome = refreshAllWithConflictResolution();
+                notifyUserConfigChanges(refreshOutcome.refreshResult());
+                Cli.success(refreshOutcome.message());
                 return 0;
             }
 
-            Cli.success(refreshSingleWithConflictResolution(profileName));
+            RefreshOutcome refreshOutcome = refreshSingleWithConflictResolution(profileName);
+            notifyUserConfigChanges(refreshOutcome.refreshResult());
+            Cli.success(refreshOutcome.message());
             return 0;
         } catch (ProfileService.DuplicateProfilesException e) {
             Cli.error("duplicate profile names found: " + String.join(", ", e.duplicateProfileNames()));
@@ -44,18 +48,24 @@ class ProfileRefreshCommand implements Callable<Integer> {
         }
     }
 
-    private String refreshSingleWithConflictResolution(String name) {
+    private RefreshOutcome refreshSingleWithConflictResolution(String name) {
         ProfileService.RefreshConflictResolution appliedResolution = null;
         while (true) {
             try {
-                profileService.refreshProfile(name);
+                ProfileService.ProfileRefreshResult refreshResult = profileService.refreshProfileWithDetails(name);
                 if (appliedResolution == ProfileService.RefreshConflictResolution.DISCARD_AND_REFRESH) {
-                    return "Discarded local changes and refreshed profile `" + name + "`.";
+                    return new RefreshOutcome(
+                        "Discarded local changes and refreshed profile `" + name + "`.",
+                        refreshResult
+                    );
                 }
                 if (appliedResolution == ProfileService.RefreshConflictResolution.COMMIT_AND_FORCE_PUSH) {
-                    return "Committed local changes, force-pushed, and refreshed profile `" + name + "`.";
+                    return new RefreshOutcome(
+                        "Committed local changes, force-pushed, and refreshed profile `" + name + "`.",
+                        refreshResult
+                    );
                 }
-                return "Refreshed profile `" + name + "`.";
+                return new RefreshOutcome("Refreshed profile `" + name + "`.", refreshResult);
             } catch (ProfileService.ProfileRefreshConflictException conflict) {
                 ProfileService.RefreshConflictResolution resolution = promptRefreshConflictResolution(conflict);
                 if (resolution == ProfileService.RefreshConflictResolution.DO_NOTHING) {
@@ -67,19 +77,25 @@ class ProfileRefreshCommand implements Callable<Integer> {
         }
     }
 
-    private String refreshAllWithConflictResolution() {
+    private RefreshOutcome refreshAllWithConflictResolution() {
         boolean discardedLocalChanges = false;
         boolean forcePushedLocalChanges = false;
         while (true) {
             try {
-                profileService.refreshAllProfiles();
+                ProfileService.ProfileRefreshResult refreshResult = profileService.refreshAllProfilesWithDetails();
                 if (forcePushedLocalChanges) {
-                    return "Resolved local changes (including commit + force push) and refreshed all repositories.";
+                    return new RefreshOutcome(
+                        "Resolved local changes (including commit + force push) and refreshed all repositories.",
+                        refreshResult
+                    );
                 }
                 if (discardedLocalChanges) {
-                    return "Discarded local changes where needed and refreshed all repositories.";
+                    return new RefreshOutcome(
+                        "Discarded local changes where needed and refreshed all repositories.",
+                        refreshResult
+                    );
                 }
-                return "Refreshed all repositories.";
+                return new RefreshOutcome("Refreshed all repositories.", refreshResult);
             } catch (ProfileService.ProfileRefreshConflictException conflict) {
                 ProfileService.RefreshConflictResolution resolution = promptRefreshConflictResolution(conflict);
                 if (resolution == ProfileService.RefreshConflictResolution.DO_NOTHING) {
@@ -92,6 +108,24 @@ class ProfileRefreshCommand implements Callable<Integer> {
                     || resolution == ProfileService.RefreshConflictResolution.COMMIT_AND_FORCE_PUSH;
             }
         }
+    }
+
+    private void notifyUserConfigChanges(ProfileService.ProfileRefreshResult refreshResult) {
+        refreshResult.userConfigChanges().ifPresent(switchResult -> {
+            Cli.info("Updated user configuration files in `" + switchResult.targetDirectory() + "`.");
+            if (switchResult.hasBackups()) {
+                String fileLabel = switchResult.backedUpFiles() == 1 ? "file" : "files";
+                Cli.warning(
+                    "Backed up "
+                        + switchResult.backedUpFiles()
+                        + " existing "
+                        + fileLabel
+                        + " to `"
+                        + switchResult.backupDirectory()
+                        + "`."
+                );
+            }
+        });
     }
 
     private ProfileService.RefreshConflictResolution promptRefreshConflictResolution(
@@ -166,5 +200,8 @@ class ProfileRefreshCommand implements Callable<Integer> {
             return;
         }
         throw new IllegalStateException("Unsupported refresh conflict resolution: " + resolution);
+    }
+
+    private record RefreshOutcome(String message, ProfileService.ProfileRefreshResult refreshResult) {
     }
 }
