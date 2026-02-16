@@ -1014,6 +1014,15 @@ public final class ProfileService {
         public boolean hasBackups() {
             return backedUpFiles > 0 && backupDirectory != null;
         }
+
+        /**
+         * Returns whether this switch operation changed any managed files.
+         *
+         * @return {@code true} when files were linked, removed, or backed up
+         */
+        public boolean changedFiles() {
+            return linkedFiles > 0 || removedFiles > 0 || backedUpFiles > 0;
+        }
     }
 
     /**

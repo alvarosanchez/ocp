@@ -177,9 +177,9 @@ oss/opencode.json
 - For each profile file:
   - If target does not exist: create symlink.
   - If target exists and is a symlink: replace symlink.
-- If target exists and is not a symlink: move to backup before linking.
+  - If target exists and is not a symlink: move to backup before linking.
 - Backup location: `~/.config/ocp/backups/<timestamp>/<filename>`
-- `ocp profile use <name>` must notify users when files in `~/.config/opencode/` are updated.
+- `ocp profile use <name>` must print a user-config notice for `~/.config/opencode/` and indicate whether files were updated or only processed.
 - When backups are created, CLI output must include the backup location under `~/.config/ocp/backups/<timestamp>/`.
 - Switching must be transactional at file level:
   - If linking one file fails, already-processed files must be restored from backups.
@@ -218,11 +218,13 @@ oss/opencode.json
   - with duplicate profile names: exits `1`, prints duplicate-name error on stderr
 - `ocp profile use <name>`
   - exits `0`, prints profile switch success message
-  - prints a user-config update notice for `~/.config/opencode/`
+  - prints a user-config notice for `~/.config/opencode/`
+  - when files are linked/replaced/removed, notice states files were updated
+  - when no file changes are needed, notice states files were processed
   - when existing files are moved, prints backup notice with backup path
 - `ocp profile refresh [name]`
   - exits `0`, prints refresh success message
-  - when active profile files are reapplied, prints user-config update notice and backup notice when applicable
+  - when active profile files are reapplied, prints user-config notice (updated vs processed) and backup notice when applicable
 - Repository config loading
   - missing `config.json`: treated as empty repository list
   - invalid `config.json`: exits `1`, reports registry read failure

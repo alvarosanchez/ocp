@@ -30,13 +30,13 @@ class ProfileRefreshCommand implements Callable<Integer> {
         try {
             if (profileName == null || profileName.isBlank()) {
                 RefreshOutcome refreshOutcome = refreshAllWithConflictResolution();
-                notifyUserConfigChanges(refreshOutcome.refreshResult());
+                ProfileConfigChangeNotifier.notifyUserConfigChanges(refreshOutcome.refreshResult());
                 Cli.success(refreshOutcome.message());
                 return 0;
             }
 
             RefreshOutcome refreshOutcome = refreshSingleWithConflictResolution(profileName);
-            notifyUserConfigChanges(refreshOutcome.refreshResult());
+            ProfileConfigChangeNotifier.notifyUserConfigChanges(refreshOutcome.refreshResult());
             Cli.success(refreshOutcome.message());
             return 0;
         } catch (ProfileService.DuplicateProfilesException e) {
@@ -108,24 +108,6 @@ class ProfileRefreshCommand implements Callable<Integer> {
                     || resolution == ProfileService.RefreshConflictResolution.COMMIT_AND_FORCE_PUSH;
             }
         }
-    }
-
-    private void notifyUserConfigChanges(ProfileService.ProfileRefreshResult refreshResult) {
-        refreshResult.userConfigChanges().ifPresent(switchResult -> {
-            Cli.info("Updated user configuration files in `" + switchResult.targetDirectory() + "`.");
-            if (switchResult.hasBackups()) {
-                String fileLabel = switchResult.backedUpFiles() == 1 ? "file" : "files";
-                Cli.warning(
-                    "Backed up "
-                        + switchResult.backedUpFiles()
-                        + " existing "
-                        + fileLabel
-                        + " to `"
-                        + switchResult.backupDirectory()
-                        + "`."
-                );
-            }
-        });
     }
 
     private ProfileService.RefreshConflictResolution promptRefreshConflictResolution(
