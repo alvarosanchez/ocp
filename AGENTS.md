@@ -136,7 +136,7 @@ Rule of thumb: keep command classes thin; move business logic to services.
 - Read nearby classes in the same package and related tests first
 - Check `SPEC.md` acceptance criteria for user-visible behavior changes
 - Keep changes minimal, cohesive, and scoped to the request
-- Checkout a new branch for the code changes to be done
+- Before making any file edits, create and switch to a dedicated working branch (for example `git checkout -b agent/<topic>`); never start work on `master` or `main`.
 
 
 ### After coding

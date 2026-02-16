@@ -196,6 +196,7 @@ public final class ProfileService {
             .findFirst()
             .orElseThrow(() -> new IllegalStateException("Repository `" + normalizedRepositoryName + "` was not found."));
 
+        checkMergedProfileFileRefreshConflictsIfAffectedByRepository(normalizedRepositoryName);
         refreshRepository(repositoryEntry);
         return new ProfileRefreshResult(refreshActiveProfileIfAffectedByRepository(normalizedRepositoryName));
     }
@@ -216,6 +217,7 @@ public final class ProfileService {
      * @return refresh details including optional user-config changes
      */
     public ProfileRefreshResult refreshAllRepositoriesWithDetails() {
+        checkMergedProfileFileRefreshConflictsIfActiveProfileConfigured();
         for (RepositoryEntry repositoryEntry : repositoryService.load()) {
             refreshRepository(repositoryEntry);
         }
@@ -239,6 +241,101 @@ public final class ProfileService {
             return false;
         }
         return true;
+    }
+
+    /**
+     * Applies a selected conflict resolution strategy and retries refresh when merged user config files were edited.
+     *
+     * @param conflict detected merged-file refresh conflict
+     * @param resolution selected conflict resolution
+     * @return {@code true} when changes were applied, {@code false} when no action was taken
+     */
+    public boolean resolveRefreshConflict(
+        ProfileRefreshUserConfigConflictException conflict,
+        RefreshConflictResolution resolution
+    ) {
+        if (resolution != RefreshConflictResolution.DISCARD_AND_REFRESH) {
+            return false;
+        }
+        useProfileWithDetails(conflict.profileName());
+        return true;
+    }
+
+    private void checkMergedProfileFileRefreshConflictsIfAffectedByRepository(String refreshedRepositoryName) {
+        String activeProfileName = currentActiveProfileName();
+        if (activeProfileName == null || activeProfileName.isBlank()) {
+            return;
+        }
+
+        Map<String, DiscoveredProfile> profilesByName = discoverProfilesByName();
+        if (!profilesByName.containsKey(activeProfileName)) {
+            return;
+        }
+
+        boolean repositoryAffectsActiveProfile = false;
+        for (DiscoveredProfile discoveredProfile : profileLineageFor(activeProfileName, profilesByName)) {
+            if (discoveredProfile.repositoryEntry().name().equals(refreshedRepositoryName)) {
+                repositoryAffectsActiveProfile = true;
+                break;
+            }
+        }
+        if (!repositoryAffectsActiveProfile) {
+            return;
+        }
+
+        ensureNoMergedResolvedFileDrift(activeProfileName, profilesByName);
+    }
+
+    private void checkMergedProfileFileRefreshConflictsIfActiveProfileConfigured() {
+        String activeProfileName = currentActiveProfileName();
+        if (activeProfileName == null || activeProfileName.isBlank()) {
+            return;
+        }
+
+        Map<String, DiscoveredProfile> profilesByName = discoverProfilesByName();
+        if (!profilesByName.containsKey(activeProfileName)) {
+            return;
+        }
+
+        ensureNoMergedResolvedFileDrift(activeProfileName, profilesByName);
+    }
+
+    private void ensureNoMergedResolvedFileDrift(String profileName, Map<String, DiscoveredProfile> profilesByName) {
+        Map<Path, EffectiveProfileFile> effectiveFiles = effectiveProfileFilesByLogicalRelativePath(profileName, profilesByName);
+        Path resolvedDirectory = resolvedProfileDirectory(profileName);
+        Path targetDirectory = openCodeDirectory();
+        List<Path> driftedFiles = new ArrayList<>();
+
+        for (EffectiveProfileFile effectiveFile : effectiveFiles.values()) {
+            if (!effectiveFile.mergedJson()) {
+                continue;
+            }
+
+            Path resolvedFile = resolvedDirectory.resolve(effectiveFile.relativePath());
+            Path targetFile = targetDirectory.resolve(effectiveFile.relativePath());
+            if (!Files.isRegularFile(resolvedFile, LinkOption.NOFOLLOW_LINKS) || !Files.isSymbolicLink(targetFile)) {
+                continue;
+            }
+
+            try {
+                Path targetLink = Files.readSymbolicLink(targetFile);
+                if (!targetLink.equals(resolvedFile.toAbsolutePath())) {
+                    continue;
+                }
+
+                String expectedContent = objectMapper.writeValueAsString(effectiveFile.jsonValue());
+                String currentContent = Files.readString(resolvedFile);
+                if (!currentContent.equals(expectedContent)) {
+                    driftedFiles.add(effectiveFile.relativePath());
+                }
+            } catch (IOException e) {
+                throw new IllegalStateException("Failed to inspect merged active profile file " + effectiveFile.relativePath(), e);
+            }
+        }
+
+        if (!driftedFiles.isEmpty()) {
+            throw new ProfileRefreshUserConfigConflictException(profileName, targetDirectory, driftedFiles);
+        }
     }
 
     private void writeActiveProfile(String profileName) {
@@ -411,6 +508,42 @@ public final class ProfileService {
         Map<String, DiscoveredProfile> profilesByName,
         boolean materializeMergedFiles
     ) {
+        Map<Path, EffectiveProfileFile> filesByLogicalRelativePath = effectiveProfileFilesByLogicalRelativePath(profileName, profilesByName);
+
+        Path resolvedDirectory = resolvedProfileDirectory(profileName);
+        if (materializeMergedFiles) {
+            deleteRecursively(resolvedDirectory);
+        }
+
+        List<ResolvedProfileFile> resolvedFiles = new ArrayList<>();
+        for (EffectiveProfileFile effectiveFile : filesByLogicalRelativePath.values()) {
+            if (effectiveFile.mergedJson()) {
+                Path resolvedFile = resolvedDirectory.resolve(effectiveFile.relativePath());
+                if (materializeMergedFiles) {
+                    try {
+                        Files.createDirectories(resolvedFile.getParent());
+                        Files.writeString(resolvedFile, objectMapper.writeValueAsString(effectiveFile.jsonValue()));
+                    } catch (IOException e) {
+                        throw new IllegalStateException(
+                            "Failed to materialize merged profile file " + effectiveFile.relativePath(),
+                            e
+                        );
+                    }
+                }
+                resolvedFiles.add(new ResolvedProfileFile(effectiveFile.relativePath(), resolvedFile));
+            } else {
+                resolvedFiles.add(new ResolvedProfileFile(effectiveFile.relativePath(), effectiveFile.sourcePath()));
+            }
+        }
+
+        resolvedFiles.sort(Comparator.comparing(file -> file.relativePath().toString()));
+        return resolvedFiles;
+    }
+
+    private Map<Path, EffectiveProfileFile> effectiveProfileFilesByLogicalRelativePath(
+        String profileName,
+        Map<String, DiscoveredProfile> profilesByName
+    ) {
         List<DiscoveredProfile> lineage = profileLineageFor(profileName, profilesByName);
         Map<Path, EffectiveProfileFile> filesByLogicalRelativePath = new LinkedHashMap<>();
 
@@ -468,34 +601,7 @@ public final class ProfileService {
             }
         }
 
-        Path resolvedDirectory = resolvedProfileDirectory(profileName);
-        if (materializeMergedFiles) {
-            deleteRecursively(resolvedDirectory);
-        }
-
-        List<ResolvedProfileFile> resolvedFiles = new ArrayList<>();
-        for (EffectiveProfileFile effectiveFile : filesByLogicalRelativePath.values()) {
-            if (effectiveFile.mergedJson()) {
-                Path resolvedFile = resolvedDirectory.resolve(effectiveFile.relativePath());
-                if (materializeMergedFiles) {
-                    try {
-                        Files.createDirectories(resolvedFile.getParent());
-                        Files.writeString(resolvedFile, objectMapper.writeValueAsString(effectiveFile.jsonValue()));
-                    } catch (IOException e) {
-                        throw new IllegalStateException(
-                            "Failed to materialize merged profile file " + effectiveFile.relativePath(),
-                            e
-                        );
-                    }
-                }
-                resolvedFiles.add(new ResolvedProfileFile(effectiveFile.relativePath(), resolvedFile));
-            } else {
-                resolvedFiles.add(new ResolvedProfileFile(effectiveFile.relativePath(), effectiveFile.sourcePath()));
-            }
-        }
-
-        resolvedFiles.sort(Comparator.comparing(file -> file.relativePath().toString()));
-        return resolvedFiles;
+        return filesByLogicalRelativePath;
     }
 
     private List<DiscoveredProfile> profileLineageFor(
@@ -1183,6 +1289,52 @@ public final class ProfileService {
          */
         public String diff() {
             return diff;
+        }
+    }
+
+    /**
+     * Raised when merged active-profile files were edited locally and refresh would overwrite those edits.
+     */
+    public static final class ProfileRefreshUserConfigConflictException extends RuntimeException {
+
+        private static final long serialVersionUID = 1L;
+
+        private final String profileName;
+        private final Path targetDirectory;
+        private final List<Path> driftedFiles;
+
+        ProfileRefreshUserConfigConflictException(String profileName, Path targetDirectory, List<Path> driftedFiles) {
+            super("Local changes detected in merged active profile files for profile `" + profileName + "`.");
+            this.profileName = profileName;
+            this.targetDirectory = targetDirectory;
+            this.driftedFiles = List.copyOf(driftedFiles);
+        }
+
+        /**
+         * Returns the active profile name whose merged files were modified.
+         *
+         * @return profile name
+         */
+        public String profileName() {
+            return profileName;
+        }
+
+        /**
+         * Returns the user config directory containing the modified files.
+         *
+         * @return user config directory
+         */
+        public Path targetDirectory() {
+            return targetDirectory;
+        }
+
+        /**
+         * Returns merged profile-relative file paths that differ from generated content.
+         *
+         * @return immutable list of modified relative paths
+         */
+        public List<Path> driftedFiles() {
+            return driftedFiles;
         }
     }
 }
