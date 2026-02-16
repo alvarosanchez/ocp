@@ -21,6 +21,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import jakarta.inject.Singleton;
@@ -136,6 +137,17 @@ public final class ProfileService {
      * @return {@code true} when the switch is applied
      */
     public boolean useProfile(String profileName) {
+        useProfileWithDetails(profileName);
+        return true;
+    }
+
+    /**
+     * Switches the active profile and returns details about changed user config files.
+     *
+     * @param profileName profile name to activate
+     * @return profile switch details including updated paths and backup metadata
+     */
+    public ProfileSwitchResult useProfileWithDetails(String profileName) {
         String normalizedProfileName = normalizeProfileName(profileName);
         Map<String, DiscoveredProfile> profilesByName = discoverProfilesByName();
         DiscoveredProfile discoveredProfile = profilesByName.get(normalizedProfileName);
@@ -153,9 +165,9 @@ public final class ProfileService {
             }
         }
 
-        switchProfileFiles(resolvedFiles, previousResolvedFiles, openCodeDirectory());
+        ProfileSwitchResult switchResult = switchProfileFiles(resolvedFiles, previousResolvedFiles, openCodeDirectory());
         writeActiveProfile(normalizedProfileName);
-        return true;
+        return switchResult;
     }
 
     /**
@@ -165,6 +177,17 @@ public final class ProfileService {
      * @return {@code true} when refresh completes successfully
      */
     public boolean refreshProfile(String profileName) {
+        refreshProfileWithDetails(profileName);
+        return true;
+    }
+
+    /**
+     * Refreshes the repository that contains the specified profile.
+     *
+     * @param profileName profile name whose repository should be refreshed
+     * @return refresh details including optional user-config changes
+     */
+    public ProfileRefreshResult refreshProfileWithDetails(String profileName) {
         String normalizedProfileName = normalizeProfileName(profileName);
         Map<String, DiscoveredProfile> profilesByName = discoverProfilesByName();
         DiscoveredProfile discoveredProfile = profilesByName.get(normalizedProfileName);
@@ -173,8 +196,7 @@ public final class ProfileService {
         }
 
         refreshRepository(discoveredProfile.repositoryEntry());
-        refreshActiveProfileIfAffected(normalizedProfileName);
-        return true;
+        return new ProfileRefreshResult(refreshActiveProfileIfAffected(normalizedProfileName));
     }
 
     /**
@@ -183,11 +205,20 @@ public final class ProfileService {
      * @return {@code true} when all refresh operations complete successfully
      */
     public boolean refreshAllProfiles() {
+        refreshAllProfilesWithDetails();
+        return true;
+    }
+
+    /**
+     * Refreshes all configured repositories.
+     *
+     * @return refresh details including optional user-config changes
+     */
+    public ProfileRefreshResult refreshAllProfilesWithDetails() {
         for (RepositoryEntry repositoryEntry : repositoryService.load()) {
             refreshRepository(repositoryEntry);
         }
-        refreshActiveProfileIfConfigured();
-        return true;
+        return new ProfileRefreshResult(refreshActiveProfileIfConfigured());
     }
 
     /**
@@ -219,7 +250,7 @@ public final class ProfileService {
         return repositoryService.loadConfigFile().config().activeProfile();
     }
 
-    private void switchProfileFiles(
+    private ProfileSwitchResult switchProfileFiles(
         List<ResolvedProfileFile> sourceFiles,
         List<ResolvedProfileFile> previousSourceFiles,
         Path targetDirectory
@@ -238,6 +269,10 @@ public final class ProfileService {
         }
 
         Path backupRoot = backupsDirectory().resolve(timestamp());
+        int backedUpFiles = 0;
+        int removedFiles = 0;
+        int linkedFiles = 0;
+        Path backupDirectory = null;
         List<FileSwitchState> switchStates = new ArrayList<>();
 
         try {
@@ -259,6 +294,7 @@ public final class ProfileService {
 
                 switchStates.add(new FileSwitchState(targetFile, null, currentSymlinkTarget));
                 Files.delete(targetFile);
+                removedFiles++;
             }
 
             for (ResolvedProfileFile sourceFile : sourceFiles) {
@@ -279,10 +315,12 @@ public final class ProfileService {
                         previousSymlinkTarget = Files.readSymbolicLink(occupiedTarget);
                         Files.delete(occupiedTarget);
                     } else {
+                        backupDirectory = backupRoot;
                         Path occupiedRelativePath = targetDirectory.relativize(occupiedTarget);
                         backupPath = backupRoot.resolve(occupiedRelativePath);
                         Files.createDirectories(backupPath.getParent());
                         Files.move(occupiedTarget, backupPath);
+                        backedUpFiles++;
                     }
 
                     switchStates.add(new FileSwitchState(occupiedTarget, backupPath, previousSymlinkTarget));
@@ -295,7 +333,9 @@ public final class ProfileService {
                     switchStates.add(new FileSwitchState(targetFile, null, null));
                 }
                 Files.createSymbolicLink(targetFile, sourceFile.sourcePath().toAbsolutePath());
+                linkedFiles++;
             }
+            return new ProfileSwitchResult(targetDirectory, linkedFiles, removedFiles, backedUpFiles, backupDirectory);
         } catch (IOException e) {
             IOException rollbackFailure = rollbackSwitch(switchStates);
             if (rollbackFailure != null) {
@@ -640,34 +680,35 @@ public final class ProfileService {
         return normalizedProfileName;
     }
 
-    private void refreshActiveProfileIfAffected(String refreshedProfileName) {
+    private Optional<ProfileSwitchResult> refreshActiveProfileIfAffected(String refreshedProfileName) {
         String activeProfileName = currentActiveProfileName();
         if (activeProfileName == null || activeProfileName.isBlank()) {
-            return;
+            return Optional.empty();
         }
 
         Map<String, DiscoveredProfile> profilesByName = discoverProfilesByName();
         if (!profilesByName.containsKey(activeProfileName)) {
-            return;
+            return Optional.empty();
         }
 
         if (isProfileInLineage(activeProfileName, refreshedProfileName, profilesByName)) {
-            useProfile(activeProfileName);
+            return Optional.of(useProfileWithDetails(activeProfileName));
         }
+        return Optional.empty();
     }
 
-    private void refreshActiveProfileIfConfigured() {
+    private Optional<ProfileSwitchResult> refreshActiveProfileIfConfigured() {
         String activeProfileName = currentActiveProfileName();
         if (activeProfileName == null || activeProfileName.isBlank()) {
-            return;
+            return Optional.empty();
         }
 
         Map<String, DiscoveredProfile> profilesByName = discoverProfilesByName();
         if (!profilesByName.containsKey(activeProfileName)) {
-            return;
+            return Optional.empty();
         }
 
-        useProfile(activeProfileName);
+        return Optional.of(useProfileWithDetails(activeProfileName));
     }
 
     private boolean isProfileInLineage(
@@ -928,6 +969,77 @@ public final class ProfileService {
     }
 
     private record ResolvedProfileFile(Path relativePath, Path sourcePath) {
+    }
+
+    /**
+     * Result details produced when switching profile files in user config directories.
+     *
+     * @param targetDirectory user config directory where symlinks were updated
+     * @param linkedFiles number of symlinks created or replaced
+     * @param removedFiles number of stale symlinks removed
+     * @param backedUpFiles number of existing non-symlink files moved to backups
+     * @param backupDirectory backup root directory for moved files, or {@code null} when no backup was needed
+     */
+    public record ProfileSwitchResult(
+        Path targetDirectory,
+        int linkedFiles,
+        int removedFiles,
+        int backedUpFiles,
+        Path backupDirectory
+    ) {
+
+        /**
+         * Creates profile switch result details.
+         *
+         * @param targetDirectory user config directory where symlinks were updated
+         * @param linkedFiles number of symlinks created or replaced
+         * @param removedFiles number of stale symlinks removed
+         * @param backedUpFiles number of existing non-symlink files moved to backups
+         * @param backupDirectory backup root directory for moved files
+         */
+        public ProfileSwitchResult {
+            if (targetDirectory == null) {
+                throw new IllegalArgumentException("targetDirectory is required");
+            }
+            if (linkedFiles < 0 || removedFiles < 0 || backedUpFiles < 0) {
+                throw new IllegalArgumentException("File counters must be non-negative");
+            }
+        }
+
+        /**
+         * Returns whether this switch operation created backups.
+         *
+         * @return {@code true} when at least one file was backed up
+         */
+        public boolean hasBackups() {
+            return backedUpFiles > 0 && backupDirectory != null;
+        }
+    }
+
+    /**
+     * Result details produced when a refresh operation may reapply active profile files.
+     *
+     * @param userConfigChanges optional details for user-config updates triggered during refresh
+     */
+    public record ProfileRefreshResult(Optional<ProfileSwitchResult> userConfigChanges) {
+
+        /**
+         * Creates refresh result details.
+         *
+         * @param userConfigChanges optional user-config updates performed while refreshing repositories
+         */
+        public ProfileRefreshResult {
+            userConfigChanges = userConfigChanges == null ? Optional.empty() : userConfigChanges;
+        }
+
+        /**
+         * Returns whether refresh updated files in the user config directory.
+         *
+         * @return {@code true} when active profile files were reapplied
+         */
+        public boolean changedUserConfigFiles() {
+            return userConfigChanges.isPresent();
+        }
     }
 
     private static final class RepositoryStatus {

@@ -173,6 +173,8 @@ class ProfileCommandTest {
         CommandResult result = execute("profile", "use", "corporate");
 
         assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("Updated user configuration files in"));
+        assertTrue(result.stdout().contains("Backed up 1 existing file"));
         assertTrue(Files.isSymbolicLink(openCodeDir.resolve("opencode.json")));
         assertEquals(
             sourceProfileDir.resolve("opencode.json").toAbsolutePath(),
@@ -623,6 +625,7 @@ class ProfileCommandTest {
         CommandResult refreshResult = execute("profile", "refresh", "oca");
 
         assertEquals(0, refreshResult.exitCode());
+        assertTrue(refreshResult.stdout().contains("Updated user configuration files in"));
         assertTrue(refreshResult.stdout().contains("Refreshed profile `oca`"));
         Map<String, Object> refreshed = readJsonMap(opencodeFile);
         assertEquals("v2", refreshed.get("some_parent"));
