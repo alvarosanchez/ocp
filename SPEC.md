@@ -141,6 +141,7 @@ oss/opencode.json
 | `ocp profile create [name]` | Implemented | Create profile folder and register it in repository metadata. Defaults to `default` when no name is provided. |
 | `ocp profile use <name>` | Implemented | Switch active profile by linking profile files to OpenCode config location. |
 | `ocp repository add <uri>` | Implemented | Clone repository into local cache and register it in `config.json`. |
+| `ocp repository list` | Implemented | Print configured repositories as rounded CLI boxes with name, URI, local clone path, and resolved profile names from each repository metadata file. |
 | `ocp repository delete <name>` | Implemented | Remove repository entry from registry and delete local clone. |
 | `ocp repository create <name> [--profile-name <profile>]` | Implemented | Initialize new profile repository with `repository.json` and initial profile. |
 | `ocp repository refresh [name]` | Implemented | Pull latest changes for a specific repository, or for all repositories when no name is provided. Reapplies active profile resolution when refreshed repository data affects the active profile lineage. |
@@ -225,6 +226,10 @@ oss/opencode.json
 - `ocp repository refresh [name]`
   - exits `0`, prints refresh success message
   - when active profile files are reapplied, prints user-config notice (updated vs processed) and backup notice when applicable
+- `ocp repository list`
+  - with no repositories: exits `0`, prints helpful empty-state message
+  - with configured repositories: outputs one rounded box per repository with fields `Name`, `URI`, `Local path`, and `Resolved profiles`
+  - if a repository metadata file is invalid JSON: exits `1`, reports metadata read failure
 - Repository config loading
   - missing `config.json`: treated as empty repository list
   - invalid `config.json`: exits `1`, reports registry read failure

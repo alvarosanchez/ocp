@@ -137,6 +137,79 @@ class RepositoryCommandTest {
         assertEquals(List.of(new ProfileEntry("team")), repositoryConfigFile.profiles());
     }
 
+    @Test
+    void listShowsMessageWhenNoRepositoriesAreConfigured() {
+        CommandResult result = execute("repository", "list");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("No repositories available yet"));
+    }
+
+    @Test
+    void listShowsConfiguredRepositoriesIncludingResolvedProfiles() throws IOException {
+        writeRepositoryMetadata(
+            "repo-one",
+            new RepositoryConfigFile(
+                List.of(
+                    new ProfileEntry("beta"),
+                    new ProfileEntry("alpha")
+                )
+            )
+        );
+        writeRepositoryMetadata(
+            "repo-two",
+            new RepositoryConfigFile(
+                List.of(
+                    new ProfileEntry("gamma"),
+                    new ProfileEntry("alpha")
+                )
+            )
+        );
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(
+                    new RepositoryEntry("repo-two", "https://github.com/acme/repo-two.git", null),
+                    new RepositoryEntry("repo-one", "git@github.com:acme/repo-one.git", null)
+                )
+            )
+        );
+
+        CommandResult result = execute("repository", "list");
+
+        assertEquals(0, result.exitCode());
+        String output = removeAnsiCodes(result.stdout());
+        assertTrue(output.contains("╭"));
+        assertTrue(output.contains("Name:"));
+        assertTrue(output.contains("-> repo-one"));
+        assertTrue(output.contains("-> repo-two"));
+        assertTrue(output.contains("URI:"));
+        assertTrue(output.contains("Local path:"));
+        assertTrue(output.contains("Resolved profiles:"));
+        assertTrue(output.contains("alpha, beta"));
+        assertTrue(output.contains("alpha, gamma"));
+    }
+
+    @Test
+    void listFailsWhenRepositoryMetadataIsInvalid() throws IOException {
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-one", "git@github.com:acme/repo-one.git", null))
+            )
+        );
+
+        Path repositoryPath = Path.of(System.getProperty("ocp.cache.dir"), "repositories", "repo-one");
+        Files.createDirectories(repositoryPath);
+        Files.writeString(repositoryPath.resolve("repository.json"), "not-json");
+
+        CommandResult result = execute("repository", "list");
+
+        assertEquals(1, result.exitCode());
+        assertTrue(result.stderr().contains("Failed to read profile metadata"));
+    }
+
     private Path createRemoteRepository() throws IOException, InterruptedException {
         Path seedRepository = tempDir.resolve("seed");
         runCommand(List.of("git", "init", seedRepository.toString()));
@@ -185,6 +258,12 @@ class RepositoryCommandTest {
         Files.writeString(configDir.resolve("config.json"), serializeAsJson(configFile));
     }
 
+    private void writeRepositoryMetadata(String repositoryName, RepositoryConfigFile repositoryConfigFile) throws IOException {
+        Path repositoryPath = Path.of(System.getProperty("ocp.cache.dir"), "repositories", repositoryName);
+        Files.createDirectories(repositoryPath);
+        Files.writeString(repositoryPath.resolve("repository.json"), serializeAsJson(repositoryConfigFile));
+    }
+
     private OcpConfigFile readOcpConfig(Path configPath) throws IOException {
         try (ApplicationContext context = ApplicationContext.run()) {
             ObjectMapper objectMapper = context.getBean(ObjectMapper.class);
@@ -213,6 +292,10 @@ class RepositoryCommandTest {
         if (exitCode != 0) {
             throw new IllegalStateException("Command failed: " + String.join(" ", command) + "\n" + output);
         }
+    }
+
+    private static String removeAnsiCodes(String output) {
+        return output.replaceAll("\\u001B\\[[;\\d]*m", "");
     }
 
     private record CommandResult(int exitCode, String stdout, String stderr) {

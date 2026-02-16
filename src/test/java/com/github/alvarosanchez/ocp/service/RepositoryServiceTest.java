@@ -9,6 +9,8 @@ import com.github.alvarosanchez.ocp.git.GitRepositoryClient;
 import com.github.alvarosanchez.ocp.config.OcpConfigFile;
 import com.github.alvarosanchez.ocp.config.OcpConfigFile.OcpConfigOptions;
 import com.github.alvarosanchez.ocp.config.OcpConfigFile.RepositoryEntry;
+import com.github.alvarosanchez.ocp.config.RepositoryConfigFile;
+import com.github.alvarosanchez.ocp.config.RepositoryConfigFile.ProfileEntry;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.serde.ObjectMapper;
 import java.io.IOException;
@@ -132,9 +134,64 @@ class RepositoryServiceTest {
         assertTrue(thrown.getMessage().contains("Failed to read repository registry"));
     }
 
+    @Test
+    void listConfiguredRepositoriesIncludesUriLocalPathAndResolvedProfiles() throws IOException {
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(
+                    new RepositoryEntry("repo-two", "https://github.com/acme/repo-two.git", null),
+                    new RepositoryEntry("repo-one", "git@github.com:acme/repo-one.git", null)
+                )
+            )
+        );
+
+        writeRepositoryMetadata(
+            "repo-one",
+            new RepositoryConfigFile(
+                List.of(
+                    new ProfileEntry("beta"),
+                    new ProfileEntry("alpha"),
+                    new ProfileEntry("alpha")
+                )
+            )
+        );
+        writeRepositoryMetadata(
+            "repo-two",
+            new RepositoryConfigFile(
+                List.of(new ProfileEntry("gamma"))
+            )
+        );
+
+        List<RepositoryService.ConfiguredRepository> repositories = repositoryService.listConfiguredRepositories();
+
+        assertEquals(2, repositories.size());
+        assertEquals("repo-one", repositories.get(0).name());
+        assertEquals("git@github.com:acme/repo-one.git", repositories.get(0).uri());
+        assertEquals(
+            Path.of(System.getProperty("ocp.cache.dir"), "repositories", "repo-one").toString(),
+            repositories.get(0).localPath()
+        );
+        assertEquals(List.of("alpha", "beta"), repositories.get(0).resolvedProfiles());
+
+        assertEquals("repo-two", repositories.get(1).name());
+        assertEquals("https://github.com/acme/repo-two.git", repositories.get(1).uri());
+        assertEquals(
+            Path.of(System.getProperty("ocp.cache.dir"), "repositories", "repo-two").toString(),
+            repositories.get(1).localPath()
+        );
+        assertEquals(List.of("gamma"), repositories.get(1).resolvedProfiles());
+    }
+
     private void writeConfig(OcpConfigFile configFile) throws IOException {
         Path configDir = Path.of(System.getProperty("ocp.config.dir"));
         Files.createDirectories(configDir);
         Files.writeString(configDir.resolve("config.json"), objectMapper.writeValueAsString(configFile));
+    }
+
+    private void writeRepositoryMetadata(String repositoryName, RepositoryConfigFile repositoryConfigFile) throws IOException {
+        Path repositoryPath = Path.of(System.getProperty("ocp.cache.dir"), "repositories", repositoryName);
+        Files.createDirectories(repositoryPath);
+        Files.writeString(repositoryPath.resolve("repository.json"), objectMapper.writeValueAsString(repositoryConfigFile));
     }
 }

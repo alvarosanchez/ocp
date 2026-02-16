@@ -4,6 +4,7 @@ import com.github.alvarosanchez.ocp.git.GitRepositoryClient;
 import com.github.alvarosanchez.ocp.config.OcpConfigFile;
 import com.github.alvarosanchez.ocp.config.OcpConfigFile.OcpConfigOptions;
 import com.github.alvarosanchez.ocp.config.OcpConfigFile.RepositoryEntry;
+import com.github.alvarosanchez.ocp.config.RepositoryConfigFile;
 import com.github.alvarosanchez.ocp.config.RepositoryConfigFile.ProfileEntry;
 import io.micronaut.serde.ObjectMapper;
 import java.io.IOException;
@@ -37,6 +38,27 @@ public final class RepositoryService {
     public List<RepositoryEntry> load() {
         OcpConfigFile configFile = loadConfigFile();
         return normalizeEntries(configFile.repositories());
+    }
+
+    /**
+     * Returns configured repositories enriched with local profile metadata.
+     *
+     * @return repositories sorted by name
+     */
+    public List<ConfiguredRepository> listConfiguredRepositories() {
+        List<ConfiguredRepository> repositories = new ArrayList<>();
+        for (RepositoryEntry entry : load()) {
+            repositories.add(
+                new ConfiguredRepository(
+                    entry.name(),
+                    entry.uri(),
+                    entry.localPath(),
+                    resolvedProfilesFor(entry)
+                )
+            );
+        }
+        repositories.sort(Comparator.comparing(ConfiguredRepository::name));
+        return List.copyOf(repositories);
     }
 
     /**
@@ -136,7 +158,7 @@ public final class RepositoryService {
                 Files.createDirectories(repositoryPath.resolve(normalizedProfileName));
             }
 
-            String content = objectMapper.writeValueAsString(new com.github.alvarosanchez.ocp.config.RepositoryConfigFile(profiles));
+            String content = objectMapper.writeValueAsString(new RepositoryConfigFile(profiles));
             Files.writeString(repositoryPath.resolve("repository.json"), content);
             gitRepositoryClient.init(repositoryPath);
             return repositoryPath;
@@ -188,6 +210,28 @@ public final class RepositoryService {
             );
         }
         return normalized;
+    }
+
+    private List<String> resolvedProfilesFor(RepositoryEntry repositoryEntry) {
+        Path metadataFile = Path.of(repositoryEntry.localPath()).resolve("repository.json");
+        if (!Files.exists(metadataFile)) {
+            return List.of();
+        }
+
+        try {
+            RepositoryConfigFile metadata = objectMapper.readValue(Files.readString(metadataFile), RepositoryConfigFile.class);
+            return metadata
+                .profiles()
+                .stream()
+                .map(ProfileEntry::name)
+                .filter(name -> name != null && !name.isBlank())
+                .map(String::trim)
+                .distinct()
+                .sorted()
+                .toList();
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read profile metadata from " + metadataFile, e);
+        }
     }
 
     private void deleteRecursively(Path path) {
@@ -371,6 +415,34 @@ public final class RepositoryService {
     }
 
     private record RepositoryPathInfo(List<String> segments, boolean namespaced) {
+    }
+
+    /**
+     * Render-ready repository view model used by repository list command.
+     *
+     * @param name normalized repository name
+     * @param uri configured repository URI
+     * @param localPath normalized local clone path
+     * @param resolvedProfiles repository profile names discovered from metadata
+     */
+    public record ConfiguredRepository(
+        String name,
+        String uri,
+        String localPath,
+        List<String> resolvedProfiles
+    ) {
+
+        /**
+         * Creates an immutable configured repository projection.
+         *
+         * @param name normalized repository name
+         * @param uri configured repository URI
+         * @param localPath normalized local clone path
+         * @param resolvedProfiles repository profile names
+         */
+        public ConfiguredRepository {
+            resolvedProfiles = resolvedProfiles == null ? List.of() : List.copyOf(resolvedProfiles);
+        }
     }
 
     private Path repositoriesFile() {

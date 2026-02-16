@@ -18,6 +18,7 @@ import picocli.CommandLine.Parameters;
     description = "Manage profile repositories.",
     mixinStandardHelpOptions = true,
     subcommands = {
+        RepositoryListCommand.class,
         RepositoryCommand.AddCommand.class,
         RepositoryCommand.DeleteCommand.class,
         RepositoryCommand.CreateCommand.class,

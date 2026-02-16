@@ -24,6 +24,9 @@ Requirements:
 # Add a profile repository
 ocp repository add git@github.com:my-org/opencode-profiles.git
 
+# List configured repositories and discovered profiles
+ocp repository list
+
 # List profiles discovered across configured repositories
 ocp profile list
 
@@ -79,6 +82,7 @@ When `extends_from` is set, parent profiles are resolved first. Shared JSON/JSON
 - `ocp profile create [name]` - create a profile in the current repository (`default` if omitted).
 - `ocp profile use <name>` - switch to profile by name.
 - `ocp repository add <uri>` - clone and register a repository.
+- `ocp repository list` - list configured repositories with URI, local path, and resolved profiles.
 - `ocp repository delete <name>` - remove repository and local clone.
 - `ocp repository create <name> [--profile-name <profile>]` - scaffold a new profile repository.
 - `ocp repository refresh [name]` - pull latest changes for one repository by name or all repositories.
