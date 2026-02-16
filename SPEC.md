@@ -34,7 +34,7 @@ Many users need to switch between different model/provider setups depending on c
 
 ```bash
 ocp profile list
-ocp repository add git@github.com:my-company/my-repo.git
+ocp repository add git@github.com:my-company/my-repo.git --name my-repo
 ocp profile use my-company
 ```
 
@@ -75,9 +75,7 @@ Rules:
 
 - `config.activeProfile` defaults to `null` (no active profile selected).
 - `repositories[*].uri` is required.
-- `repositories[*].name` may be omitted; when omitted, name is derived from URI path.
-  - Hosted remotes use namespace + repository (for example `acme-opencode-config`).
-  - Local file paths keep basename behavior (for example `remote`).
+- `repositories[*].name` is required.
 - `repositories[*].localPath` is derived from cache directory and repository name.
 
 ### `repository.json` schema
@@ -140,7 +138,7 @@ oss/opencode.json
 | `ocp profile` | Implemented | Print currently active profile with repository/version metadata and update hints. |
 | `ocp profile create [name]` | Implemented | Create profile folder and register it in repository metadata. Defaults to `default` when no name is provided. |
 | `ocp profile use <name>` | Implemented | Switch active profile by linking profile files to OpenCode config location. |
-| `ocp repository add <uri>` | Implemented | Clone repository into local cache and register it in `config.json`. |
+| `ocp repository add <uri> --name <name>` | Implemented | Clone repository into local cache and register it in `config.json`. |
 | `ocp repository list` | Implemented | Print configured repositories as rounded CLI boxes with name, URI, local clone path, and resolved profile names from each repository metadata file. |
 | `ocp repository delete <name>` | Implemented | Remove repository entry from registry and delete local clone. |
 | `ocp repository create <name> [--profile-name <profile>]` | Implemented | Initialize new profile repository with `repository.json` and initial profile. |
@@ -148,13 +146,11 @@ oss/opencode.json
 
 ## Operational semantics
 
-### Repository name normalization
+### Repository registration normalization
 
-- Derive repository name from URI path segments.
-- For hosted/scp remotes, include namespace segments plus repository segment (joined by `-`).
-- For local file paths, use repository basename.
-- Strip `.git` suffix when present.
-- Trim URI whitespace before parsing.
+- `ocp repository add` requires both URI and repository name.
+- Trim URI and repository name before validation and persistence.
+- Compute `localPath` from cache directory and configured repository name.
 
 ### Profile uniqueness
 
@@ -234,7 +230,7 @@ oss/opencode.json
 - Repository config loading
   - missing `config.json`: treated as empty repository list
   - invalid `config.json`: exits `1`, reports registry read failure
-  - repository URI normalization: trims URI, derives repository name, computes `localPath`
+  - repository URI/name normalization: trims URI and name, computes `localPath`
 - Git operations
   - clone command failure: exits `1`, includes exit-code detail
   - interrupted git operation: thread interrupt flag is restored and command fails cleanly
