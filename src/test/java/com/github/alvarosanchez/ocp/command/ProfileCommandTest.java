@@ -716,6 +716,67 @@ class ProfileCommandTest {
     }
 
     @Test
+    void repositoryRefreshSinglePromptsWhenMergedActiveProfileFilesHaveLocalChangesAndCanDiscardThenRefresh() throws IOException, InterruptedException {
+        RemoteRepositoryState state = createRemoteInheritedProfileRepository("oca", "oca-personal");
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-refresh-inherited", state.remoteUri(), null))
+            )
+        );
+
+        runCommand(List.of("git", "clone", state.remoteUri(), state.localClone().toString()));
+
+        CommandResult useResult = execute("profile", "use", "oca-personal");
+        assertEquals(0, useResult.exitCode());
+
+        Path opencodeFile = Path.of(System.getProperty("ocp.opencode.config.dir")).resolve("opencode.json");
+        Files.writeString(opencodeFile, "{\"some_parent\":\"local\",\"shared\":\"child\",\"local\":\"edit\"}");
+
+        CommandResult refreshResult = executeWithInput("1\n", "repository", "refresh", "repo-refresh-inherited");
+
+        assertEquals(0, refreshResult.exitCode());
+        assertTrue(refreshResult.stdout().contains("Local changes detected in merged active profile files for profile `oca-personal`"));
+        assertTrue(refreshResult.stdout().contains("Discarding local changes in merged user config files and retrying refresh"));
+        assertTrue(refreshResult.stdout().contains("Reapplied active profile and refreshed repository `repo-refresh-inherited`."));
+        Map<String, Object> refreshed = readJsonMap(opencodeFile);
+        assertEquals("v1", refreshed.get("some_parent"));
+        assertEquals("child", refreshed.get("shared"));
+        assertFalse(refreshed.containsKey("local"));
+    }
+
+    @Test
+    void repositoryRefreshSinglePromptsWhenMergedActiveProfileFilesHaveLocalChangesAndCanAbortWithoutChanges() throws IOException, InterruptedException {
+        RemoteRepositoryState state = createRemoteInheritedProfileRepository("oca", "oca-personal");
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-refresh-inherited", state.remoteUri(), null))
+            )
+        );
+
+        runCommand(List.of("git", "clone", state.remoteUri(), state.localClone().toString()));
+
+        CommandResult useResult = execute("profile", "use", "oca-personal");
+        assertEquals(0, useResult.exitCode());
+
+        Path opencodeFile = Path.of(System.getProperty("ocp.opencode.config.dir")).resolve("opencode.json");
+        Files.writeString(opencodeFile, "{\"some_parent\":\"local\",\"shared\":\"child\",\"local\":\"edit\"}");
+
+        CommandResult refreshResult = executeWithInput("2\n", "repository", "refresh", "repo-refresh-inherited");
+
+        assertEquals(1, refreshResult.exitCode());
+        assertTrue(refreshResult.stdout().contains("Local changes detected in merged active profile files for profile `oca-personal`"));
+        assertTrue(refreshResult.stderr().contains("Refresh cancelled"));
+        Map<String, Object> unchanged = readJsonMap(opencodeFile);
+        assertEquals("local", unchanged.get("some_parent"));
+        assertEquals("child", unchanged.get("shared"));
+        assertEquals("edit", unchanged.get("local"));
+    }
+
+    @Test
     void repositoryRefreshPromptsWhenRepositoryHasLocalChangesAndCanDiscardThenRefresh() throws IOException, InterruptedException {
         RemoteRepositoryState state = createRemoteProfileRepository("ops");
 
