@@ -202,6 +202,27 @@ class ProfileCommandTest {
     }
 
     @Test
+    void useReportsProcessedNoticeWhenProfileContainsNoFiles() throws IOException {
+        writeRepositoryMetadata("repo-local", new RepositoryConfigFile(List.of(new ProfileEntry("empty"))));
+        Path sourceProfileDir = repositoriesCacheDir().resolve("repo-local").resolve("empty");
+        Files.createDirectories(sourceProfileDir);
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null))
+            )
+        );
+
+        CommandResult result = execute("profile", "use", "empty");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("Processed user configuration files in"));
+        assertFalse(result.stdout().contains("Updated user configuration files in"));
+        assertFalse(result.stdout().contains("Backed up "));
+    }
+
+    @Test
     void useRemovesFilesThatBelongOnlyToPreviousProfile() throws IOException {
         writeRepositoryMetadata(
             "repo-local",

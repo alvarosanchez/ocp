@@ -28,19 +28,7 @@ class ProfileUseCommand implements Callable<Integer> {
     public Integer call() {
         try {
             ProfileService.ProfileSwitchResult switchResult = profileService.useProfileWithDetails(profileName);
-            Cli.info("Updated user configuration files in `" + switchResult.targetDirectory() + "`.");
-            if (switchResult.hasBackups()) {
-                String fileLabel = switchResult.backedUpFiles() == 1 ? "file" : "files";
-                Cli.warning(
-                    "Backed up "
-                        + switchResult.backedUpFiles()
-                        + " existing "
-                        + fileLabel
-                        + " to `"
-                        + switchResult.backupDirectory()
-                        + "`."
-                );
-            }
+            ProfileConfigChangeNotifier.notifyUserConfigChanges(switchResult);
             Cli.success("Switched to profile `" + profileName + "`.");
             return 0;
         } catch (ProfileService.DuplicateProfilesException e) {
