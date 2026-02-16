@@ -1,156 +1,166 @@
 # AGENTS.md
 Guidance for autonomous coding agents working in this repository.
 
-## 1) Project overview
+## 1) Project snapshot
 - Project: `ocp` (OpenCode Configuration Profiles CLI)
-- Stack: Java 25, Micronaut, Picocli, Gradle Kotlin DSL, JUnit 5
-- Packaging: single-module Gradle project
+- Stack: Java 25, Micronaut 4.x, Picocli, Gradle Kotlin DSL, JUnit 5
+- Packaging: single-module Gradle application
 - Main class: `com.github.alvarosanchez.ocp.command.OcpCommand`
-- Root package: `com.github.alvarosanchez.ocp`
+- Source root package: `com.github.alvarosanchez.ocp`
+- Behavior contract: `SPEC.md` is the product truth source
 
-## 2) Build / test / verification commands
-Run commands from repository root: `/Users/alvaro/Dev/alvarosanchez/ocp`.
+## 2) Repository policy files
+- Cursor rules: no `.cursorrules` and no `.cursor/rules/**` found
+- Copilot rules: no `.github/copilot-instructions.md` found
+- If these files are added later, treat them as higher-priority agent instructions
 
-### Core commands
+## 3) Build, test, and verification commands
+Run from repo root: `/Users/alvaro/Dev/alvarosanchez/ocp`.
+
+### Core lifecycle
 - Build: `./gradlew build`
-- Full checks: `./gradlew check`
-- All JVM tests: `./gradlew test`
-- Native binary: `./gradlew nativeCompile`
+- Full verification: `./gradlew check`
+- JVM tests: `./gradlew test`
+- Native binary compile: `./gradlew nativeCompile`
 - Native tests: `./gradlew nativeTest`
-- CLI help: `./gradlew run --args="help"`
+- Show CLI help through Gradle app plugin: `./gradlew run --args="help"`
 
-### Single-test commands (important)
-- One test class:
+### Single test execution (important)
+- One class:
   - `./gradlew test --tests com.github.alvarosanchez.ocp.service.ProfileServiceTest`
-- One test method:
-  - `./gradlew test --tests com.github.alvarosanchez.ocp.service.ProfileServiceTest.listProfilesReturnsSortedUniqueNames`
-- Pattern match:
+- One method:
+  - `./gradlew test --tests com.github.alvarosanchez.ocp.service.ProfileServiceTest.getAllProfilesReturnsSortedUniqueNames`
+- Pattern selection:
   - `./gradlew test --tests "*ProfileCommandTest*"`
 
-### Supporting commands
-- List all Gradle tasks: `./gradlew tasks --all`
-- Compile only (Java type-check proxy): `./gradlew compileJava`
+### Useful support commands
+- List tasks: `./gradlew tasks --all`
+- Compile only (quick type-check proxy): `./gradlew compileJava`
 - Clean outputs: `./gradlew clean`
 
-## 3) Lint and static-analysis reality
-- No dedicated lint task configured in `build.gradle.kts`
-- No Spotless/PMD/Gradle Checkstyle plugin configured
-- IntelliJ Checkstyle settings exist at `.idea/checkstyle-idea.xml`
-- Practical local quality baseline: `./gradlew check`
+## 4) Lint and static-analysis reality
+- No dedicated lint task is configured in `build.gradle.kts`
+- No Spotless / PMD / Gradle Checkstyle plugin is configured
+- IntelliJ Checkstyle plugin config exists at `.idea/checkstyle-idea.xml`
+- Practical quality baseline for agents: `./gradlew check`
 
-## 4) Source layout
-- Production code: `src/main/java/com/github/alvarosanchez/ocp/**`
+## 5) Directory map
+- Production Java: `src/main/java/com/github/alvarosanchez/ocp/**`
 - Tests: `src/test/java/com/github/alvarosanchez/ocp/**`
 - Resources: `src/main/resources/**`
 - Build config: `build.gradle.kts`, `settings.gradle.kts`, `gradle/libs.versions.toml`
-- Product behavior contract: `SPEC.md`
+- Product spec and acceptance criteria: `SPEC.md`
 
-## 5) Architecture boundaries
-- `command/`: Picocli commands and CLI entry points
-- `service/`: business logic and orchestration
-- `git/`: external process calls (`git`)
-- `model/`: immutable serde models (records)
+## 6) Architecture boundaries and responsibilities
+- `command/`: Picocli commands, argument handling, exit-code orchestration, user messages
+- `service/`: domain logic and orchestration across repositories/profiles
+- `git/`: external `git` process execution wrappers
+- `config/`: serde models for registry/repository metadata files
+- `model/`: immutable read models for command rendering
 
-Guideline: keep commands thin and place domain logic in services.
+Rule of thumb: keep command classes thin; move business logic to services.
 
-## 6) Code style conventions (observed)
+## 7) Code style conventions (observed in source)
 
-### Formatting
-- 4-space indentation
-- Braces on same line
-- Wrap long argument lists vertically
-- Keep methods straightforward and readable
+### Formatting and structure
+- 4-space indentation, braces on same line
+- Prefer straightforward loops/conditionals over clever abstractions
+- Keep methods readable; extract helpers for repeated logic
+- Avoid wildcard imports
 
 ### Imports
-- No wildcard imports
-- Tests use static imports for assertions
-- Keep imports explicit and minimal
-- Follow local ordering style in edited files
+- Standard ordering in this repo is mixed; preserve local file ordering style
+- Use explicit imports; static imports are common in tests for assertions
+- Avoid introducing unused imports and large import churn
 
-### Types and immutability
-- Prefer records for DTO/config models in `model/`
-- Prefer immutable collections (`List.of`, `List.copyOf`, `Set.copyOf`)
-- Use `final` classes where extension is not intended
-- Use package-private visibility by default
-- Use `var` sparingly
+### Types, immutability, and visibility
+- Prefer `record` for DTO/config projections (`config/`, `model/`, and local helper records)
+- Normalize immutable collections with `List.copyOf` / `Set.copyOf` / `List.of`
+- Use `final` classes for core services and utility types when extension is not intended
+- Default to package-private constructors/methods unless API must be public
 
 ### Naming
-- Classes and records: `PascalCase`
-- Methods and variables: `camelCase`
+- Types/records/enums: `PascalCase`
+- Methods/fields/locals: `camelCase`
 - Constants: `UPPER_SNAKE_CASE`
 - Tests: descriptive `camelCase` method names
-- Subcommands often use nested types (for example `ProfileCommand.ListCommand`)
+- Command names and messages should align with `SPEC.md` CLI terminology
 
-### Documentation
-- Public classes and public methods must have Javadoc
+### Javadoc and API documentation
+- Public classes and public methods generally include Javadoc
+- Preserve this standard when adding new public API surface
+- Keep Javadoc concise and behavior-focused (params, return, failure mode)
 
-### Error handling
-- Never swallow exceptions
-- Wrap checked I/O with context (`UncheckedIOException` or `IllegalStateException`)
-- Preserve interrupt status on `InterruptedException`
-- Include URI/path/operation context in failure messages
+## 8) Error handling conventions
+- Never swallow exceptions silently
+- Wrap I/O failures with context (`UncheckedIOException` or `IllegalStateException`)
+- Include operation and path/URI in exception messages where possible
+- For `InterruptedException`, always restore interrupt status with `Thread.currentThread().interrupt()`
+- Commands catch domain/runtime exceptions, print to `stderr`, and return non-zero
 
-### CLI behavior
-- Success output goes to `stdout`
-- Error output goes to `stderr`
-- Return explicit exit codes (`0` success, non-zero failure)
-- Root/group commands print usage when no subcommand is provided
+## 9) CLI output and exit-code conventions
+- Success/info output uses `stdout`
+- Errors use `stderr`
+- Expected exit codes:
+  - `0`: success
+  - `1`: runtime/validation failure
+  - `2`: command usage error
+- Root/group commands should print usage/help when no subcommand is provided
 
-### Micronaut / DI
-- Use `@Singleton` for stateless services and clients
-- Prefer constructor injection
-- Keep constructors dependency-only
+## 10) Micronaut and DI conventions
+- Stateless services/clients use `@Singleton`
+- Prefer constructor injection (including package-private constructors)
+- Keep constructors dependency-only and avoid side effects
 
-## 7) Testing conventions
-- JUnit 5 (`useJUnitPlatform()`)
-- Use `@TempDir` for filesystem isolation
-- Use `@BeforeEach` / `@AfterEach` for setup and cleanup
-- Assert both behavior and CLI contract (exit code + stdout/stderr)
-- Integration tests may use Testcontainers (Docker dependency)
-- Native-incompatible tests use `@DisabledInNativeImage`
+## 11) Test conventions
+- JUnit 5 platform (`useJUnitPlatform()`)
+- `@TempDir` is standard for filesystem isolation
+- Use explicit setup/teardown for system properties in tests
+- Validate both behavior and CLI contract (exit code + stdout/stderr content)
+- Keep tests deterministic and independent
+- Use private helper methods inside each test class for fixtures
 
-When writing tests:
-- Keep tests deterministic and isolated
-- Keep test helpers private to the class
-- Follow Arrange/Act/Assert structure
-
-## 8) Filesystem and config conventions
-- Default config dir: `~/.config/ocp`
-- Default cache dir: `~/.cache/ocp`
-- Test override properties:
+## 12) Filesystem and config assumptions
+- Default registry file: `~/.config/ocp/config.json`
+- Default cache root: `~/.cache/ocp`
+- Default OpenCode config target: `~/.config/opencode`
+- Common system property overrides:
   - `ocp.config.dir`
   - `ocp.cache.dir`
-- Registry file: `config.json`
-- Repository metadata file: `repository.json`
+  - `ocp.opencode.config.dir`
+  - `ocp.working.dir`
 
-## 9) Workflow expectations for agents
-Before coding:
-- Read nearby files in the same package
-- Read related tests before behavior changes
-- Check `SPEC.md` for expected behavior and contracts
+## 13) Agent workflow expectations
+
+### Before coding
+- Read nearby classes in the same package and related tests first
+- Check `SPEC.md` acceptance criteria for user-visible behavior changes
+- Keep changes minimal, cohesive, and scoped to the request
 - Checkout a new branch for the code changes to be done
 
-After coding:
-- Minimum: `./gradlew test`
-- If startup/native-sensitive behavior changed: `./gradlew nativeTest`
-- If build/runtime wiring changed: `./gradlew build`
-- If behavior/CLI contract changed, update `SPEC.md` in the same change set
-- Ask the user to review the files. The user is the one who commits changes
-- Ask the user if they want to create a PR with the "gh" CLI. If granted permission, 
-  upon PR creation, wait for the GitHub Copilot review, and address review comments.
-  Once all comments have been reviewed, monitor for CI checks, and if they pass, merge 
-  the PR. Otherwise, investigate failures and fix them. 
 
-## 10) Do / don't checklist
+### After coding
+- Minimum verification: `./gradlew test`
+- If startup/native-sensitive behavior changed: `./gradlew nativeTest`
+- If wiring/build behavior changed: `./gradlew build`
+- If CLI behavior changed, update `SPEC.md` in the same change set
+- Ask the user to review the files. The user is the one who commits changes
+- Ask the user if they want to create a PR with the "gh" CLI. If granted permission,
+  upon PR creation, wait for the GitHub Copilot review, and address review comments.
+  Once all comments have been reviewed, monitor for CI checks, and if they pass, merge
+  the PR. Otherwise, investigate failures and fix them.
+
+## 14) Do / don't checklist
 Do:
-- Keep changes small and cohesive
+- Keep architecture boundaries intact (`command` thin, `service` rich)
 - Add or update tests for behavior changes
-- Match existing package boundaries and naming patterns
-- Keep exceptions explicit with useful context
+- Preserve transactionality and rollback behavior in profile switch flows
+- Keep user-facing error messages actionable and context-rich
 
 Don't:
-- Add unrelated refactors
-- Introduce silent failure paths
-- Add dependencies without concrete need
-- Skip `SPEC.md` updates when implemented features change documented behavior
-- Commit changes yourself
+- Add unrelated refactors in bugfix changes
+- Introduce silent failure paths or empty catches
+- Add dependencies without clear need
+- Change documented behavior without updating `SPEC.md`
+- Hardcode dependencies in the build script (use the version catalog instead)
+- Commit or push unless explicitly requested by the user
