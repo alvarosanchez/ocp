@@ -68,7 +68,7 @@ class RepositoryServiceTest {
     }
 
     @Test
-    void loadNormalizesEntriesUsingRepositoryNameAndCacheDirectory() throws IOException {
+    void loadNormalizesEntriesUsingRepositoryNameAndConfiguredStorageDirectory() throws IOException {
         writeConfig(
             new OcpConfigFile(
                 new OcpConfigOptions(),
@@ -87,15 +87,45 @@ class RepositoryServiceTest {
         assertEquals("alpha-repo", repositories.get(0).name());
         assertEquals("git@github.com:acme/alpha.git", repositories.get(0).uri());
         assertEquals(
-            Path.of(System.getProperty("ocp.cache.dir"), "repositories", "alpha-repo").toString(),
+            repositoriesRootDirectory().resolve("alpha-repo").toString(),
             repositories.get(0).localPath()
         );
         assertEquals("custom", repositories.get(1).name());
         assertEquals("https://github.com/acme/beta.git", repositories.get(1).uri());
         assertEquals(
-            Path.of(System.getProperty("ocp.cache.dir"), "repositories", "custom").toString(),
+            repositoriesRootDirectory().resolve("custom").toString(),
             repositories.get(1).localPath()
         );
+    }
+
+    @Test
+    void loadNormalizesEntriesUsingConfigDirectoryWhenCacheOverrideIsNotConfigured() throws IOException {
+        String configuredCacheDir = System.getProperty("ocp.cache.dir");
+        if (configuredCacheDir != null) {
+            System.clearProperty("ocp.cache.dir");
+        }
+        try {
+            writeConfig(
+                new OcpConfigFile(
+                    new OcpConfigOptions(),
+                    List.of(new RepositoryEntry("alpha-repo", "git@github.com:acme/alpha.git", null))
+                )
+            );
+
+            List<RepositoryEntry> repositories = repositoryService.load();
+
+            assertEquals(1, repositories.size());
+            assertEquals(
+                Path.of(System.getProperty("ocp.config.dir"), "repositories", "alpha-repo").toString(),
+                repositories.getFirst().localPath()
+            );
+        } finally {
+            if (configuredCacheDir == null) {
+                System.clearProperty("ocp.cache.dir");
+            } else {
+                System.setProperty("ocp.cache.dir", configuredCacheDir);
+            }
+        }
     }
 
     @Test
@@ -144,7 +174,7 @@ class RepositoryServiceTest {
         assertEquals("repo-one", repositories.get(0).name());
         assertEquals("git@github.com:acme/repo-one.git", repositories.get(0).uri());
         assertEquals(
-            Path.of(System.getProperty("ocp.cache.dir"), "repositories", "repo-one").toString(),
+            repositoriesRootDirectory().resolve("repo-one").toString(),
             repositories.get(0).localPath()
         );
         assertEquals(List.of("alpha", "beta"), repositories.get(0).resolvedProfiles());
@@ -152,10 +182,18 @@ class RepositoryServiceTest {
         assertEquals("repo-two", repositories.get(1).name());
         assertEquals("https://github.com/acme/repo-two.git", repositories.get(1).uri());
         assertEquals(
-            Path.of(System.getProperty("ocp.cache.dir"), "repositories", "repo-two").toString(),
+            repositoriesRootDirectory().resolve("repo-two").toString(),
             repositories.get(1).localPath()
         );
         assertEquals(List.of("gamma"), repositories.get(1).resolvedProfiles());
+    }
+
+    private Path repositoriesRootDirectory() {
+        String configuredCacheDir = System.getProperty("ocp.cache.dir");
+        if (configuredCacheDir != null && !configuredCacheDir.isBlank()) {
+            return Path.of(configuredCacheDir).resolve("repositories");
+        }
+        return Path.of(System.getProperty("ocp.config.dir"), "repositories");
     }
 
     private void writeConfig(OcpConfigFile configFile) throws IOException {
@@ -165,7 +203,7 @@ class RepositoryServiceTest {
     }
 
     private void writeRepositoryMetadata(String repositoryName, RepositoryConfigFile repositoryConfigFile) throws IOException {
-        Path repositoryPath = Path.of(System.getProperty("ocp.cache.dir"), "repositories", repositoryName);
+        Path repositoryPath = repositoriesRootDirectory().resolve(repositoryName);
         Files.createDirectories(repositoryPath);
         Files.writeString(repositoryPath.resolve("repository.json"), objectMapper.writeValueAsString(repositoryConfigFile));
     }

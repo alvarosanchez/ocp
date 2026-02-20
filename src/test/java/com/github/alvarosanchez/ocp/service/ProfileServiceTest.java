@@ -146,7 +146,7 @@ class ProfileServiceTest {
                 )
             )
         );
-        Path repositoryDir = Path.of(System.getProperty("ocp.cache.dir"), "repositories", "repo-local");
+        Path repositoryDir = repositoriesRootDirectory().resolve("repo-local");
         Path parentDir = repositoryDir.resolve("oca");
         Path childDir = repositoryDir.resolve("oca-oh-my-opencode");
         Files.createDirectories(parentDir);
@@ -190,7 +190,7 @@ class ProfileServiceTest {
                 )
             )
         );
-        Path repositoryDir = Path.of(System.getProperty("ocp.cache.dir"), "repositories", "repo-local");
+        Path repositoryDir = repositoriesRootDirectory().resolve("repo-local");
         Path parentDir = repositoryDir.resolve("oca");
         Path childDir = repositoryDir.resolve("oca-personal");
         Files.createDirectories(parentDir);
@@ -230,6 +230,56 @@ class ProfileServiceTest {
         );
     }
 
+    @Test
+    void useProfileStoresMergedResolvedFilesUnderConfigDirectoryWhenCacheOverrideIsNotConfigured() throws IOException {
+        String configuredCacheDir = System.getProperty("ocp.cache.dir");
+        if (configuredCacheDir != null) {
+            System.clearProperty("ocp.cache.dir");
+        }
+        try {
+            writeRepositoryMetadata(
+                "repo-local",
+                new RepositoryConfigFile(
+                    List.of(
+                        new ProfileEntry("parent"),
+                        new ProfileEntry("child", null, "parent")
+                    )
+                )
+            );
+            Path repositoryDir = repositoriesRootDirectory().resolve("repo-local");
+            Path parentDir = repositoryDir.resolve("parent");
+            Path childDir = repositoryDir.resolve("child");
+            Files.createDirectories(parentDir);
+            Files.createDirectories(childDir);
+            Files.writeString(parentDir.resolve("opencode.json"), "{\"theme\":\"dark\"}");
+            Files.writeString(childDir.resolve("opencode.json"), "{\"model\":\"gpt-5\"}");
+
+            writeConfig(List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null)));
+            profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+            assertTrue(profileService.useProfile("child"));
+
+            Path opencodeFile = Path.of(System.getProperty("ocp.opencode.config.dir")).resolve("opencode.json");
+            assertTrue(Files.isSymbolicLink(opencodeFile));
+            Path target = Files.readSymbolicLink(opencodeFile);
+            assertTrue(target.startsWith(Path.of(System.getProperty("ocp.config.dir"), "resolved-profiles", "child")));
+        } finally {
+            if (configuredCacheDir == null) {
+                System.clearProperty("ocp.cache.dir");
+            } else {
+                System.setProperty("ocp.cache.dir", configuredCacheDir);
+            }
+        }
+    }
+
+    private Path repositoriesRootDirectory() {
+        String configuredCacheDir = System.getProperty("ocp.cache.dir");
+        if (configuredCacheDir != null && !configuredCacheDir.isBlank()) {
+            return Path.of(configuredCacheDir).resolve("repositories");
+        }
+        return Path.of(System.getProperty("ocp.config.dir"), "repositories");
+    }
+
     private void writeConfig(List<RepositoryEntry> repositories) throws IOException {
         Path configDir = Path.of(System.getProperty("ocp.config.dir"));
         Files.createDirectories(configDir);
@@ -245,7 +295,7 @@ class ProfileServiceTest {
     }
 
     private void writeRepositoryMetadata(String repositoryName, RepositoryConfigFile configFile) throws IOException {
-        Path repositoryDir = Path.of(System.getProperty("ocp.cache.dir"), "repositories", repositoryName);
+        Path repositoryDir = repositoriesRootDirectory().resolve(repositoryName);
         Files.createDirectories(repositoryDir);
         Files.writeString(repositoryDir.resolve("repository.json"), objectMapper.writeValueAsString(configFile));
     }

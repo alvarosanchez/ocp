@@ -122,11 +122,11 @@ Rule of thumb: keep command classes thin; move business logic to services.
 
 ## 12) Filesystem and config assumptions
 - Default registry file: `~/.config/ocp/config.json`
-- Default cache root: `~/.cache/ocp`
+- Default repository storage root: `~/.config/ocp`
 - Default OpenCode config target: `~/.config/opencode`
 - Common system property overrides:
   - `ocp.config.dir`
-  - `ocp.cache.dir`
+  - `ocp.cache.dir` (legacy storage override)
   - `ocp.opencode.config.dir`
   - `ocp.working.dir`
 

@@ -26,7 +26,7 @@ class RepositoryBoxRendererTest {
         ConfiguredRepository repository = new ConfiguredRepository(
             "repo-with-very-long-name",
             "ssh://git@very.long.company.internal:7999/teams/devops/profiles-and-configurations-with-super-long-identifier.git",
-            "/Users/alvaro/.cache/ocp/repositories/repo-with-very-long-name/branch-with-very-long-name-and-no-breaks",
+            "/Users/alvaro/.config/ocp/repositories/repo-with-very-long-name/branch-with-very-long-name-and-no-breaks",
             List.of("alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta")
         );
 

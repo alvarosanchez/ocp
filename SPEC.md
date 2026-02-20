@@ -43,14 +43,15 @@ ocp profile use my-company
 ### Default paths
 
 - OCP registry: `~/.config/ocp/config.json`
-- OCP cache root: `~/.cache/ocp`
-- Repository clone directory: `~/.cache/ocp/repositories/<repo-name>`
-- Repository metadata file: `~/.cache/ocp/repositories/<repo-name>/repository.json`
+- OCP storage root: `~/.config/ocp`
+- Repository clone directory: `~/.config/ocp/repositories/<repo-name>`
+- Repository metadata file: `~/.config/ocp/repositories/<repo-name>/repository.json`
+- Resolved merged profile directory: `~/.config/ocp/resolved-profiles/<profile-name>/`
 
 ### Path overrides (for tests and advanced usage)
 
 - Config directory override: JVM system property `ocp.config.dir`
-- Cache directory override: JVM system property `ocp.cache.dir`
+- Legacy storage directory override: JVM system property `ocp.cache.dir`
 - OpenCode config directory override: JVM system property `ocp.opencode.config.dir`
 - Working directory override for local create commands: JVM system property `ocp.working.dir`
 
@@ -65,7 +66,7 @@ ocp profile use my-company
     {
       "name": "my-repo",
       "uri": "git@github.com:my-company/my-repo.git",
-      "localPath": "/home/user/.cache/ocp/repositories/my-repo"
+      "localPath": "/home/user/.config/ocp/repositories/my-repo"
     }
   ]
 }
@@ -76,7 +77,7 @@ Rules:
 - `config.activeProfile` defaults to `null` (no active profile selected).
 - `repositories[*].uri` is required.
 - `repositories[*].name` is required.
-- `repositories[*].localPath` is derived from cache directory and repository name.
+- `repositories[*].localPath` is derived from repository storage directory and repository name.
 
 ### `repository.json` schema
 
@@ -138,7 +139,7 @@ oss/opencode.json
 | `ocp profile` | Implemented | Print currently active profile with repository/version metadata and update hints. |
 | `ocp profile create [name]` | Implemented | Create profile folder and register it in repository metadata. Defaults to `default` when no name is provided. |
 | `ocp profile use <name>` | Implemented | Switch active profile by linking profile files to OpenCode config location. |
-| `ocp repository add <uri> --name <name>` | Implemented | Clone repository into local cache and register it in `config.json`. |
+| `ocp repository add <uri> --name <name>` | Implemented | Clone repository into local storage and register it in `config.json`. |
 | `ocp repository list` | Implemented | Print configured repositories as rounded CLI boxes with name, URI, local clone path, and resolved profile names from each repository metadata file. |
 | `ocp repository delete <name>` | Implemented | Remove repository entry from registry and delete local clone. |
 | `ocp repository create <name> [--profile-name <profile>]` | Implemented | Initialize new profile repository with `repository.json` and initial profile. |
@@ -150,7 +151,7 @@ oss/opencode.json
 
 - `ocp repository add` requires both URI and repository name.
 - Trim URI and repository name before validation and persistence.
-- Compute `localPath` from cache directory and configured repository name.
+- Compute `localPath` from repository storage directory and configured repository name.
 
 ### Profile uniqueness
 
@@ -169,7 +170,7 @@ oss/opencode.json
 
 ### Profile switching and backups (target behavior)
 
-- Source directory: `~/.cache/ocp/repositories/<repo-name>/<profile-name>/`
+- Source directory: `~/.config/ocp/repositories/<repo-name>/<profile-name>/`
 - Target directory: `~/.config/opencode/`
 - For each profile file:
   - If target does not exist: create symlink.

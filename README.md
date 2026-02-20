@@ -92,15 +92,16 @@ When `extends_from` is set, parent profiles are resolved first. Shared JSON/JSON
 Default paths:
 
 - Registry: `~/.config/ocp/config.json`
-- Cache root: `~/.cache/ocp`
-- Local clones: `~/.cache/ocp/repositories/<repo-name>` (using the configured repository name)
+- Repository storage root: `~/.config/ocp`
+- Local clones: `~/.config/ocp/repositories/<repo-name>` (using the configured repository name)
+- Resolved merged profiles: `~/.config/ocp/resolved-profiles/<profile-name>/`
 - Backups: `~/.config/ocp/backups/<timestamp>/...`
 - OpenCode config target: `~/.config/opencode`
 
 Optional JVM system property overrides:
 
 - `ocp.config.dir`
-- `ocp.cache.dir`
+- `ocp.cache.dir` (legacy storage override)
 - `ocp.opencode.config.dir`
 - `ocp.working.dir`
 
