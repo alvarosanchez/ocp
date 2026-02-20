@@ -990,7 +990,7 @@ public final class ProfileService {
     }
 
     private Path resolvedProfileDirectory(String profileName) {
-        return cacheDirectory().resolve("resolved-profiles").resolve(profileName);
+        return profileStorageDirectory().resolve("resolved-profiles").resolve(profileName);
     }
 
     private void deleteRecursively(Path path) {
@@ -1012,12 +1012,12 @@ public final class ProfileService {
         }
     }
 
-    private Path cacheDirectory() {
+    private Path profileStorageDirectory() {
         String configuredPath = System.getProperty("ocp.cache.dir");
         if (configuredPath != null && !configuredPath.isBlank()) {
             return Path.of(configuredPath);
         }
-        return Path.of(System.getProperty("user.home"), ".cache", "ocp");
+        return configDirectory();
     }
 
     private Path configDirectory() {

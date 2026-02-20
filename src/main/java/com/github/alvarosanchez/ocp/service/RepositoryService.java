@@ -289,7 +289,7 @@ public final class RepositoryService {
     }
 
     private Path repositoriesDirectory() {
-        return cacheDirectory().resolve("repositories");
+        return repositoryStorageDirectory().resolve("repositories");
     }
 
     private Path configDirectory() {
@@ -300,12 +300,12 @@ public final class RepositoryService {
         return Path.of(System.getProperty("user.home"), ".config", "ocp");
     }
 
-    private Path cacheDirectory() {
+    private Path repositoryStorageDirectory() {
         String configuredPath = System.getProperty("ocp.cache.dir");
         if (configuredPath != null && !configuredPath.isBlank()) {
             return Path.of(configuredPath);
         }
-        return Path.of(System.getProperty("user.home"), ".cache", "ocp");
+        return configDirectory();
     }
 
     private Path workingDirectory() {
