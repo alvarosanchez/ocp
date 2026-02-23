@@ -192,7 +192,8 @@ class ProfileCommandTest {
         assertTrue(normalizedOutput.contains("ACTIVE"));
         assertTrue(normalizedOutput.contains("✓"));
         assertTrue(normalizedOutput.contains("corporate"));
-        assertFalse(normalizedOutput.contains("REPOSITORY"));
+        assertTrue(normalizedOutput.contains("REPOSITORY"));
+        assertTrue(normalizedOutput.contains("repo-local"));
         assertTrue(normalizedOutput.contains("VERSION"));
         assertTrue(normalizedOutput.matches("(?s).*LAST\\s+UPDATED.*"));
         assertTrue(normalizedOutput.contains("MESSAGE"));
@@ -963,11 +964,12 @@ class ProfileCommandTest {
         assertEquals(0, result.exitCode());
         assertTrue(result.stdout().contains("NAME"));
         assertTrue(result.stdout().contains("DESCRIPTION"));
-        assertFalse(result.stdout().contains("REPOSITORY"));
+        assertTrue(result.stdout().contains("REPOSITORY"));
         assertTrue(result.stdout().contains("VERSION"));
         assertTrue(result.stdout().contains("LAST UPDATED"));
         assertTrue(result.stdout().contains("MESSAGE"));
         assertTrue(result.stdout().contains("ops"));
+        assertTrue(result.stdout().contains("repo-refresh"));
         assertFalse(result.stdout().contains(state.remoteUri()));
         assertTrue(result.stdout().contains("❄"));
         assertTrue(result.stdout().contains("❄ Newer commits are available in remote repositories."));

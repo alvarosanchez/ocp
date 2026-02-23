@@ -96,7 +96,7 @@ class ProfileTableRendererTest {
 
         String rendered = removeAnsiCodes(stdout.toString());
         assertTrue(rendered.contains("REPOSITORY"));
-        assertTrue(rendered.contains(profile.repository()));
+        assertTrue(rendered.contains(profile.repositoryName()));
     }
 
     @Test
@@ -118,17 +118,17 @@ class ProfileTableRendererTest {
         PrintStream originalOut = System.out;
         try {
             System.setOut(new PrintStream(stdout));
-            ProfileTableRenderer.print(List.of(profile), Map.of("COLUMNS", "100"));
+            ProfileTableRenderer.print(List.of(profile), Map.of("COLUMNS", "80"));
         } finally {
             System.setOut(originalOut);
         }
 
         String rendered = removeAnsiCodes(stdout.toString());
         assertFalse(rendered.contains("REPOSITORY"));
-        assertFalse(rendered.contains(profile.repository()));
+        assertFalse(rendered.contains(profile.repositoryName()));
         for (String line : rendered.split("\\R")) {
             if (!line.isEmpty()) {
-                assertTrue(line.length() <= 100, "Line exceeds width: " + line);
+                assertTrue(line.length() <= 80, "Line exceeds width: " + line);
             }
         }
     }
