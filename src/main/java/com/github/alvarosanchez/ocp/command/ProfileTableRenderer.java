@@ -76,7 +76,7 @@ final class ProfileTableRenderer {
                         firstRow ? profile.name() : "",
                         lineAt(descriptionLines, row),
                         firstRow ? activeMarker(profile) : "",
-                        firstRow ? profile.repository() : "",
+                        firstRow ? profile.repositoryName() : "",
                         firstRow ? renderedVersion(profile) : "",
                         firstRow ? profile.lastUpdated() : "",
                         lineAt(messageLines, row)
@@ -207,7 +207,7 @@ final class ProfileTableRenderer {
     private static TableLayout tableLayout(List<Profile> profiles, int maxTableWidth) {
         int nameWidth = maxDisplayWidth(NAME_HEADER, profiles.stream().map(Profile::name).toList());
         int activeWidth = maxDisplayWidth(ACTIVE_HEADER, profiles.stream().map(ProfileTableRenderer::activeMarker).toList());
-        int repositoryWidth = maxDisplayWidth(REPOSITORY_HEADER, profiles.stream().map(Profile::repository).toList());
+        int repositoryWidth = maxDisplayWidth(REPOSITORY_HEADER, profiles.stream().map(Profile::repositoryName).toList());
         int versionWidth = maxDisplayWidth(VERSION_HEADER, profiles.stream().map(ProfileTableRenderer::renderedVersion).toList());
         int lastUpdatedWidth = maxDisplayWidth(LAST_UPDATED_HEADER, profiles.stream().map(Profile::lastUpdated).toList());
         int descriptionWidth = maxDisplayWidth(DESCRIPTION_HEADER, profiles.stream().map(Profile::description).toList());
