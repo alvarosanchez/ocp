@@ -135,7 +135,7 @@ oss/opencode.json
 | --- | --- | --- |
 | `ocp` | Implemented | Print root usage when no subcommand is provided. |
 | `ocp help <command>` | Implemented | Print help for command/subcommand. |
-| `ocp profile list` | Implemented | Print a table of profiles with name, description, local commit metadata, and non-fatal remote update hints; include repository URI when width budget allows. |
+| `ocp profile list` | Implemented | Print a table of profiles with name, description, local commit metadata, and non-fatal remote update hints; include repository name when width budget allows. |
 | `ocp profile` | Implemented | Print currently active profile with repository/version metadata and update hints. |
 | `ocp profile create [name]` | Implemented | Create profile folder and register it in repository metadata. Defaults to `default` when no name is provided. |
 | `ocp profile use <name>` | Implemented | Switch active profile by linking profile files to OpenCode config location. |
@@ -212,7 +212,7 @@ oss/opencode.json
   - output contains `Usage: ocp`
 - `ocp profile list`
   - with no repositories/profiles: exits `0`, prints helpful empty-state message
-  - with multiple repositories: outputs a table sorted by profile name with columns `NAME`, `DESCRIPTION`, `ACTIVE`, `VERSION`, `LAST UPDATED`, `MESSAGE`, and includes `REPOSITORY` when it fits within the width budget
+  - with multiple repositories: outputs a table sorted by profile name with columns `NAME`, `DESCRIPTION`, `ACTIVE`, `VERSION`, `LAST UPDATED`, `MESSAGE`, and includes `REPOSITORY` when it fits within the width budget (repository name)
   - with duplicate profile names: exits `1`, prints duplicate-name error on stderr
 - `ocp profile use <name>`
   - exits `0`, prints profile switch success message
