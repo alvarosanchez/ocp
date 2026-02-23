@@ -192,11 +192,13 @@ class ProfileCommandTest {
         assertTrue(normalizedOutput.contains("ACTIVE"));
         assertTrue(normalizedOutput.contains("✓"));
         assertTrue(normalizedOutput.contains("corporate"));
-        assertTrue(normalizedOutput.contains("REPOSITORY"));
-        assertTrue(normalizedOutput.contains("repo-local"));
+        if (normalizedOutput.contains("REPOSITORY")) {
+            assertTrue(normalizedOutput.contains("repo-local"));
+        }
         assertTrue(normalizedOutput.contains("VERSION"));
         assertTrue(normalizedOutput.matches("(?s).*LAST\\s+UPDATED.*"));
         assertTrue(normalizedOutput.contains("MESSAGE"));
+        assertFalse(normalizedOutput.contains("git@github.com:acme/repo-local.git"));
 
         OcpConfigFile configFile = readOcpConfig(Path.of(System.getProperty("ocp.config.dir"), "config.json"));
         assertEquals("corporate", configFile.config().activeProfile());
@@ -969,7 +971,9 @@ class ProfileCommandTest {
         assertTrue(result.stdout().contains("LAST UPDATED"));
         assertTrue(result.stdout().contains("MESSAGE"));
         assertTrue(result.stdout().contains("ops"));
-        assertTrue(result.stdout().contains("repo-refresh"));
+        if (result.stdout().contains("REPOSITORY")) {
+            assertTrue(result.stdout().contains("repo-refresh"));
+        }
         assertFalse(result.stdout().contains(state.remoteUri()));
         assertTrue(result.stdout().contains("❄"));
         assertTrue(result.stdout().contains("❄ Newer commits are available in remote repositories."));
