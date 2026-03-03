@@ -17,6 +17,7 @@ brew install alvarosanchez/tap/ocp
 Requirements:
 
 - `git` available in your `PATH`
+- `bat` (optional, for syntax-highlighted file previews in interactive mode; falls back to plain text when unavailable)
 
 ## Quick start
 
