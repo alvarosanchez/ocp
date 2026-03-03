@@ -627,7 +627,8 @@ final class OcpInteractiveApp extends ToolkitApp {
                         parentByName.put(profileEntry.name(), profileEntry.extendsFrom());
                     }
                 }
-            } catch (IOException | RuntimeException ignored) {
+            } catch (IOException | RuntimeException e) {
+                status = "Error loading metadata from `" + metadataFile + "`: " + e.getMessage();
             }
         }
         return Map.copyOf(parentByName);
@@ -1395,18 +1396,12 @@ final class OcpInteractiveApp extends ToolkitApp {
         if (selectedNode != null && selectedNode.repositoryName() != null) {
             return selectedNode.repositoryName();
         }
-        if (!repositories.isEmpty()) {
-            return repositories.getFirst().name();
-        }
         return null;
     }
 
     private String selectedProfileName() {
         if (selectedNode != null && selectedNode.profileName() != null) {
             return selectedNode.profileName();
-        }
-        if (!profiles.isEmpty()) {
-            return profiles.getFirst().name();
         }
         return null;
     }
@@ -1488,19 +1483,24 @@ final class OcpInteractiveApp extends ToolkitApp {
             String finalMessage = successMessage;
             ProfileService.ProfileRefreshConflictException repositoryConflict = null;
             ProfileService.ProfileRefreshUserConfigConflictException mergedFilesConflict = null;
+            boolean operationSucceeded = true;
             try {
                 operation.run();
             } catch (ProfileService.ProfileRefreshConflictException e) {
                 repositoryConflict = e;
+                operationSucceeded = false;
             } catch (ProfileService.ProfileRefreshUserConfigConflictException e) {
                 mergedFilesConflict = e;
+                operationSucceeded = false;
             } catch (RuntimeException e) {
                 finalMessage = "Error: " + e.getMessage();
+                operationSucceeded = false;
             }
 
             String messageToShow = finalMessage;
             ProfileService.ProfileRefreshConflictException finalRepositoryConflict = repositoryConflict;
             ProfileService.ProfileRefreshUserConfigConflictException finalMergedFilesConflict = mergedFilesConflict;
+            boolean finalOperationSucceeded = operationSucceeded;
             runner().runOnRenderThread(() -> {
                 ToolkitRunner.ScheduledAction spinnerAction = spinnerActionRef.get();
                 if (spinnerAction != null) {
@@ -1522,7 +1522,7 @@ final class OcpInteractiveApp extends ToolkitApp {
 
                 status = messageToShow;
                 reloadState();
-                if (onSuccess != null) {
+                if (finalOperationSucceeded && onSuccess != null) {
                     onSuccess.run();
                 }
             });
