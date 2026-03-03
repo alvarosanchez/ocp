@@ -1,10 +1,11 @@
 package com.github.alvarosanchez.ocp.command;
 
-import com.github.kusoroadeolu.clique.Clique;
-import com.github.kusoroadeolu.clique.ansi.ColorCode;
-import com.github.kusoroadeolu.clique.config.BorderStyle;
-import com.github.kusoroadeolu.clique.config.CellAlign;
-import com.github.kusoroadeolu.clique.config.TableConfiguration;
+import dev.tamboui.buffer.Buffer;
+import dev.tamboui.layout.Rect;
+import dev.tamboui.style.Color;
+import dev.tamboui.style.Style;
+import dev.tamboui.text.Line;
+import dev.tamboui.text.Span;
 import picocli.CommandLine;
 
 /**
@@ -13,16 +14,8 @@ import picocli.CommandLine;
 public final class Cli {
 
     private static final String CLEAR_LINE = "\r\u001B[2K";
-
-    /**
-     * Default table configuration used for profile output rendering.
-     */
-    public static final TableConfiguration TABLE_CFG = TableConfiguration
-            .immutableBuilder()
-            .borderStyle(borderStyle())
-            .padding(2)
-            .alignment(CellAlign.CENTER)
-            .build();
+    private static final int MIN_LINE_WIDTH = 80;
+    private static volatile boolean ansiEnabled = true;
 
     private Cli() {
     }
@@ -33,7 +26,7 @@ public final class Cli {
      * @param message message to print
      */
     public static void print(String message) {
-        Clique.parser().print(message);
+        System.out.println(message);
     }
 
     /**
@@ -42,7 +35,7 @@ public final class Cli {
      * @param message message to print
      */
     public static void info(String message) {
-        Clique.parser().print("[tokyo_blue]" + message + "[/]");
+        printStyled("", Color.CYAN, message, false);
     }
 
     /**
@@ -51,7 +44,7 @@ public final class Cli {
      * @param message message to print
      */
     public static void success(String message) {
-        Clique.parser().print("[green]" + message + "[/]");
+        printStyled("", Color.GREEN, message, false);
     }
 
     /**
@@ -60,7 +53,7 @@ public final class Cli {
      * @param message message to print
      */
     public static void warning(String message) {
-        Clique.parser().print("[tokyo_yellow]" + message + "[/]");
+        printStyled("", Color.YELLOW, message, false);
     }
 
     /**
@@ -69,25 +62,14 @@ public final class Cli {
      * @param message message to print
      */
     public static void error(String message) {
-        System.err.println(Clique.parser().parse("[tokyo_red]Error:[/] ") + message);
-    }
-
-    /**
-     * Styles text as a table header.
-     *
-     * @param content header text
-     * @return styled header token
-     */
-    public static String th(String content) {
-        return "[*tokyo_blue]" + content + "[/]";
+        printStyled("Error:", Color.RED, message, true);
     }
 
     /**
      * Initializes CLI output theme and ANSI behavior.
      */
     public static void init() {
-        Clique.enableCliqueColors(CommandLine.Help.Ansi.AUTO.enabled());
-        Clique.registerTheme("tokyo-night");
+        ansiEnabled = CommandLine.Help.Ansi.AUTO.enabled();
     }
 
     /**
@@ -100,7 +82,7 @@ public final class Cli {
         if (System.console() == null) {
             return false;
         }
-        System.out.print("\r" + Clique.parser().parse("[tokyo_blue]" + message + "[/]"));
+        System.out.print("\r" + styledLine("", Color.CYAN, message));
         System.out.flush();
         return true;
     }
@@ -118,11 +100,32 @@ public final class Cli {
         System.out.flush();
     }
 
-    private static BorderStyle borderStyle() {
-        return BorderStyle.immutableBuilder()
-                .horizontalBorderStyles(ColorCode.CYAN)
-                .verticalBorderStyles(ColorCode.CYAN)
-                .edgeBorderStyles(ColorCode.CYAN)
-                .build();
+    private static void printStyled(String label, Color color, String message, boolean stderr) {
+        String output = styledLine(label, color, message);
+        if (stderr) {
+            System.err.println(output);
+            return;
+        }
+        System.out.println(output);
+    }
+
+    private static String styledLine(String label, Color color, String message) {
+        String normalizedLabel = label == null || label.isBlank() ? "" : label + " ";
+        String normalizedMessage = message == null ? "" : message;
+        if (!ansiEnabled) {
+            return normalizedLabel + normalizedMessage;
+        }
+
+        int width = Math.max(MIN_LINE_WIDTH, normalizedLabel.length() + normalizedMessage.length() + 2);
+        Buffer buffer = Buffer.empty(Rect.of(width, 1));
+        buffer.setLine(
+            0,
+            0,
+            Line.from(
+                Span.styled(normalizedLabel, Style.EMPTY.bold().fg(color)),
+                Span.raw(normalizedMessage)
+            )
+        );
+        return buffer.toAnsiStringTrimmed();
     }
 }

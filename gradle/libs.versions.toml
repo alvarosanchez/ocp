@@ -6,8 +6,7 @@ test-logger-plugin = "4.0.0"
 testcontainers = "2.0.3"
 testcontainers-gitserver = "0.13.0"
 commons-codec = "1.21.0"
-clique = "v2.0.0"
-clique-themes = "v0.0.1"
+tamboui = "0.2.0-SNAPSHOT"
 
 [libraries]
 micronaut-inject-java = { module = "io.micronaut:micronaut-inject-java" }
@@ -22,8 +21,10 @@ testcontainers-bom = { module = "org.testcontainers:testcontainers-bom", version
 testcontainers-junit-jupiter = { module = "org.testcontainers:testcontainers-junit-jupiter" }
 testcontainers-gitserver = { module = "io.github.sparsick.testcontainers.gitserver:testcontainers-gitserver", version.ref = "testcontainers-gitserver" }
 commons-codec = { module = "commons-codec:commons-codec", version.ref = "commons-codec" }
-clique = { module = "com.github.kusoroadeolu:Clique", version.ref = "clique" }
-clique-themes = { module = "com.github.kusoroadeolu:clique-themes", version.ref = "clique-themes" }
+tamboui-bom = { module = "dev.tamboui:tamboui-bom", version.ref = "tamboui" }
+tamboui-toolkit = { module = "dev.tamboui:tamboui-toolkit" }
+tamboui-jline3-backend = { module = "dev.tamboui:tamboui-jline3-backend" }
+tamboui-panama-backend = { module = "dev.tamboui:tamboui-panama-backend" }
 
 [plugins]
 micronaut-application = { id = "io.micronaut.application", version.ref = "micronaut-plugin" }

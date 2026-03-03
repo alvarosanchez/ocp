@@ -133,7 +133,7 @@ oss/opencode.json
 
 | Command | Status | Behavior |
 | --- | --- | --- |
-| `ocp` | Implemented | Print root usage when no subcommand is provided. |
+| `ocp` | Implemented | Launch interactive TUI mode when running in an interactive terminal; otherwise print root usage. |
 | `ocp help <command>` | Implemented | Print help for command/subcommand. |
 | `ocp profile list` | Implemented | Print a table of profiles with name, description, local commit metadata, and non-fatal remote update hints; include repository name when width budget allows. |
 | `ocp profile` | Implemented | Print currently active profile with repository/version metadata and update hints. |
@@ -168,6 +168,12 @@ oss/opencode.json
 - When profile tables exceed the width budget, `DESCRIPTION` and `MESSAGE` cells are wrapped to fit.
 - If the table still cannot fit, the `REPOSITORY` column is omitted.
 
+### Interactive root mode
+
+- Running `ocp` without a subcommand starts an interactive full-screen terminal UI when `System.console()` is available, `TERM` is not `dumb`, and `OCP_NO_UI` is not set.
+- Interactive mode exposes profile and repository operations (`use`, `create`, `add`, `delete`, and refresh actions) and uses the same service layer semantics as subcommands.
+- If interactive UI initialization fails, behavior falls back to standard Picocli root usage output.
+
 ### Profile switching and backups (target behavior)
 
 - Source directory: `~/.config/ocp/repositories/<repo-name>/<profile-name>/`
@@ -195,6 +201,7 @@ oss/opencode.json
 - Micronaut 4.10
 - Micronaut Picocli integration
 - Gradle build
+- TamboUI toolkit for terminal rendering
 - GraalVM native executable (`ocp`)
 - Homebrew distribution target
 
