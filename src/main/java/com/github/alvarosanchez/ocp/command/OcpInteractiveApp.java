@@ -131,6 +131,7 @@ final class OcpInteractiveApp extends ToolkitApp {
         );
 
         Thread.ofVirtual().start(this::loadInitialDataInBackground);
+        Thread.ofVirtual().start(this::prewarmBatAvailability);
     }
 
     @Override
@@ -527,7 +528,7 @@ final class OcpInteractiveApp extends ToolkitApp {
                 Path profilePath = repositoryPath.resolve(profileName);
                 Profile profile = profilesByName.get(profileName);
                 TreeNode<NodeRef> profileNode = TreeNode.of(
-                    profileLabel(profileName, profile),
+                    profileLabel(profileName),
                     NodeRef.profile(repository.name(), profileName, profilePath)
                 );
 
@@ -593,7 +594,7 @@ final class OcpInteractiveApp extends ToolkitApp {
         return children;
     }
 
-    private String profileLabel(String profileName, Profile profile) {
+    private String profileLabel(String profileName) {
         return profileName;
     }
 
@@ -909,7 +910,7 @@ final class OcpInteractiveApp extends ToolkitApp {
     }
 
     private void requestBatPreview(Path filePath, String contentSnapshot) {
-        if (filePath == null || runner() == null || !isBatAvailable()) {
+        if (filePath == null || runner() == null || batAvailable == null || !batAvailable) {
             return;
         }
         long requestId = ++previewRequestSequence;
@@ -940,7 +941,7 @@ final class OcpInteractiveApp extends ToolkitApp {
     }
 
     private String highlightWithBat(Path filePath) {
-        if (!isBatAvailable()) {
+        if (batAvailable == null || !batAvailable) {
             return null;
         }
         List<String> command = new ArrayList<>();
@@ -994,25 +995,18 @@ final class OcpInteractiveApp extends ToolkitApp {
         }
     }
 
-    private boolean isBatAvailable() {
-        if (batAvailable != null) {
-            return batAvailable;
-        }
+    private boolean probeBatAvailability() {
         Process process;
         try {
             process = new ProcessBuilder("bat", "--version").start();
         } catch (IOException e) {
-            batAvailable = false;
             return false;
         }
-
         try {
             boolean completed = process.waitFor(Duration.ofSeconds(1).toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS);
-            batAvailable = completed && process.exitValue() == 0;
-            return batAvailable;
+            return completed && process.exitValue() == 0;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            batAvailable = false;
             return false;
         }
     }
@@ -1404,6 +1398,20 @@ final class OcpInteractiveApp extends ToolkitApp {
             return selectedNode.profileName();
         }
         return null;
+    }
+
+    private void prewarmBatAvailability() {
+        boolean available = probeBatAvailability();
+        if (runner() != null) {
+            runner().runOnRenderThread(() -> {
+                batAvailable = available;
+                if (available && selectedNode != null && selectedNode.kind() == NodeKind.FILE && selectedNode.path() != null) {
+                    requestBatPreview(selectedNode.path(), selectedFileContent);
+                }
+            });
+        } else {
+            batAvailable = available;
+        }
     }
 
     private void loadInitialDataInBackground() {
