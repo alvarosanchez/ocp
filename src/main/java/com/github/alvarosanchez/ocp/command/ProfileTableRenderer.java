@@ -31,6 +31,10 @@ final class ProfileTableRenderer {
     private static final int DEFAULT_MAX_TABLE_WIDTH = 120;
     private static final int FULL_TABLE_COLUMN_COUNT = 7;
     private static final int COMPACT_TABLE_COLUMN_COUNT = 6;
+    private static final int TABLE_COLUMN_SPACING = 2;
+    private static final int BLOCK_HORIZONTAL_BORDERS = 2;
+    private static final int TABLE_CELL_HORIZONTAL_PADDING = 2;
+    private static final int TABLE_VERTICAL_SEPARATOR_WIDTH = 1;
     private static final String NAME_HEADER = "NAME";
     private static final String DESCRIPTION_HEADER = "DESCRIPTION";
     private static final String ACTIVE_HEADER = "ACTIVE";
@@ -119,7 +123,7 @@ final class ProfileTableRenderer {
             .header(header)
             .rows(rows)
             .widths(widths)
-            .columnSpacing(2)
+            .columnSpacing(TABLE_COLUMN_SPACING)
             .block(
                 Block.builder()
                     .title("Profiles")
@@ -310,7 +314,10 @@ final class ProfileTableRenderer {
     }
 
     private static int columnOverhead(int columnCount) {
-        return (5 * columnCount) + 1;
+        int spacingOverhead = Math.max(0, columnCount - 1) * TABLE_COLUMN_SPACING;
+        int cellPaddingOverhead = columnCount * TABLE_CELL_HORIZONTAL_PADDING;
+        int separatorOverhead = (columnCount + 1) * TABLE_VERTICAL_SEPARATOR_WIDTH;
+        return BLOCK_HORIZONTAL_BORDERS + spacingOverhead + cellPaddingOverhead + separatorOverhead;
     }
 
     private static int maxDisplayWidth(String header, List<String> values) {

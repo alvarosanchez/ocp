@@ -64,12 +64,12 @@ public class OcpCommand implements Runnable {
                 new OcpInteractiveApp(profileService, repositoryService, objectMapper).run();
                 return;
             } catch (Exception | LinkageError e) {
-                Cli.warning(
+                System.err.println(
                     "Interactive mode is unavailable (" + e.getClass().getSimpleName() + ": " + safeMessage(e)
                         + "); falling back to standard usage output."
                 );
-                Cli.warning("Interactive mode cause chain: " + causeChain(e));
-                Cli.info("Tip: set TAMBOUI_BACKEND=panama or TAMBOUI_BACKEND=jline3 to force a backend.");
+                System.err.println("Interactive mode cause chain: " + causeChain(e));
+                System.err.println("Tip: set TAMBOUI_BACKEND=panama or TAMBOUI_BACKEND=jline3 to force a backend.");
             }
         }
         CommandLine.usage(this, System.out);
@@ -105,6 +105,10 @@ public class OcpCommand implements Runnable {
     private boolean shouldStartInteractiveMode() {
         String disabledByEnvironment = System.getenv("OCP_NO_UI");
         if (disabledByEnvironment != null && !disabledByEnvironment.isBlank()) {
+            return false;
+        }
+        String disabledBySystemProperty = System.getProperty("ocp.no.ui");
+        if (disabledBySystemProperty != null && !disabledBySystemProperty.isBlank()) {
             return false;
         }
         String terminal = System.getenv("TERM");

@@ -15,6 +15,7 @@ public final class Cli {
 
     private static final String CLEAR_LINE = "\r\u001B[2K";
     private static final int MIN_LINE_WIDTH = 80;
+    private static final int MAX_RENDER_LINE_WIDTH = 240;
     private static volatile boolean ansiEnabled = true;
 
     private Cli() {
@@ -116,16 +117,34 @@ public final class Cli {
             return normalizedLabel + normalizedMessage;
         }
 
-        int width = Math.max(MIN_LINE_WIDTH, normalizedLabel.length() + normalizedMessage.length() + 2);
+        String renderedMessage = truncateToRenderWidth(normalizedMessage, MAX_RENDER_LINE_WIDTH - normalizedLabel.length());
+
+        int width = Math.min(
+            MAX_RENDER_LINE_WIDTH,
+            Math.max(MIN_LINE_WIDTH, normalizedLabel.length() + renderedMessage.length() + 2)
+        );
         Buffer buffer = Buffer.empty(Rect.of(width, 1));
         buffer.setLine(
             0,
             0,
             Line.from(
                 Span.styled(normalizedLabel, Style.EMPTY.bold().fg(color)),
-                Span.raw(normalizedMessage)
+                Span.raw(renderedMessage)
             )
         );
         return buffer.toAnsiStringTrimmed();
+    }
+
+    private static String truncateToRenderWidth(String value, int maxWidth) {
+        if (maxWidth <= 1) {
+            return "";
+        }
+        if (value.length() <= maxWidth) {
+            return value;
+        }
+        if (maxWidth <= 3) {
+            return value.substring(0, maxWidth);
+        }
+        return value.substring(0, maxWidth - 3) + "...";
     }
 }

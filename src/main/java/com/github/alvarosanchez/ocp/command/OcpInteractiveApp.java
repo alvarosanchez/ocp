@@ -1495,6 +1495,9 @@ final class OcpInteractiveApp extends ToolkitApp {
             } catch (RuntimeException e) {
                 finalMessage = "Error: " + e.getMessage();
                 operationSucceeded = false;
+            } catch (Throwable t) {
+                finalMessage = "Unexpected error: " + t.getClass().getSimpleName() + ": " + t.getMessage();
+                operationSucceeded = false;
             }
 
             String messageToShow = finalMessage;

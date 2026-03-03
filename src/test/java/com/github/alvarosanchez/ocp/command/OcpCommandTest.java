@@ -51,13 +51,20 @@ class OcpCommandTest {
     void noSubcommandFallsBackToUsageInNonInteractiveEnvironment() {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         PrintStream originalOut = System.out;
+        String previousNoUiProperty = System.getProperty("ocp.no.ui");
 
         try {
+            System.setProperty("ocp.no.ui", "1");
             System.setOut(new PrintStream(output));
             int exitCode = PicocliRunner.execute(OcpCommand.class);
             assertEquals(0, exitCode);
         } finally {
             System.setOut(originalOut);
+            if (previousNoUiProperty == null) {
+                System.clearProperty("ocp.no.ui");
+            } else {
+                System.setProperty("ocp.no.ui", previousNoUiProperty);
+            }
         }
 
         assertTrue(output.toString().contains("Usage: ocp"));
