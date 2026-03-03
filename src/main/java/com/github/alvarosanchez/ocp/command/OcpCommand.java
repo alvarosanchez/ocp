@@ -3,6 +3,7 @@ package com.github.alvarosanchez.ocp.command;
 import com.github.alvarosanchez.ocp.service.ProfileService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
 import io.micronaut.configuration.picocli.PicocliRunner;
+import io.micronaut.serde.ObjectMapper;
 import jakarta.inject.Inject;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
@@ -25,11 +26,13 @@ public class OcpCommand implements Runnable {
 
     private final ProfileService profileService;
     private final RepositoryService repositoryService;
+    private final ObjectMapper objectMapper;
 
     @Inject
-    OcpCommand(ProfileService profileService, RepositoryService repositoryService) {
+    OcpCommand(ProfileService profileService, RepositoryService repositoryService, ObjectMapper objectMapper) {
         this.profileService = profileService;
         this.repositoryService = repositoryService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -58,7 +61,7 @@ public class OcpCommand implements Runnable {
     public void run() {
         if (shouldStartInteractiveMode()) {
             try {
-                new OcpInteractiveApp(profileService, repositoryService).run();
+                new OcpInteractiveApp(profileService, repositoryService, objectMapper).run();
                 return;
             } catch (Exception | LinkageError e) {
                 Cli.warning(

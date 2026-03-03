@@ -1,5 +1,6 @@
 package com.github.alvarosanchez.ocp.command;
 
+import com.github.alvarosanchez.ocp.config.RepositoryConfigFile;
 import com.github.alvarosanchez.ocp.model.Profile;
 import com.github.alvarosanchez.ocp.service.ProfileService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
@@ -21,6 +22,7 @@ import dev.tamboui.toolkit.event.EventResult;
 import dev.tamboui.tui.event.KeyEvent;
 import dev.tamboui.widgets.input.TextAreaState;
 import dev.tamboui.widgets.tree.TreeNode;
+import io.micronaut.serde.ObjectMapper;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -46,7 +48,6 @@ import static dev.tamboui.toolkit.Toolkit.row;
 import static dev.tamboui.toolkit.Toolkit.spacer;
 import static dev.tamboui.toolkit.Toolkit.text;
 import static dev.tamboui.toolkit.Toolkit.textArea;
-import static dev.tamboui.toolkit.Toolkit.tree;
 
 final class OcpInteractiveApp extends ToolkitApp {
 
@@ -60,9 +61,11 @@ final class OcpInteractiveApp extends ToolkitApp {
     private static final int CONFLICT_FILES_PREVIEW_LINES = 12;
     private static final int TREE_MAX_DEPTH = 6;
     private static final int TREE_MAX_CHILDREN = 200;
+    private static final String REPOSITORY_METADATA_FILE = "repository.json";
 
     private final ProfileService profileService;
     private final RepositoryService repositoryService;
+    private final ObjectMapper objectMapper;
 
     private final TreeElement<NodeRef> hierarchyTree = Toolkit.<NodeRef>tree()
         .title("Repositories / Profiles / Files")
@@ -81,6 +84,7 @@ final class OcpInteractiveApp extends ToolkitApp {
     private List<Profile> profiles = List.of();
     private List<ConfiguredRepository> repositories = List.of();
     private Map<String, Profile> profilesByName = Map.of();
+    private Map<String, String> profileParentByName = Map.of();
 
     private Pane activePane = Pane.TREE;
     private String status = "Ready. Select a node in the hierarchy.";
@@ -104,9 +108,10 @@ final class OcpInteractiveApp extends ToolkitApp {
     private long previewRequestSequence;
     private int previewScrollOffset;
 
-    OcpInteractiveApp(ProfileService profileService, RepositoryService repositoryService) {
+    OcpInteractiveApp(ProfileService profileService, RepositoryService repositoryService, ObjectMapper objectMapper) {
         this.profileService = profileService;
         this.repositoryService = repositoryService;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -206,6 +211,10 @@ final class OcpInteractiveApp extends ToolkitApp {
             }
             if (event.isCancel()) {
                 editMode = false;
+                if (runner() != null) {
+                    runner().focusManager().setFocus(DETAIL_ID);
+                    activePane = Pane.DETAIL;
+                }
                 status = "Exited edit mode.";
                 return EventResult.HANDLED;
             }
@@ -268,6 +277,7 @@ final class OcpInteractiveApp extends ToolkitApp {
         if (event.isChar('e')) {
             if (selectedNode != null && selectedNode.kind() == NodeKind.FILE) {
                 editMode = true;
+                resetEditorCursorToTop();
                 if (runner() != null) {
                     runner().focusManager().setFocus(EDITOR_ID);
                     activePane = Pane.DETAIL;
@@ -331,6 +341,7 @@ final class OcpInteractiveApp extends ToolkitApp {
         }
         if (nodeRef.kind() == NodeKind.FILE) {
             editMode = true;
+            resetEditorCursorToTop();
             if (runner() != null) {
                 runner().focusManager().setFocus(EDITOR_ID);
                 activePane = Pane.DETAIL;
@@ -480,6 +491,7 @@ final class OcpInteractiveApp extends ToolkitApp {
             byName.put(profile.name(), profile);
         }
         profilesByName = Map.copyOf(byName);
+        profileParentByName = loadProfileParentByName();
 
         List<TreeNode<NodeRef>> roots = buildHierarchyTree();
         hierarchyTree.roots(roots.toArray(TreeNode[]::new));
@@ -488,15 +500,30 @@ final class OcpInteractiveApp extends ToolkitApp {
     }
 
     private List<TreeNode<NodeRef>> buildHierarchyTree() {
+        String activeRepositoryName = activeRepositoryName();
+        String activeProfileName = activeProfileName();
+
         List<TreeNode<NodeRef>> roots = new ArrayList<>();
-        for (ConfiguredRepository repository : repositories) {
+        List<ConfiguredRepository> sortedRepositories = repositories.stream()
+            .sorted(Comparator
+                .comparing((ConfiguredRepository repository) -> !repository.name().equals(activeRepositoryName))
+                .thenComparing(repository -> repository.name().toLowerCase()))
+            .toList();
+
+        for (ConfiguredRepository repository : sortedRepositories) {
             Path repositoryPath = Path.of(repository.localPath());
             TreeNode<NodeRef> repositoryNode = TreeNode.of(
                 repository.name(),
                 NodeRef.repository(repository.name(), repositoryPath)
             ).expanded(true);
 
-            for (String profileName : repository.resolvedProfiles()) {
+            List<String> sortedProfiles = repository.resolvedProfiles().stream()
+                .sorted(Comparator
+                    .comparing((String profileName) -> !profileName.equals(activeProfileName))
+                    .thenComparing(profileName -> profileName.toLowerCase()))
+                .toList();
+
+            for (String profileName : sortedProfiles) {
                 Path profilePath = repositoryPath.resolve(profileName);
                 Profile profile = profilesByName.get(profileName);
                 TreeNode<NodeRef> profileNode = TreeNode.of(
@@ -570,6 +597,42 @@ final class OcpInteractiveApp extends ToolkitApp {
         return profileName;
     }
 
+    private String activeProfileName() {
+        return profiles.stream()
+            .filter(Profile::active)
+            .map(Profile::name)
+            .findFirst()
+            .orElse(null);
+    }
+
+    private String activeRepositoryName() {
+        return profiles.stream()
+            .filter(Profile::active)
+            .map(Profile::repositoryName)
+            .findFirst()
+            .orElse(null);
+    }
+
+    private Map<String, String> loadProfileParentByName() {
+        Map<String, String> parentByName = new HashMap<>();
+        for (ConfiguredRepository repository : repositories) {
+            Path metadataFile = Path.of(repository.localPath()).resolve(REPOSITORY_METADATA_FILE);
+            if (!Files.exists(metadataFile) || !Files.isRegularFile(metadataFile)) {
+                continue;
+            }
+            try {
+                RepositoryConfigFile repositoryConfig = objectMapper.readValue(Files.readString(metadataFile), RepositoryConfigFile.class);
+                for (RepositoryConfigFile.ProfileEntry profileEntry : repositoryConfig.profiles()) {
+                    if (profileEntry.extendsFrom() != null && !profileEntry.extendsFrom().isBlank()) {
+                        parentByName.put(profileEntry.name(), profileEntry.extendsFrom());
+                    }
+                }
+            } catch (IOException | RuntimeException ignored) {
+            }
+        }
+        return Map.copyOf(parentByName);
+    }
+
     private StyledElement<?> renderTreeNode(TreeNode<NodeRef> node) {
         NodeRef data = node.data();
         if (data == null) {
@@ -577,38 +640,46 @@ final class OcpInteractiveApp extends ToolkitApp {
         }
 
         String icon = switch (data.kind()) {
-            case REPOSITORY -> "⎇ ";
-            case PROFILE -> "◉ ";
+            case REPOSITORY -> "◆ ";
+            case PROFILE -> "● ";
             case DIRECTORY -> "📁 ";
             case FILE -> "📄 ";
         };
 
         Color iconColor = switch (data.kind()) {
-            case REPOSITORY -> Color.CYAN;
+            case REPOSITORY -> Color.LIGHT_YELLOW;
             case PROFILE -> Color.MAGENTA;
             case DIRECTORY -> Color.BLUE;
             case FILE -> Color.GRAY;
         };
 
         Style labelStyle = Style.EMPTY;
-        String suffix = "";
+        boolean isCurrentProfile = false;
+        boolean hasUpdates = false;
         if (data.kind() == NodeKind.PROFILE) {
             Profile profile = profilesByName.get(data.profileName());
             if (profile != null && profile.active()) {
-                labelStyle = labelStyle.bold().underlined().fg(Color.GREEN);
+                labelStyle = labelStyle.bold().fg(Color.BRIGHT_WHITE);
+                isCurrentProfile = true;
             }
             if (profile != null && profile.updateAvailable()) {
-                suffix = "  [updates]";
+                hasUpdates = true;
             }
+        }
+
+        List<Span> spans = new ArrayList<>();
+        spans.add(Span.styled(icon, Style.EMPTY.bold().fg(iconColor)));
+        spans.add(Span.styled(node.label(), labelStyle));
+        if (isCurrentProfile) {
+            spans.add(Span.styled(" (current)", Style.EMPTY.bold().fg(Color.GREEN)));
+        }
+        if (hasUpdates) {
+            spans.add(Span.styled(" (updates)", Style.EMPTY.bold().fg(Color.YELLOW)));
         }
 
         return richText(
             Text.from(
-                Line.from(
-                    Span.styled(icon, Style.EMPTY.fg(iconColor)),
-                    Span.styled(node.label(), labelStyle),
-                    Span.styled(suffix, Style.EMPTY.fg(Color.YELLOW))
-                )
+                Line.from(spans)
             )
         );
     }
@@ -636,6 +707,7 @@ final class OcpInteractiveApp extends ToolkitApp {
             selectedFilePreview = plainText(selectedFileContent);
             requestBatPreview(selectedNode.path(), selectedFileContent);
             editorState.setText(selectedFileContent);
+            resetEditorCursorToTop();
             status = "Loaded `" + selectedNode.path().getFileName() + "`. Press e to edit.";
         } catch (IOException e) {
             selectedFileContent = "";
@@ -659,8 +731,8 @@ final class OcpInteractiveApp extends ToolkitApp {
         if (selectedNode.kind() == NodeKind.REPOSITORY) {
             return column(
                 text("Repository").bold().fg(Color.CYAN),
-                text("Name: " + selectedNode.repositoryName()),
-                text("Path: " + selectedNode.path()),
+                detailField("Name", selectedNode.repositoryName()),
+                detailField("Path", String.valueOf(selectedNode.path())),
                 text("Enter to refresh this repository.").dim()
             )
                 .id(DETAIL_ID)
@@ -670,13 +742,15 @@ final class OcpInteractiveApp extends ToolkitApp {
 
         if (selectedNode.kind() == NodeKind.PROFILE) {
             Profile profile = profilesByName.get(selectedNode.profileName());
+            String parentProfileName = profileParentByName.get(selectedNode.profileName());
             return column(
                 text("Profile").bold().fg(Color.CYAN),
-                text("Name: " + selectedNode.profileName()),
-                text("Repository: " + selectedNode.repositoryName()),
-                text("Path: " + selectedNode.path()),
-                text(profile != null && profile.active() ? "Status: active" : "Status: inactive"),
-                text(profile != null && profile.updateAvailable() ? "Updates: available" : "Updates: up to date"),
+                detailField("Name", selectedNode.profileName()),
+                detailField("Repository", selectedNode.repositoryName()),
+                detailField("Path", String.valueOf(selectedNode.path())),
+                detailField("Inherits from", parentProfileName == null ? "none" : parentProfileName),
+                detailField("Status", profile != null && profile.active() ? "active" : "inactive"),
+                detailField("Updates", profile != null && profile.updateAvailable() ? "available" : "up to date"),
                 text("Enter or u to activate this profile.").dim()
             )
                 .id(DETAIL_ID)
@@ -687,7 +761,7 @@ final class OcpInteractiveApp extends ToolkitApp {
         if (selectedNode.kind() == NodeKind.DIRECTORY) {
             return column(
                 text("Directory").bold().fg(Color.CYAN),
-                text("Path: " + selectedNode.path()),
+                detailField("Path", String.valueOf(selectedNode.path())),
                 text("Space/Enter to expand or collapse in tree.").dim()
             )
                 .id(DETAIL_ID)
@@ -810,6 +884,17 @@ final class OcpInteractiveApp extends ToolkitApp {
             return "Press e or Enter to edit selected file | Up/Down/PgUp/PgDn/Home/End scroll preview";
         }
         return "Detail pane";
+    }
+
+    private Element detailField(String label, String value) {
+        return richText(
+            Text.from(
+                Line.from(
+                    Span.styled(label + ": ", Style.EMPTY.bold().fg(Color.LIGHT_YELLOW)),
+                    Span.styled(value == null ? "" : value, Style.EMPTY.fg(Color.BRIGHT_WHITE))
+                )
+            )
+        );
     }
 
     private Text plainText(String content) {
@@ -1289,12 +1374,21 @@ final class OcpInteractiveApp extends ToolkitApp {
                 selectedFileContent = editorState.text();
                 selectedFilePreview = plainText(selectedFileContent);
                 requestBatPreview(filePath, selectedFileContent);
+                if (runner() != null) {
+                    runner().focusManager().setFocus(DETAIL_ID);
+                    activePane = Pane.DETAIL;
+                }
             }
         );
     }
 
     private boolean isSaveKey(KeyEvent event) {
         return event.hasCtrl() && (event.isChar('s') || event.isChar('S') || event.character() == 19);
+    }
+
+    private void resetEditorCursorToTop() {
+        editorState.moveCursorToStart();
+        editorState.ensureCursorVisible(0, 0);
     }
 
     private String selectedRepositoryName() {
