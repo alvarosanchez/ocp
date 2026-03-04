@@ -99,7 +99,7 @@ graalvmNative {
             buildArgs.add("--enable-native-access=ALL-UNNAMED")
             buildArgs.add("-H:+UnlockExperimentalVMOptions")
             buildArgs.add("-H:+SharedArenaSupport")
-            buildArgs.add("-H:IncludeResources=META-INF/ocp/version.txt|dev/tamboui/tui/bindings/.*\\.properties")
+            buildArgs.add("-H:IncludeResources=META-INF/ocp/version.txt|dev/tamboui/tui/bindings/.*\\.properties|splash-logo\\.txt")
         }
         named("test") {
             buildArgs.add("--initialize-at-build-time=org.junit.platform.commons.logging.LoggerFactory\$DelegatingLogger")

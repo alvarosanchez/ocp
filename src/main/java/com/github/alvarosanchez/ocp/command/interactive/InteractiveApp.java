@@ -20,6 +20,7 @@ import dev.tamboui.widgets.tree.TreeNode;
 import io.micronaut.serde.ObjectMapper;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -48,6 +49,16 @@ public final class InteractiveApp extends ToolkitApp {
     private static final int TREE_MAX_CHILDREN = 200;
     private static final String REPOSITORY_METADATA_FILE = "repository.json";
     private static final String REFRESH_CANCELLED_MESSAGE = "Refresh cancelled. Local changes were left untouched.";
+    private static final String SPLASH_LOGO_RESOURCE = "/splash-logo.txt";
+    private static final List<String> DEFAULT_SPLASH_LOGO_LINES = List.of(
+        "▒▒▒▒▒▒▒▒▒█░░░░░░░░░░█▒▒▒▒▒▒▒▒▒",
+        "▒▒█████▒▒█░░█████████▒▒█████▒▒",
+        "▒▒▓▓▓▓▓▒▒█░░▓▓▓▓▓▓▓▓█▒▒▓▓▓▓▓▒▒",
+        "▒▒▓▓▓▓▓▒▒█░░▓▓▓▓▓▓▓▓█▒▒▓▓▓▓▓▒▒",
+        "▒▒▓▓▓▓▓▒▒█░░▓▓▓▓▓▓▓▓█▒▒▓▓▓▓▓▒▒",
+        "▒▒▒▒▒▒▒▒▒█░░░░░░░░░░█▒▒▒▒▒▒▒▒▒",
+        "█████████████████████▒▒███████"
+    );
 
     private final ProfileService profileService;
     private final RepositoryService repositoryService;
@@ -90,6 +101,7 @@ public final class InteractiveApp extends ToolkitApp {
     private NodeRef selectedNode;
     private String selectedFileContent = "";
     private Text selectedFilePreview = DetailPaneRenderer.plainText("");
+    private List<String> splashLogoLines = DEFAULT_SPLASH_LOGO_LINES;
     private boolean editMode;
     private boolean batAvailable;
     private long previewRequestSequence;
@@ -103,6 +115,8 @@ public final class InteractiveApp extends ToolkitApp {
 
     @Override
     protected void onStart() {
+        loadSplashLogoLines();
+
         if (runner() == null) {
             reloadState();
             splashVisible = false;
@@ -955,18 +969,18 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     private Element splashScreen() {
+        List<Element> content = new ArrayList<>();
+        for (String line : splashLogoLines) {
+            content.add(row(spacer(), text(line), spacer()));
+        }
+        content.add(spacer());
+        content.add(row(spacer(), text("OpenCode Configuration Profiles").bold().fg(Color.CYAN), spacer()));
+        content.add(row(spacer(), text("Interactive Tree Workspace").fg(Color.YELLOW), spacer()));
+        content.add(spacer());
+        content.add(row(spacer(), text("Loading repositories and profile trees...").dim(), spacer()));
+
         return dialog(
-            column(
-                row(spacer(), text("░█▀█░█▀▀░█▀█").fg(Color.CYAN), spacer()),
-                row(spacer(), text("░█░█░█░░░█▀▀").fg(Color.BLUE), spacer()),
-                row(spacer(), text("░▀▀▀░▀▀▀░▀░░").fg(Color.GREEN), spacer()),
-                spacer(),
-                row(spacer(), text("OpenCode Configuration Profiles").bold().fg(Color.CYAN), spacer()),
-                row(spacer(), text("Interactive Tree Workspace").fg(Color.YELLOW), spacer()),
-                spacer(),
-                row(spacer(), text("Loading repositories and profile trees...").dim(), spacer()),
-                row(spacer(), text("Press any key to continue").dim().fg(Color.MAGENTA), spacer())
-            )
+            column(content.toArray(Element[]::new))
         )
             .rounded()
             .borderColor(Color.CYAN)
@@ -975,6 +989,25 @@ public final class InteractiveApp extends ToolkitApp {
             .id("splash")
             .focusable()
             .onKeyEvent(this::handleKeyEvent);
+    }
+
+    private void loadSplashLogoLines() {
+        try (var input = InteractiveApp.class.getResourceAsStream(SPLASH_LOGO_RESOURCE)) {
+            if (input == null) {
+                status = "Splash logo file not found (`splash-logo.txt`), using default.";
+                return;
+            }
+
+            String content = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+            List<String> loadedLines = content.lines().toList();
+            if (loadedLines.isEmpty()) {
+                status = "Splash logo file is empty, using default.";
+                return;
+            }
+            splashLogoLines = List.copyOf(loadedLines);
+        } catch (IOException | RuntimeException e) {
+            status = "Error loading splash logo file: " + e.getMessage();
+        }
     }
 
 }
