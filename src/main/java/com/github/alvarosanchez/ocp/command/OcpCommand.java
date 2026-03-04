@@ -62,44 +62,13 @@ public class OcpCommand implements Runnable {
         if (shouldStartInteractiveMode()) {
             try {
                 new OcpInteractiveApp(profileService, repositoryService, objectMapper).run();
-                return;
-            } catch (Exception | LinkageError e) {
-                System.err.println(
-                    "Interactive mode is unavailable (" + e.getClass().getSimpleName() + ": " + safeMessage(e)
-                        + "); falling back to standard usage output."
-                );
-                System.err.println("Interactive mode cause chain: " + causeChain(e));
-                System.err.println("Tip: set TAMBOUI_BACKEND=panama to force the backend.");
+            } catch (Exception e) {
+                Cli.error("Interactive mode is unavailable: " + e.getMessage());
+                Cli.error("Falling back to standard usage output");
             }
+            return;
         }
         CommandLine.usage(this, System.out);
-    }
-
-    private String safeMessage(Throwable throwable) {
-        String message = throwable.getMessage();
-        if (message == null || message.isBlank()) {
-            return "no details";
-        }
-        return message;
-    }
-
-    private String causeChain(Throwable throwable) {
-        StringBuilder chain = new StringBuilder();
-        Throwable cursor = throwable;
-        int depth = 0;
-        while (cursor != null && depth < 8) {
-            if (depth > 0) {
-                chain.append(" -> ");
-            }
-            chain.append(cursor.getClass().getSimpleName()).append(": ").append(safeMessage(cursor));
-            Throwable next = cursor.getCause();
-            if (next == cursor) {
-                break;
-            }
-            cursor = next;
-            depth++;
-        }
-        return chain.toString();
     }
 
     private boolean shouldStartInteractiveMode() {
