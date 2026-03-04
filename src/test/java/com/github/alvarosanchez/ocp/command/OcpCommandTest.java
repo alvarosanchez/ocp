@@ -47,6 +47,22 @@ class OcpCommandTest {
         assertTrue(output.toString().contains(expectedVersion));
     }
 
+    @Test
+    void noSubcommandFallsBackToUsageInNonInteractiveEnvironment() {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        PrintStream originalOut = System.out;
+
+        try {
+            System.setOut(new PrintStream(output));
+            int exitCode = PicocliRunner.execute(OcpCommand.class);
+            assertEquals(0, exitCode);
+        } finally {
+            System.setOut(originalOut);
+        }
+
+        assertTrue(output.toString().contains("Usage: ocp"));
+    }
+
     private static String readExpectedVersion() {
         try (var inputStream = OcpCommandTest.class.getResourceAsStream("/META-INF/ocp/version.txt")) {
             assertNotNull(inputStream);

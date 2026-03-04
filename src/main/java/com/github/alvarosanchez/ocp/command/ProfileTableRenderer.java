@@ -1,9 +1,21 @@
 package com.github.alvarosanchez.ocp.command;
 
 import com.github.alvarosanchez.ocp.model.Profile;
-import com.github.kusoroadeolu.clique.Clique;
-import com.github.kusoroadeolu.clique.tables.Table;
-import com.github.kusoroadeolu.clique.tables.TableType;
+import dev.tamboui.buffer.Buffer;
+import dev.tamboui.layout.Constraint;
+import dev.tamboui.layout.Rect;
+import dev.tamboui.style.Color;
+import dev.tamboui.style.Style;
+import dev.tamboui.text.Line;
+import dev.tamboui.text.Span;
+import dev.tamboui.text.Text;
+import dev.tamboui.widgets.block.Block;
+import dev.tamboui.widgets.block.BorderType;
+import dev.tamboui.widgets.block.Borders;
+import dev.tamboui.widgets.table.Cell;
+import dev.tamboui.widgets.table.Row;
+import dev.tamboui.widgets.table.Table;
+import dev.tamboui.widgets.table.TableState;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -11,9 +23,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
-import java.util.regex.Pattern;
-
-import static com.github.alvarosanchez.ocp.command.Cli.TABLE_CFG;
 
 final class ProfileTableRenderer {
 
@@ -22,6 +31,10 @@ final class ProfileTableRenderer {
     private static final int DEFAULT_MAX_TABLE_WIDTH = 120;
     private static final int FULL_TABLE_COLUMN_COUNT = 7;
     private static final int COMPACT_TABLE_COLUMN_COUNT = 6;
+    private static final int TABLE_COLUMN_SPACING = 2;
+    private static final int BLOCK_HORIZONTAL_BORDERS = 2;
+    private static final int TABLE_CELL_HORIZONTAL_PADDING = 2;
+    private static final int TABLE_VERTICAL_SEPARATOR_WIDTH = 1;
     private static final String NAME_HEADER = "NAME";
     private static final String DESCRIPTION_HEADER = "DESCRIPTION";
     private static final String ACTIVE_HEADER = "ACTIVE";
@@ -31,7 +44,6 @@ final class ProfileTableRenderer {
     private static final String MESSAGE_HEADER = "MESSAGE";
     private static final int DESCRIPTION_HEADER_WIDTH = DESCRIPTION_HEADER.length();
     private static final int MESSAGE_HEADER_WIDTH = MESSAGE_HEADER.length();
-    private static final Pattern STYLE_TAG_PATTERN = Pattern.compile("\\[(?:/|\\*?[a-zA-Z][a-zA-Z0-9_]*)]");
 
     private ProfileTableRenderer() {
     }
@@ -42,28 +54,37 @@ final class ProfileTableRenderer {
 
     static void print(List<Profile> profiles, Map<String, String> environment) {
         TableLayout layout = tableLayout(profiles, resolvedMaxTableWidth(environment));
-
-        Table table = Clique.table(TableType.ROUNDED_BOX_DRAW, TABLE_CFG);
+        List<Constraint> widths = new ArrayList<>();
+        widths.add(Constraint.length(maxDisplayWidth(NAME_HEADER, profiles.stream().map(Profile::name).toList())));
+        widths.add(Constraint.length(layout.descriptionWidth()));
+        widths.add(Constraint.length(maxDisplayWidth(ACTIVE_HEADER, profiles.stream().map(ProfileTableRenderer::activeMarker).toList())));
         if (layout.includeRepository()) {
-            table.addHeaders(
-                NAME_HEADER,
-                DESCRIPTION_HEADER,
-                ACTIVE_HEADER,
-                REPOSITORY_HEADER,
-                VERSION_HEADER,
-                LAST_UPDATED_HEADER,
-                MESSAGE_HEADER
-            );
-        } else {
-            table.addHeaders(
-                NAME_HEADER,
-                DESCRIPTION_HEADER,
-                ACTIVE_HEADER,
-                VERSION_HEADER,
-                LAST_UPDATED_HEADER,
-                MESSAGE_HEADER
-            );
+            widths.add(Constraint.length(maxDisplayWidth(REPOSITORY_HEADER, profiles.stream().map(Profile::repositoryName).toList())));
         }
+        widths.add(Constraint.length(maxDisplayWidth(VERSION_HEADER, profiles.stream().map(ProfileTableRenderer::renderedVersion).toList())));
+        widths.add(Constraint.length(maxDisplayWidth(LAST_UPDATED_HEADER, profiles.stream().map(Profile::lastUpdated).toList())));
+        widths.add(Constraint.length(layout.messageWidth()));
+
+        Row header = layout.includeRepository()
+            ? Row.from(
+                Cell.from(Span.styled(NAME_HEADER, Style.EMPTY.bold().fg(Color.CYAN))),
+                Cell.from(Span.styled(DESCRIPTION_HEADER, Style.EMPTY.bold().fg(Color.CYAN))),
+                Cell.from(Span.styled(ACTIVE_HEADER, Style.EMPTY.bold().fg(Color.CYAN))),
+                Cell.from(Span.styled(REPOSITORY_HEADER, Style.EMPTY.bold().fg(Color.CYAN))),
+                Cell.from(Span.styled(VERSION_HEADER, Style.EMPTY.bold().fg(Color.CYAN))),
+                Cell.from(Span.styled(LAST_UPDATED_HEADER, Style.EMPTY.bold().fg(Color.CYAN))),
+                Cell.from(Span.styled(MESSAGE_HEADER, Style.EMPTY.bold().fg(Color.CYAN)))
+            )
+            : Row.from(
+                Cell.from(Span.styled(NAME_HEADER, Style.EMPTY.bold().fg(Color.CYAN))),
+                Cell.from(Span.styled(DESCRIPTION_HEADER, Style.EMPTY.bold().fg(Color.CYAN))),
+                Cell.from(Span.styled(ACTIVE_HEADER, Style.EMPTY.bold().fg(Color.CYAN))),
+                Cell.from(Span.styled(VERSION_HEADER, Style.EMPTY.bold().fg(Color.CYAN))),
+                Cell.from(Span.styled(LAST_UPDATED_HEADER, Style.EMPTY.bold().fg(Color.CYAN))),
+                Cell.from(Span.styled(MESSAGE_HEADER, Style.EMPTY.bold().fg(Color.CYAN)))
+            );
+
+        List<Row> rows = new ArrayList<>();
 
         for (Profile profile : profiles) {
             List<String> descriptionLines = wrapLines(profile.description(), layout.descriptionWidth());
@@ -72,28 +93,51 @@ final class ProfileTableRenderer {
             for (int row = 0; row < rowCount; row++) {
                 boolean firstRow = row == 0;
                 if (layout.includeRepository()) {
-                    table.addRows(
-                        firstRow ? profile.name() : "",
-                        lineAt(descriptionLines, row),
-                        firstRow ? activeMarker(profile) : "",
-                        firstRow ? profile.repositoryName() : "",
-                        firstRow ? renderedVersion(profile) : "",
-                        firstRow ? profile.lastUpdated() : "",
-                        lineAt(messageLines, row)
+                    rows.add(
+                        Row.from(
+                            Cell.from(firstRow ? profile.name() : ""),
+                            Cell.from(lineAt(descriptionLines, row)),
+                            activeCellValue(profile, firstRow),
+                            Cell.from(firstRow ? profile.repositoryName() : ""),
+                            Cell.from(firstRow ? renderedVersion(profile) : ""),
+                            Cell.from(firstRow ? profile.lastUpdated() : ""),
+                            Cell.from(lineAt(messageLines, row))
+                        )
                     );
                 } else {
-                    table.addRows(
-                        firstRow ? profile.name() : "",
-                        lineAt(descriptionLines, row),
-                        firstRow ? activeMarker(profile) : "",
-                        firstRow ? renderedVersion(profile) : "",
-                        firstRow ? profile.lastUpdated() : "",
-                        lineAt(messageLines, row)
+                    rows.add(
+                        Row.from(
+                            Cell.from(firstRow ? profile.name() : ""),
+                            Cell.from(lineAt(descriptionLines, row)),
+                            activeCellValue(profile, firstRow),
+                            Cell.from(firstRow ? renderedVersion(profile) : ""),
+                            Cell.from(firstRow ? profile.lastUpdated() : ""),
+                            Cell.from(lineAt(messageLines, row))
+                        )
                     );
                 }
             }
         }
-        table.render();
+
+        Table table = Table.builder()
+            .header(header)
+            .rows(rows)
+            .widths(widths)
+            .columnSpacing(TABLE_COLUMN_SPACING)
+            .block(
+                Block.builder()
+                    .title("Profiles")
+                    .borders(Borders.ALL)
+                    .borderType(BorderType.ROUNDED)
+                    .borderColor(Color.CYAN)
+                    .build()
+            )
+            .build();
+
+        int renderedHeight = rows.stream().mapToInt(Row::totalHeight).sum() + header.totalHeight() + 2;
+        Buffer buffer = Buffer.empty(Rect.of(resolvedMaxTableWidth(environment), Math.max(3, renderedHeight)));
+        table.render(buffer.area(), buffer, new TableState());
+        Cli.print(buffer.toAnsiStringTrimmed());
     }
 
     static void printWithWarnings(List<Profile> profiles) {
@@ -270,7 +314,10 @@ final class ProfileTableRenderer {
     }
 
     private static int columnOverhead(int columnCount) {
-        return (5 * columnCount) + 1;
+        int spacingOverhead = Math.max(0, columnCount - 1) * TABLE_COLUMN_SPACING;
+        int cellPaddingOverhead = columnCount * TABLE_CELL_HORIZONTAL_PADDING;
+        int separatorOverhead = (columnCount + 1) * TABLE_VERTICAL_SEPARATOR_WIDTH;
+        return BLOCK_HORIZONTAL_BORDERS + spacingOverhead + cellPaddingOverhead + separatorOverhead;
     }
 
     private static int maxDisplayWidth(String header, List<String> values) {
@@ -283,13 +330,19 @@ final class ProfileTableRenderer {
 
     private static int displayWidth(String value) {
         String normalized = value == null ? "" : value;
-        String noStyle = STYLE_TAG_PATTERN.matcher(normalized).replaceAll("");
         int width = 0;
-        String[] lines = noStyle.split("\\R", -1);
+        String[] lines = normalized.split("\\R", -1);
         for (String line : lines) {
             width = Math.max(width, line.length());
         }
         return width;
+    }
+
+    private static Cell activeCellValue(Profile profile, boolean firstRow) {
+        if (!firstRow || !profile.active()) {
+            return Cell.from("");
+        }
+        return Cell.from(Text.from(Line.from(Span.styled(ACTIVE_MARKER, Style.EMPTY.bold().fg(Color.GREEN)))));
     }
 
     private static List<String> wrapLines(String value, int width) {

@@ -19,7 +19,12 @@ val micronautPlatformVersion = libs.versions.micronaut.platform.get()
 
 repositories {
     mavenCentral()
-    maven("https://jitpack.io")
+    maven {
+        url = uri("https://central.sonatype.com/repository/maven-snapshots/")
+        mavenContent {
+            snapshotsOnly()
+        }
+    }
 }
 
 dependencies {
@@ -29,8 +34,9 @@ dependencies {
 
     implementation(libs.micronaut.picocli)
     implementation(libs.micronaut.serde.jackson)
-    implementation(libs.clique)
-    implementation(libs.clique.themes)
+    implementation(platform(libs.tamboui.bom))
+    implementation(libs.tamboui.toolkit)
+    implementation(libs.tamboui.panama.backend)
 
     runtimeOnly(libs.logback.classic)
 
@@ -89,10 +95,16 @@ graalvmNative {
             imageName.set("ocp")
             mainClass.set("com.github.alvarosanchez.ocp.command.OcpCommand")
             buildArgs.add("--no-fallback")
-            buildArgs.add("-H:IncludeResources=META-INF/ocp/version.txt")
+            buildArgs.add("--enable-monitoring=jfr")
+            buildArgs.add("--enable-native-access=ALL-UNNAMED")
+            buildArgs.add("-H:+UnlockExperimentalVMOptions")
+            buildArgs.add("-H:+SharedArenaSupport")
+            buildArgs.add("-H:IncludeResources=META-INF/ocp/version.txt|dev/tamboui/tui/bindings/.*\\.properties|splash-logo\\.txt")
         }
         named("test") {
             buildArgs.add("--initialize-at-build-time=org.junit.platform.commons.logging.LoggerFactory\$DelegatingLogger")
+            buildArgs.add("-H:+UnlockExperimentalVMOptions")
+            buildArgs.add("-H:+SharedArenaSupport")
             quickBuild.set(true)
         }
     }

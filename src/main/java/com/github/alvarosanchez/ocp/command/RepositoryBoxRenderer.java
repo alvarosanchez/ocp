@@ -1,13 +1,17 @@
 package com.github.alvarosanchez.ocp.command;
 
 import com.github.alvarosanchez.ocp.service.RepositoryService.ConfiguredRepository;
-import com.github.kusoroadeolu.clique.Clique;
-import com.github.kusoroadeolu.clique.ansi.ColorCode;
-import com.github.kusoroadeolu.clique.boxes.Box;
-import com.github.kusoroadeolu.clique.boxes.BoxType;
-import com.github.kusoroadeolu.clique.config.BorderStyle;
-import com.github.kusoroadeolu.clique.config.BoxConfiguration;
-import com.github.kusoroadeolu.clique.config.TextAlign;
+import dev.tamboui.buffer.Buffer;
+import dev.tamboui.layout.Rect;
+import dev.tamboui.style.Color;
+import dev.tamboui.style.Style;
+import dev.tamboui.text.Line;
+import dev.tamboui.text.Span;
+import dev.tamboui.text.Text;
+import dev.tamboui.widgets.block.Block;
+import dev.tamboui.widgets.block.BorderType;
+import dev.tamboui.widgets.block.Borders;
+import dev.tamboui.widgets.paragraph.Paragraph;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -15,7 +19,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
-import java.util.regex.Pattern;
 
 final class RepositoryBoxRenderer {
 
@@ -23,19 +26,6 @@ final class RepositoryBoxRenderer {
     private static final int MIN_BOX_WIDTH = 28;
     private static final int BOX_HORIZONTAL_OVERHEAD = 4;
     private static final String VALUE_PREFIX = "-> ";
-    private static final Pattern STYLE_TAG_PATTERN = Pattern.compile("\\[(?:/|\\*?[a-zA-Z][a-zA-Z0-9_]*)]");
-    private static final BoxConfiguration BOX_CFG = BoxConfiguration
-        .immutableBuilder()
-        .textAlign(TextAlign.TOP_LEFT)
-        .borderStyle(
-            BorderStyle
-                .immutableBuilder()
-                .horizontalBorderStyles(ColorCode.CYAN)
-                .verticalBorderStyles(ColorCode.CYAN)
-                .edgeBorderStyles(ColorCode.CYAN)
-                .build()
-        )
-        .build();
 
     private RepositoryBoxRenderer() {
     }
@@ -52,15 +42,25 @@ final class RepositoryBoxRenderer {
             ConfiguredRepository repository = repositories.get(index);
             List<String> contentLines = contentLines(repository, maxContentWidth);
             int contentWidth = Math.min(maxContentWidth, Math.max(1, maxDisplayWidth(contentLines)));
+            int boxWidth = contentWidth + BOX_HORIZONTAL_OVERHEAD;
+            int boxHeight = contentLines.size() + 2;
 
-            Box box = Clique.box(BoxType.ROUNDED, BOX_CFG);
-            box.width(contentWidth + BOX_HORIZONTAL_OVERHEAD);
-            box.length(contentLines.size() + 2);
-            box.content(String.join("\n", contentLines));
-            box.render();
+            Buffer buffer = Buffer.empty(Rect.of(boxWidth, boxHeight));
+            Paragraph paragraph = Paragraph.builder()
+                .text(styledContent(contentLines))
+                .block(
+                    Block.builder()
+                        .borders(Borders.ALL)
+                        .borderType(BorderType.ROUNDED)
+                        .borderColor(Color.CYAN)
+                        .build()
+                )
+                .build();
+            paragraph.render(buffer.area(), buffer);
+            Cli.print(buffer.toAnsiStringTrimmed());
 
             if (index < repositories.size() - 1) {
-                System.out.println();
+                Cli.print("");
             }
         }
     }
@@ -89,7 +89,7 @@ final class RepositoryBoxRenderer {
         List<String> wrappedValueLines = wrapLines(normalizedValue, valueWidth);
 
         List<String> lines = new ArrayList<>(wrappedValueLines.size() + 1);
-        lines.add(Cli.th(label + ":"));
+        lines.add(label + ":");
         for (String wrappedValueLine : wrappedValueLines) {
             lines.add(VALUE_PREFIX + wrappedValueLine);
         }
@@ -169,13 +169,24 @@ final class RepositoryBoxRenderer {
 
     private static int displayWidth(String value) {
         String normalized = value == null ? "" : value;
-        String noStyle = STYLE_TAG_PATTERN.matcher(normalized).replaceAll("");
         int width = 0;
-        String[] lines = noStyle.split("\\R", -1);
+        String[] lines = normalized.split("\\R", -1);
         for (String line : lines) {
             width = Math.max(width, line.length());
         }
         return width;
+    }
+
+    private static Text styledContent(List<String> contentLines) {
+        List<Line> lines = new ArrayList<>(contentLines.size());
+        for (String line : contentLines) {
+            if (line.endsWith(":") && !line.startsWith(VALUE_PREFIX)) {
+                lines.add(Line.from(Span.styled(line, Style.EMPTY.bold().fg(Color.CYAN))));
+            } else {
+                lines.add(Line.from(Span.raw(line)));
+            }
+        }
+        return Text.from(lines);
     }
 
     private static List<String> wrapLines(String value, int width) {
