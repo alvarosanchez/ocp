@@ -1,5 +1,6 @@
 package com.github.alvarosanchez.ocp.command;
 
+import com.github.alvarosanchez.ocp.command.interactive.InteractiveApp;
 import com.github.alvarosanchez.ocp.service.ProfileService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
 import io.micronaut.configuration.picocli.PicocliRunner;
@@ -61,7 +62,7 @@ public class OcpCommand implements Runnable {
     public void run() {
         if (shouldStartInteractiveMode()) {
             try {
-                new OcpInteractiveApp(profileService, repositoryService, objectMapper).run();
+                new InteractiveApp(profileService, repositoryService, objectMapper).run();
             } catch (Exception e) {
                 Cli.error("Interactive mode is unavailable: " + e.getMessage());
                 Cli.error("Falling back to standard usage output");
