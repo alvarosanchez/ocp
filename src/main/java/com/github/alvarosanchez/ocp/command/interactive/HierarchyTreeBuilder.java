@@ -93,8 +93,8 @@ final class HierarchyTreeBuilder {
         }
 
         String icon = switch (data.kind()) {
-            case REPOSITORY -> "◆ ";
-            case PROFILE -> "● ";
+            case REPOSITORY -> "📦 ";
+            case PROFILE -> "👤 ";
             case DIRECTORY -> "📁 ";
             case FILE -> "📄 ";
         };
@@ -124,10 +124,10 @@ final class HierarchyTreeBuilder {
         spans.add(Span.styled(icon, Style.EMPTY.bold().fg(iconColor)));
         spans.add(Span.styled(node.label(), labelStyle));
         if (isCurrentProfile) {
-            spans.add(Span.styled(" (current)", Style.EMPTY.bold().fg(Color.GREEN)));
+            spans.add(Span.styled(" ✓", Style.EMPTY.bold().fg(Color.GREEN)));
         }
         if (hasUpdates) {
-            spans.add(Span.styled(" (updates)", Style.EMPTY.bold().fg(Color.YELLOW)));
+            spans.add(Span.styled(" ❄", Style.EMPTY.bold().fg(Color.YELLOW)));
         }
 
         return richText(
