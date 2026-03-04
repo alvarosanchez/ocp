@@ -170,7 +170,7 @@ oss/opencode.json
 
 ### Interactive root mode
 
-- Running `ocp` without a subcommand starts an interactive full-screen terminal UI when `System.console()` is available, `TERM` is not `dumb`, and `OCP_NO_UI` is not set.
+- Running `ocp` without a subcommand starts an interactive full-screen terminal UI when `System.console()` is available and `TERM` is not `dumb`.
 - Interactive mode exposes profile and repository operations (`use`, `create`, `add`, `delete`, and refresh actions) and uses the same service layer semantics as subcommands.
 - File preview syntax highlighting in interactive mode uses external `bat` when available; if `bat` is unavailable or fails, preview falls back to plain text.
 - If interactive UI initialization fails, behavior falls back to standard Picocli root usage output.

@@ -103,14 +103,6 @@ public class OcpCommand implements Runnable {
     }
 
     private boolean shouldStartInteractiveMode() {
-        String disabledByEnvironment = System.getenv("OCP_NO_UI");
-        if (disabledByEnvironment != null && !disabledByEnvironment.isBlank()) {
-            return false;
-        }
-        String disabledBySystemProperty = System.getProperty("ocp.no.ui");
-        if (disabledBySystemProperty != null && !disabledBySystemProperty.isBlank()) {
-            return false;
-        }
         String terminal = System.getenv("TERM");
         if (terminal == null || terminal.isBlank() || "dumb".equalsIgnoreCase(terminal.trim())) {
             return false;
