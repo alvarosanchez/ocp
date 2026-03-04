@@ -15,8 +15,6 @@ import dev.tamboui.toolkit.app.ToolkitApp;
 import dev.tamboui.toolkit.app.ToolkitRunner;
 import dev.tamboui.toolkit.element.Element;
 import dev.tamboui.toolkit.element.StyledElement;
-import dev.tamboui.toolkit.elements.RichTextAreaElement;
-import dev.tamboui.toolkit.elements.TextAreaElement;
 import dev.tamboui.toolkit.elements.TreeElement;
 import dev.tamboui.toolkit.event.EventResult;
 import dev.tamboui.tui.event.KeyEvent;
@@ -62,6 +60,7 @@ final class OcpInteractiveApp extends ToolkitApp {
     private static final int TREE_MAX_DEPTH = 6;
     private static final int TREE_MAX_CHILDREN = 200;
     private static final String REPOSITORY_METADATA_FILE = "repository.json";
+    private static final String REFRESH_CANCELLED_MESSAGE = "Refresh cancelled. Local changes were left untouched.";
 
     private final ProfileService profileService;
     private final RepositoryService repositoryService;
@@ -104,7 +103,7 @@ final class OcpInteractiveApp extends ToolkitApp {
     private String selectedFileContent = "";
     private Text selectedFilePreview = Text.from(Line.from(Span.raw("")));
     private boolean editMode;
-    private Boolean batAvailable;
+    private boolean batAvailable;
     private long previewRequestSequence;
     private int previewScrollOffset;
 
@@ -167,8 +166,18 @@ final class OcpInteractiveApp extends ToolkitApp {
             ).fill(),
             panel(text(statusLine())).rounded().borderColor(busy ? Color.GREEN : Color.YELLOW).length(3),
             panel(
-                text(helpVisible ? helpText() : "Press ? for interactive keymap").dim()
-            ).rounded().length(helpVisible ? 8 : 3)
+                helpVisible
+                    ? column(
+                        text("Tree: Up/Down select | Left/Right collapse-expand").dim(),
+                        text("      Enter action | Space toggle folder").dim(),
+                        text("Actions: u use profile | R refresh all | a add repo").dim(),
+                        text("         d delete repo | n create repo | c create profile").dim(),
+                        text("File: e edit | Ctrl+S save | Esc exit edit").dim(),
+                        text("      Up/Down/PgUp/PgDn/Home/End scroll preview").dim(),
+                        text("Global: Tab switch pane | r reload | q quit").dim()
+                    )
+                    : text("Press ? for interactive keymap").dim()
+            ).rounded().length(helpVisible ? 10 : 3)
         );
 
         if (prompt != null) {
@@ -526,7 +535,6 @@ final class OcpInteractiveApp extends ToolkitApp {
 
             for (String profileName : sortedProfiles) {
                 Path profilePath = repositoryPath.resolve(profileName);
-                Profile profile = profilesByName.get(profileName);
                 TreeNode<NodeRef> profileNode = TreeNode.of(
                     profileLabel(profileName),
                     NodeRef.profile(repository.name(), profileName, profilePath)
@@ -587,7 +595,7 @@ final class OcpInteractiveApp extends ToolkitApp {
                     );
                 }
             }
-        } catch (IOException e) {
+        } catch (IOException _) {
             children.add(TreeNode.of("[error reading directory]", NodeRef.directory(repositoryName, profileName, directory)).leaf());
         }
 
@@ -772,7 +780,7 @@ final class OcpInteractiveApp extends ToolkitApp {
         }
 
         if (editMode) {
-            TextAreaElement editor = textArea(editorState)
+            return textArea(editorState)
                 .title("Editing: " + selectedNode.path().getFileName())
                 .rounded()
                 .borderColor(Color.GREEN)
@@ -782,10 +790,9 @@ final class OcpInteractiveApp extends ToolkitApp {
                 .focusable()
                 .onKeyEvent(this::handleKeyEvent)
                 .fill();
-            return editor;
         }
 
-        RichTextAreaElement preview = richTextArea(selectedFilePreview)
+        return richTextArea(selectedFilePreview)
             .text(scrolledPreviewText())
             .title("Preview: " + selectedNode.path().getFileName())
             .rounded()
@@ -797,7 +804,6 @@ final class OcpInteractiveApp extends ToolkitApp {
             .focusable()
             .onKeyEvent(this::handlePreviewKeyEvent)
             .fill();
-        return preview;
     }
 
     private EventResult handlePreviewKeyEvent(KeyEvent event) {
@@ -826,7 +832,7 @@ final class OcpInteractiveApp extends ToolkitApp {
         }
 
         int maxOffset = Math.max(0, selectedFilePreview.lines().size() - 1);
-        int nextOffset = previewScrollOffset;
+        int nextOffset;
         if (event.isUp()) {
             nextOffset = Math.max(0, previewScrollOffset - 1);
         } else if (event.isDown()) {
@@ -868,7 +874,7 @@ final class OcpInteractiveApp extends ToolkitApp {
         if (lines.isEmpty()) {
             return Text.empty();
         }
-        int safeOffset = Math.max(0, Math.min(previewScrollOffset, lines.size() - 1));
+        int safeOffset = Math.clamp(lines.size() - 1L, 0, previewScrollOffset);
         if (safeOffset == 0) {
             return selectedFilePreview;
         }
@@ -910,7 +916,7 @@ final class OcpInteractiveApp extends ToolkitApp {
     }
 
     private void requestBatPreview(Path filePath, String contentSnapshot) {
-        if (filePath == null || runner() == null || batAvailable == null || !batAvailable) {
+        if (filePath == null || runner() == null || !batAvailable) {
             return;
         }
         long requestId = ++previewRequestSequence;
@@ -941,7 +947,7 @@ final class OcpInteractiveApp extends ToolkitApp {
     }
 
     private String highlightWithBat(Path filePath) {
-        if (batAvailable == null || !batAvailable) {
+        if (!batAvailable) {
             return null;
         }
         List<String> command = new ArrayList<>();
@@ -962,7 +968,7 @@ final class OcpInteractiveApp extends ToolkitApp {
             process = new ProcessBuilder(command)
                 .redirectErrorStream(true)
                 .start();
-        } catch (IOException e) {
+        } catch (IOException _) {
             return null;
         }
 
@@ -987,9 +993,9 @@ final class OcpInteractiveApp extends ToolkitApp {
                 return null;
             }
             return output.toString(java.nio.charset.StandardCharsets.UTF_8);
-        } catch (UncheckedIOException e) {
+        } catch (UncheckedIOException _) {
             return null;
-        } catch (InterruptedException e) {
+        } catch (InterruptedException _) {
             Thread.currentThread().interrupt();
             return null;
         }
@@ -999,13 +1005,13 @@ final class OcpInteractiveApp extends ToolkitApp {
         Process process;
         try {
             process = new ProcessBuilder("bat", "--version").start();
-        } catch (IOException e) {
+        } catch (IOException _) {
             return false;
         }
         try {
             boolean completed = process.waitFor(Duration.ofSeconds(1).toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS);
             return completed && process.exitValue() == 0;
-        } catch (InterruptedException e) {
+        } catch (InterruptedException _) {
             Thread.currentThread().interrupt();
             return false;
         }
@@ -1503,8 +1509,8 @@ final class OcpInteractiveApp extends ToolkitApp {
             } catch (RuntimeException e) {
                 finalMessage = "Error: " + e.getMessage();
                 operationSucceeded = false;
-            } catch (Throwable t) {
-                finalMessage = "Unexpected error: " + t.getClass().getSimpleName() + ": " + t.getMessage();
+            } catch (Exception e) {
+                finalMessage = "Unexpected error: " + e.getClass().getSimpleName() + ": " + e.getMessage();
                 operationSucceeded = false;
             }
 
@@ -1548,7 +1554,7 @@ final class OcpInteractiveApp extends ToolkitApp {
         if (event.isCancel()) {
             refreshConflict = null;
             pendingRefreshOperation = null;
-            status = "Refresh cancelled. Local changes were left untouched.";
+            status = REFRESH_CANCELLED_MESSAGE;
             return EventResult.HANDLED;
         }
 
@@ -1564,7 +1570,7 @@ final class OcpInteractiveApp extends ToolkitApp {
             if (event.isChar('3')) {
                 refreshConflict = null;
                 pendingRefreshOperation = null;
-                status = "Refresh cancelled. Local changes were left untouched.";
+                status = REFRESH_CANCELLED_MESSAGE;
                 return EventResult.HANDLED;
             }
             return EventResult.HANDLED;
@@ -1577,7 +1583,7 @@ final class OcpInteractiveApp extends ToolkitApp {
         if (event.isChar('2')) {
             refreshConflict = null;
             pendingRefreshOperation = null;
-            status = "Refresh cancelled. Local changes were left untouched.";
+            status = REFRESH_CANCELLED_MESSAGE;
             return EventResult.HANDLED;
         }
         return EventResult.HANDLED;
@@ -1722,14 +1728,6 @@ final class OcpInteractiveApp extends ToolkitApp {
             text(prompt.currentValue()),
             text("Enter next/apply | Tab next field | Backspace delete | Esc cancel").dim()
         ).rounded().borderColor(Color.MAGENTA);
-    }
-
-    private String helpText() {
-        return "Tree navigation: Up/Down select, Left/Right collapse/expand, Enter activate action, Space toggle folder\n"
-            + "Actions: u use profile | R refresh all | a add repo | d delete repo | n create repo | c create profile\n"
-            + "Preview: Up/Down/PgUp/PgDn/Home/End scroll (mouse wheel supported by terminal)\n"
-            + "File editing: e edit selected file | Ctrl+S save | Esc exit edit mode\n"
-            + "Global: Tab switch pane | r reload | q quit";
     }
 
     private Element splashScreen() {
