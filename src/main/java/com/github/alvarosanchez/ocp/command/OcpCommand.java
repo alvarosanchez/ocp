@@ -69,7 +69,7 @@ public class OcpCommand implements Runnable {
                         + "); falling back to standard usage output."
                 );
                 System.err.println("Interactive mode cause chain: " + causeChain(e));
-                System.err.println("Tip: set TAMBOUI_BACKEND=panama or TAMBOUI_BACKEND=jline3 to force a backend.");
+                System.err.println("Tip: set TAMBOUI_BACKEND=panama to force the backend.");
             }
         }
         CommandLine.usage(this, System.out);

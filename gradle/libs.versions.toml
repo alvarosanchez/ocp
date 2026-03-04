@@ -23,7 +23,6 @@ testcontainers-gitserver = { module = "io.github.sparsick.testcontainers.gitserv
 commons-codec = { module = "commons-codec:commons-codec", version.ref = "commons-codec" }
 tamboui-bom = { module = "dev.tamboui:tamboui-bom", version.ref = "tamboui" }
 tamboui-toolkit = { module = "dev.tamboui:tamboui-toolkit" }
-tamboui-jline3-backend = { module = "dev.tamboui:tamboui-jline3-backend" }
 tamboui-panama-backend = { module = "dev.tamboui:tamboui-panama-backend" }
 
 [plugins]

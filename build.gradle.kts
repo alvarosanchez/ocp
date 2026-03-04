@@ -36,7 +36,6 @@ dependencies {
     implementation(libs.micronaut.serde.jackson)
     implementation(platform(libs.tamboui.bom))
     implementation(libs.tamboui.toolkit)
-    implementation(libs.tamboui.jline3.backend)
     implementation(libs.tamboui.panama.backend)
 
     runtimeOnly(libs.logback.classic)
@@ -98,10 +97,14 @@ graalvmNative {
             buildArgs.add("--no-fallback")
             buildArgs.add("--enable-monitoring=jfr")
             buildArgs.add("--enable-native-access=ALL-UNNAMED")
+            buildArgs.add("-H:+UnlockExperimentalVMOptions")
+            buildArgs.add("-H:+SharedArenaSupport")
             buildArgs.add("-H:IncludeResources=META-INF/ocp/version.txt|dev/tamboui/tui/bindings/.*\\.properties")
         }
         named("test") {
             buildArgs.add("--initialize-at-build-time=org.junit.platform.commons.logging.LoggerFactory\$DelegatingLogger")
+            buildArgs.add("-H:+UnlockExperimentalVMOptions")
+            buildArgs.add("-H:+SharedArenaSupport")
             quickBuild.set(true)
         }
     }
