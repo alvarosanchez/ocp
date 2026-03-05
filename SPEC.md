@@ -196,7 +196,7 @@ oss/opencode.json
 - In interactive mode, `c` (create profile) creates the profile inside the currently selected repository context (repository, profile, or file node), and prompts for optional inheritance using a selectable list of all resolvable profile names across configured repositories.
 - In interactive mode, action keys are explicit: `r` refresh selected repository, `R` refresh all repositories, `u` use selected profile, `e` edit selected file, and `p` jump to the selected profile's parent; `Enter` does not trigger these actions.
 - In interactive mode, refresh (`r`) is shown only when the selected repository context is git-backed; file-based repositories do not offer refresh actions.
-- Interactive tree profile nodes visually show inheritance using a relationship marker (`📦 child ⇢ 📦 parent`).
+- Interactive tree profile nodes visually show inheritance using a relationship marker (`👤 child ⇢ 👤 parent`).
 - Interactive tree includes inherited parent-only files under child profiles as read-only file nodes with subdued styling; inherited files cannot be edited.
 - In interactive mode, repository scaffold creation prompts for directory name, location path, and optional initial profile name; after scaffolding, the repository is automatically added to the registry.
 - File preview syntax highlighting in interactive mode uses external `bat` when available; if `bat` is unavailable or fails, preview falls back to plain text.

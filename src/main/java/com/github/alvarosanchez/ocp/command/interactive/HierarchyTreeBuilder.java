@@ -107,7 +107,7 @@ final class HierarchyTreeBuilder {
 
         String icon = switch (data.kind()) {
             case REPOSITORY -> "📦 ";
-            case PROFILE -> "📦 ";
+            case PROFILE -> "👤 ";
             case DIRECTORY -> "📁 ";
             case FILE -> data.inherited() ? "🔒 " : "📄 ";
         };
@@ -145,7 +145,7 @@ final class HierarchyTreeBuilder {
         if (data.kind() == NodeKind.PROFILE) {
             String parentProfileName = profileParentByName.get(data.profileName());
             if (parentProfileName != null && !parentProfileName.isBlank()) {
-                spans.add(Span.styled(node.label() + " ⇢ 📦 " + parentProfileName, labelStyle));
+                spans.add(Span.styled(node.label() + " ⇢ 👤 " + parentProfileName, labelStyle));
             } else {
                 spans.add(Span.styled(node.label(), labelStyle));
             }

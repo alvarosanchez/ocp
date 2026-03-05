@@ -146,10 +146,10 @@ class HierarchyTreeBuilderTest {
         RichTextElement richText = assertInstanceOf(RichTextElement.class, rendered);
         var spans = richText.text().lines().getFirst().spans();
         assertEquals(4, spans.size());
-        assertEquals("\uD83D\uDCE6 ", spans.get(0).content());
+        assertEquals("\uD83D\uDC64 ", spans.get(0).content());
         assertEquals(Color.MAGENTA, spans.get(0).style().fg().orElseThrow());
         assertTrue(spans.get(0).style().effectiveModifiers().contains(Modifier.BOLD));
-        assertEquals("active-profile ⇢ 📦 base-profile", spans.get(1).content());
+        assertEquals("active-profile ⇢ 👤 base-profile", spans.get(1).content());
         assertEquals(Color.BRIGHT_WHITE, spans.get(1).style().fg().orElseThrow());
         assertTrue(spans.get(1).style().effectiveModifiers().contains(Modifier.BOLD));
         assertEquals(" \u2713", spans.get(2).content());

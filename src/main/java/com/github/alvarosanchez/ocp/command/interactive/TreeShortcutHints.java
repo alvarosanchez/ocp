@@ -5,8 +5,8 @@ import java.util.List;
 final class TreeShortcutHints {
 
     private static final List<Shortcut> NAVIGATION_SHORTCUTS = List.of(
-        new Shortcut("Up/Down", "select"),
-        new Shortcut("Left/Right", "collapse/expand")
+        Shortcut.UP_DOWN_SELECT,
+        Shortcut.LEFT_RIGHT_COLLAPSE_EXPAND
     );
 
     static ShortcutHints forSelection(
@@ -32,16 +32,16 @@ final class TreeShortcutHints {
         return switch (selectedNode.kind()) {
             case REPOSITORY -> appendRefreshActionIfAvailable(
                 List.of(
-                    new Shortcut("c", "create profile"),
-                    new Shortcut("d", "delete repo")
+                    Shortcut.CREATE_PROFILE,
+                    Shortcut.DELETE_REPOSITORY
                 ),
                 repositoryRefreshable
             );
             case PROFILE, DIRECTORY -> withParentAndRefresh(
                 List.of(
-                    new Shortcut("u", "use profile"),
-                    new Shortcut("c", "create profile"),
-                    new Shortcut("d", "delete profile")
+                    Shortcut.USE_PROFILE,
+                    Shortcut.CREATE_PROFILE,
+                    Shortcut.DELETE_PROFILE
                 ),
                 selectedProfileHasParent,
                 repositoryRefreshable
@@ -57,10 +57,10 @@ final class TreeShortcutHints {
     private static List<Shortcut> fileActions(NodeRef selectedNode) {
         List<Shortcut> actions = new java.util.ArrayList<>();
         if (!selectedNode.inherited()) {
-            actions.add(new Shortcut("e", "edit file"));
+            actions.add(Shortcut.EDIT_FILE);
         }
-        actions.add(new Shortcut("u", "use profile"));
-        actions.add(new Shortcut("d", "delete profile"));
+        actions.add(Shortcut.USE_PROFILE);
+        actions.add(Shortcut.DELETE_PROFILE);
         return List.copyOf(actions);
     }
 
@@ -71,10 +71,10 @@ final class TreeShortcutHints {
     ) {
         List<Shortcut> actions = new java.util.ArrayList<>(baseActions);
         if (selectedProfileHasParent) {
-            actions.add(new Shortcut("p", "go parent"));
+            actions.add(Shortcut.GO_PARENT);
         }
         if (repositoryRefreshable) {
-            actions.add(new Shortcut("r", "refresh repo"));
+            actions.add(Shortcut.REFRESH_REPOSITORY);
         }
         return List.copyOf(actions);
     }
@@ -84,7 +84,7 @@ final class TreeShortcutHints {
             return baseActions;
         }
         List<Shortcut> actions = new java.util.ArrayList<>(baseActions);
-        actions.add(new Shortcut("r", "refresh repo"));
+        actions.add(Shortcut.REFRESH_REPOSITORY);
         return List.copyOf(actions);
     }
 
@@ -92,5 +92,26 @@ final class TreeShortcutHints {
     }
 
     record Shortcut(String key, String description) {
+        static final Shortcut TAB_SWITCH_PANE = new Shortcut("Tab", "switch pane");
+        static final Shortcut ADD_EXISTING_REPOSITORY = new Shortcut("a", "add existing repo");
+        static final Shortcut CREATE_NEW_REPOSITORY = new Shortcut("n", "create new repo");
+        static final Shortcut REFRESH_ALL_REPOSITORIES = new Shortcut("R", "refresh all");
+        static final Shortcut QUIT = new Shortcut("q", "quit");
+
+        static final Shortcut ENTER_NEXT_APPLY = new Shortcut("Enter", "next/apply");
+        static final Shortcut BACKSPACE_DELETE = new Shortcut("Backspace", "delete");
+        static final Shortcut BACKSPACE_CLEAR = new Shortcut("Backspace", "clear");
+        static final Shortcut ESC_CANCEL = new Shortcut("Esc", "cancel");
+        static final Shortcut UP_DOWN_SELECT = new Shortcut("Up/Down", "select");
+
+        static final Shortcut LEFT_RIGHT_COLLAPSE_EXPAND = new Shortcut("Left/Right", "collapse/expand");
+        static final Shortcut REFRESH_REPOSITORY = new Shortcut("r", "refresh repository");
+        static final Shortcut CREATE_PROFILE = new Shortcut("c", "create profile");
+        static final Shortcut DELETE_REPOSITORY = new Shortcut("d", "delete repo");
+        static final Shortcut USE_PROFILE = new Shortcut("u", "use profile");
+        static final Shortcut ACTIVATE_PROFILE = new Shortcut("u", "activate profile");
+        static final Shortcut DELETE_PROFILE = new Shortcut("d", "delete profile");
+        static final Shortcut EDIT_FILE = new Shortcut("e", "edit file");
+        static final Shortcut GO_PARENT = new Shortcut("p", "go parent");
     }
 }

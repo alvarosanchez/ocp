@@ -50,23 +50,28 @@ public final class InteractiveApp extends ToolkitApp {
     private static final int TREE_MAX_CHILDREN = 200;
     private static final String REPOSITORY_METADATA_FILE = "repository.json";
     private static final String REFRESH_CANCELLED_MESSAGE = "Refresh cancelled. Local changes were left untouched.";
+    private static final String STATUS_SELECT_NODE_FIRST = "Select a repository, profile, or file first.";
+    private static final String STATUS_INHERITED_FILE_READ_ONLY = "Inherited file is read-only and cannot be edited.";
+    private static final String ERROR_REPOSITORY_SELECTION_REQUIRED = "Repository selection is required.";
+    private static final String STATUS_DELETE_CANCELLED_REPOSITORY_MISMATCH = "Delete cancelled: repository name mismatch.";
+    private static final String STATUS_DELETE_CANCELLED_PROFILE_MISMATCH = "Delete cancelled: profile name mismatch.";
     private static final List<TreeShortcutHints.Shortcut> GLOBAL_SHORTCUTS = List.of(
-        new TreeShortcutHints.Shortcut("Tab", "switch pane"),
-        new TreeShortcutHints.Shortcut("a", "add existing repo"),
-        new TreeShortcutHints.Shortcut("n", "create new repo"),
-        new TreeShortcutHints.Shortcut("R", "refresh all"),
-        new TreeShortcutHints.Shortcut("q", "quit")
+        TreeShortcutHints.Shortcut.TAB_SWITCH_PANE,
+        TreeShortcutHints.Shortcut.ADD_EXISTING_REPOSITORY,
+        TreeShortcutHints.Shortcut.CREATE_NEW_REPOSITORY,
+        TreeShortcutHints.Shortcut.REFRESH_ALL_REPOSITORIES,
+        TreeShortcutHints.Shortcut.QUIT
     );
     private static final List<TreeShortcutHints.Shortcut> PROMPT_SHORTCUTS = List.of(
-        new TreeShortcutHints.Shortcut("Enter", "next/apply"),
-        new TreeShortcutHints.Shortcut("Backspace", "delete"),
-        new TreeShortcutHints.Shortcut("Esc", "cancel")
+        TreeShortcutHints.Shortcut.ENTER_NEXT_APPLY,
+        TreeShortcutHints.Shortcut.BACKSPACE_DELETE,
+        TreeShortcutHints.Shortcut.ESC_CANCEL
     );
     private static final List<TreeShortcutHints.Shortcut> PROMPT_OPTION_SHORTCUTS = List.of(
-        new TreeShortcutHints.Shortcut("Up/Down", "select"),
-        new TreeShortcutHints.Shortcut("Enter", "next/apply"),
-        new TreeShortcutHints.Shortcut("Backspace", "clear"),
-        new TreeShortcutHints.Shortcut("Esc", "cancel")
+        TreeShortcutHints.Shortcut.UP_DOWN_SELECT,
+        TreeShortcutHints.Shortcut.ENTER_NEXT_APPLY,
+        TreeShortcutHints.Shortcut.BACKSPACE_CLEAR,
+        TreeShortcutHints.Shortcut.ESC_CANCEL
     );
     private static final String SPLASH_LOGO_RESOURCE = "/splash-logo.txt";
     private static final List<String> DEFAULT_SPLASH_LOGO_LINES = List.of(
@@ -275,14 +280,14 @@ public final class InteractiveApp extends ToolkitApp {
         }
         if (event.isChar('d')) {
             if (selectedNode == null) {
-                status = "Select a repository, profile, or file first.";
+                status = STATUS_SELECT_NODE_FIRST;
                 return EventResult.HANDLED;
             }
 
             if (selectedNode.kind() == NodeKind.REPOSITORY) {
                 String repositoryName = selectedRepositoryName();
                 if (repositoryName == null) {
-                    status = "Select a repository, profile, or file first.";
+                    status = STATUS_SELECT_NODE_FIRST;
                     return EventResult.HANDLED;
                 }
 
@@ -326,7 +331,7 @@ public final class InteractiveApp extends ToolkitApp {
 
             String profileName = selectedProfileName();
             if (profileName == null) {
-                status = "Select a repository, profile, or file first.";
+                status = STATUS_SELECT_NODE_FIRST;
                 return EventResult.HANDLED;
             }
             prompt = PromptState.single(
@@ -348,7 +353,7 @@ public final class InteractiveApp extends ToolkitApp {
         if (event.isChar('c')) {
             String repositoryName = selectedRepositoryName();
             if (repositoryName == null) {
-                status = "Select a repository, profile, or file first.";
+                status = STATUS_SELECT_NODE_FIRST;
                 return EventResult.HANDLED;
             }
             try {
@@ -378,7 +383,7 @@ public final class InteractiveApp extends ToolkitApp {
         if (event.isChar('e')) {
             if (selectedNode != null && selectedNode.kind() == NodeKind.FILE) {
                 if (selectedNode.inherited()) {
-                    status = "Inherited file is read-only and cannot be edited.";
+                    status = STATUS_INHERITED_FILE_READ_ONLY;
                     return EventResult.HANDLED;
                 }
                 editMode = true;
@@ -461,7 +466,7 @@ public final class InteractiveApp extends ToolkitApp {
                 case CREATE_PROFILE -> {
                     String repositoryName = currentPrompt.expectedConfirmation;
                     if (repositoryName == null || repositoryName.isBlank()) {
-                        throw new IllegalStateException("Repository selection is required.");
+                        throw new IllegalStateException(ERROR_REPOSITORY_SELECTION_REQUIRED);
                     }
                     String parentProfileName = currentPrompt.values.get(1);
                     profileService.createProfile(currentPrompt.values.getFirst(), repositoryName, parentProfileName);
@@ -484,7 +489,7 @@ public final class InteractiveApp extends ToolkitApp {
                 case DELETE_REPOSITORY -> {
                     String confirmation = currentPrompt.values.getFirst();
                     if (!confirmation.equals(currentPrompt.expectedConfirmation)) {
-                        statusMessage = "Delete cancelled: repository name mismatch.";
+                        statusMessage = STATUS_DELETE_CANCELLED_REPOSITORY_MISMATCH;
                         reloadState();
                         status = statusMessage;
                         return;
@@ -495,7 +500,7 @@ public final class InteractiveApp extends ToolkitApp {
                 case DELETE_REPOSITORY_FORCE -> {
                     String confirmation = currentPrompt.values.getFirst();
                     if (!confirmation.equals(currentPrompt.expectedConfirmation)) {
-                        statusMessage = "Delete cancelled: repository name mismatch.";
+                        statusMessage = STATUS_DELETE_CANCELLED_REPOSITORY_MISMATCH;
                         reloadState();
                         status = statusMessage;
                         return;
@@ -506,7 +511,7 @@ public final class InteractiveApp extends ToolkitApp {
                 case DELETE_REPOSITORY_FILE_BASED -> {
                     String confirmation = currentPrompt.values.getFirst();
                     if (!confirmation.equals(currentPrompt.expectedConfirmation)) {
-                        statusMessage = "Delete cancelled: repository name mismatch.";
+                        statusMessage = STATUS_DELETE_CANCELLED_REPOSITORY_MISMATCH;
                         reloadState();
                         status = statusMessage;
                         return;
@@ -523,14 +528,14 @@ public final class InteractiveApp extends ToolkitApp {
                     String confirmation = currentPrompt.values.getFirst();
                     String profileName = currentPrompt.expectedConfirmation;
                     if (!confirmation.equals(profileName)) {
-                        statusMessage = "Delete cancelled: profile name mismatch.";
+                        statusMessage = STATUS_DELETE_CANCELLED_PROFILE_MISMATCH;
                         reloadState();
                         status = statusMessage;
                         return;
                     }
                     String repositoryName = selectedRepositoryName();
                     if (repositoryName == null || repositoryName.isBlank()) {
-                        throw new IllegalStateException("Repository selection is required.");
+                        throw new IllegalStateException(ERROR_REPOSITORY_SELECTION_REQUIRED);
                     }
                     profileService.deleteProfile(profileName, repositoryName);
                     statusMessage = "Deleted profile `" + profileName + "` from repository `" + repositoryName + "`.";
@@ -568,7 +573,7 @@ public final class InteractiveApp extends ToolkitApp {
     private void refreshSelectedRepository() {
         String repositoryName = selectedRepositoryName();
         if (repositoryName == null) {
-            status = "Select a repository, profile, or file first.";
+            status = STATUS_SELECT_NODE_FIRST;
             return;
         }
         if (!isRepositoryRefreshable(repositoryName)) {
@@ -862,7 +867,7 @@ public final class InteractiveApp extends ToolkitApp {
             return;
         }
         if (selectedNode.inherited()) {
-            status = "Inherited file is read-only and cannot be edited.";
+            status = STATUS_INHERITED_FILE_READ_ONLY;
             return;
         }
         Path filePath = selectedNode.path();

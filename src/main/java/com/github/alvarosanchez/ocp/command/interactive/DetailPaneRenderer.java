@@ -56,7 +56,7 @@ final class DetailPaneRenderer {
             repositoryElements.add(detailField("Name", selectedNode.repositoryName()));
             repositoryElements.add(detailField("Path", String.valueOf(selectedNode.path())));
             if (repositoryRefreshable) {
-                repositoryElements.add(ShortcutHintRenderer.line(List.of(new TreeShortcutHints.Shortcut("r", "refresh repository"))));
+                repositoryElements.add(ShortcutHintRenderer.line(List.of(TreeShortcutHints.Shortcut.REFRESH_REPOSITORY)));
             }
             return column(
                 repositoryElements.toArray(Element[]::new)
@@ -78,12 +78,12 @@ final class DetailPaneRenderer {
             profileElements.add(detailField("Status", profile != null && profile.active() ? "active" : "inactive"));
             profileElements.add(detailField("Updates", profile != null && profile.updateAvailable() ? "available" : "up to date"));
             List<TreeShortcutHints.Shortcut> profileShortcuts = new ArrayList<>();
-            profileShortcuts.add(new TreeShortcutHints.Shortcut("u", "activate profile"));
+            profileShortcuts.add(TreeShortcutHints.Shortcut.ACTIVATE_PROFILE);
             if (selectedProfileHasParent) {
-                profileShortcuts.add(new TreeShortcutHints.Shortcut("p", "go parent"));
+                profileShortcuts.add(TreeShortcutHints.Shortcut.GO_PARENT);
             }
             if (repositoryRefreshable) {
-                profileShortcuts.add(new TreeShortcutHints.Shortcut("r", "refresh repository"));
+                profileShortcuts.add(TreeShortcutHints.Shortcut.REFRESH_REPOSITORY);
             }
             profileElements.add(ShortcutHintRenderer.line(profileShortcuts));
             return column(
@@ -99,7 +99,7 @@ final class DetailPaneRenderer {
                 text("Directory").bold().fg(Color.CYAN),
                 detailField("Path", String.valueOf(selectedNode.path())),
                 ShortcutHintRenderer.line(List.of(
-                    new TreeShortcutHints.Shortcut("Left/Right", "collapse/expand")
+                    TreeShortcutHints.Shortcut.LEFT_RIGHT_COLLAPSE_EXPAND
                 ))
             )
                 .id(detailId)
