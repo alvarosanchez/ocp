@@ -52,7 +52,7 @@ public record OcpConfigFile(OcpConfigOptions config, List<RepositoryEntry> repos
      * Repository registration entry from OCP configuration.
      *
      * @param name repository display name
-     * @param uri remote repository URI
+     * @param uri remote repository URI, or {@code null} for file-based repositories
      * @param localPath local filesystem path where the repository is stored
      */
     @Serdeable

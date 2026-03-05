@@ -54,4 +54,31 @@ class PromptStateTest {
         assertEquals("", prompt.currentValue());
         assertEquals(0, prompt.currentField);
     }
+
+    @Test
+    void optionFieldCyclesValuesAndBackspaceResetsToFirstOption() {
+        PromptState prompt = PromptState.multiWithOptions(
+            PromptAction.CREATE_PROFILE,
+            "Create profile",
+            List.of("Profile name", "Inherit from"),
+            List.of(List.of(), List.of("", "base", "team"))
+        );
+
+        assertTrue(prompt.nextField());
+        assertTrue(prompt.currentFieldHasOptions());
+        assertEquals("", prompt.currentValue());
+
+        prompt.selectNextOption();
+        assertEquals("base", prompt.currentValue());
+        prompt.selectNextOption();
+        assertEquals("team", prompt.currentValue());
+        prompt.selectNextOption();
+        assertEquals("", prompt.currentValue());
+
+        prompt.selectPreviousOption();
+        assertEquals("team", prompt.currentValue());
+
+        prompt.deleteLast();
+        assertEquals("", prompt.currentValue());
+    }
 }

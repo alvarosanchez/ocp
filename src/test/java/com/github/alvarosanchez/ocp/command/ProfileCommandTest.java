@@ -153,6 +153,26 @@ class ProfileCommandTest {
     }
 
     @Test
+    void createSupportsOptionalExtendsFromParameter() throws IOException {
+        Path repositoryRoot = Path.of(System.getProperty("ocp.working.dir"));
+        Files.createDirectories(repositoryRoot.resolve("base"));
+        Files.writeString(
+            repositoryRoot.resolve("repository.json"),
+            serializeAsJson(new RepositoryConfigFile(List.of(new ProfileEntry("base"))))
+        );
+
+        CommandResult result = execute("profile", "create", "child", "--extends-from", "base");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("Created profile `child` extending from `base`"));
+        assertTrue(Files.isDirectory(repositoryRoot.resolve("child")));
+
+        RepositoryConfigFile metadata = readRepositoryMetadata(repositoryRoot.resolve("repository.json"));
+        ProfileEntry child = metadata.profiles().stream().filter(profile -> profile.name().equals("child")).findFirst().orElseThrow();
+        assertEquals("base", child.extendsFrom());
+    }
+
+    @Test
     void useLinksProfileFilesBacksUpExistingFileAndSetsActiveProfile() throws IOException {
         writeRepositoryMetadata("repo-local", new RepositoryConfigFile(List.of(new ProfileEntry("corporate"))));
         Path sourceProfileDir = repositoriesCacheDir().resolve("repo-local").resolve("corporate");
@@ -602,6 +622,53 @@ class ProfileCommandTest {
         assertEquals(0, result.exitCode());
         assertTrue(result.stdout().contains("Refreshed all repositories"));
         assertTrue(Files.exists(outdatedFile));
+    }
+
+    @Test
+    void repositoryRefreshForFileBasedRepositoryIsNoOpWithMessage() throws IOException {
+        Path fileBasedRepository = tempDir.resolve("file-based-repo");
+        Files.createDirectories(fileBasedRepository);
+        Files.writeString(
+            fileBasedRepository.resolve("repository.json"),
+            serializeAsJson(new RepositoryConfigFile(List.of(new ProfileEntry("ops"))))
+        );
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-file", null, fileBasedRepository.toString()))
+            )
+        );
+
+        CommandResult result = execute("repository", "refresh", "repo-file");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("file-based; nothing to refresh"));
+    }
+
+    @Test
+    void repositoryRefreshAllForOnlyFileBasedRepositoriesIsNoOpWithMessage() throws IOException {
+        Path fileBasedRepositoryOne = tempDir.resolve("file-based-repo-one");
+        Path fileBasedRepositoryTwo = tempDir.resolve("file-based-repo-two");
+        Files.createDirectories(fileBasedRepositoryOne);
+        Files.createDirectories(fileBasedRepositoryTwo);
+        Files.writeString(fileBasedRepositoryOne.resolve("repository.json"), serializeAsJson(new RepositoryConfigFile(List.of())));
+        Files.writeString(fileBasedRepositoryTwo.resolve("repository.json"), serializeAsJson(new RepositoryConfigFile(List.of())));
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(
+                    new RepositoryEntry("repo-file-one", null, fileBasedRepositoryOne.toString()),
+                    new RepositoryEntry("repo-file-two", null, fileBasedRepositoryTwo.toString())
+                )
+            )
+        );
+
+        CommandResult result = execute("repository", "refresh");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("All configured repositories are file-based; nothing to refresh"));
     }
 
     @Test

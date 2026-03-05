@@ -26,7 +26,7 @@ Many users need to switch between different model/provider setups depending on c
 
 ## Key terms
 
-- Repository: Git repository containing `repository.json` and one directory per profile.
+- Repository: Git repository or local directory containing `repository.json` and one directory per profile.
 - Profile: named set of OpenCode config files (for example `opencode.json`).
 - Registry: local `ocp` configuration file listing added repositories.
 
@@ -35,6 +35,7 @@ Many users need to switch between different model/provider setups depending on c
 ```bash
 ocp profile list
 ocp repository add git@github.com:my-company/my-repo.git --name my-repo
+ocp repository add /absolute/path/to/my-repo --name my-local-repo
 ocp profile use my-company
 ```
 
@@ -75,9 +76,11 @@ ocp profile use my-company
 Rules:
 
 - `config.activeProfile` defaults to `null` (no active profile selected).
-- `repositories[*].uri` is required.
+- `repositories[*].uri` is optional (`null` for file-based repositories).
 - `repositories[*].name` is required.
-- `repositories[*].localPath` is derived from repository storage directory and repository name.
+- `repositories[*].localPath` is required after normalization.
+  - Git-backed repository: derived from repository storage directory and repository name.
+  - File-based repository: normalized absolute path provided by the user.
 
 ### `repository.json` schema
 
@@ -137,21 +140,35 @@ oss/opencode.json
 | `ocp help <command>` | Implemented | Print help for command/subcommand. |
 | `ocp profile list` | Implemented | Print a table of profiles with name, description, local commit metadata, and non-fatal remote update hints; include repository name when width budget allows. |
 | `ocp profile` | Implemented | Print currently active profile with repository/version metadata and update hints. |
-| `ocp profile create [name]` | Implemented | Create profile folder and register it in repository metadata. Defaults to `default` when no name is provided. |
+| `ocp profile create [name] [--extends-from <parent>]` | Implemented | Create profile folder and register it in repository metadata, optionally extending from an existing profile. Defaults to `default` when no name is provided. |
 | `ocp profile use <name>` | Implemented | Switch active profile by linking profile files to OpenCode config location. |
-| `ocp repository add <uri> --name <name>` | Implemented | Clone repository into local storage and register it in `config.json`. |
+| `ocp repository add <uri-or-path> --name <name>` | Implemented | Add a repository from a Git URI or local path; Git URIs are cloned into local storage and local paths are registered directly. |
 | `ocp repository list` | Implemented | Print configured repositories as rounded CLI boxes with name, URI, local clone path, and resolved profile names from each repository metadata file. |
-| `ocp repository delete <name>` | Implemented | Remove repository entry from registry and delete local clone. |
+| `ocp repository delete <name> [--force] [--delete-local-path]` | Implemented | Remove repository entry from registry. Git-backed repos require `--force` when local changes exist; file-based repos keep the local folder unless `--delete-local-path` is provided. |
 | `ocp repository create <name> [--profile-name <profile>]` | Implemented | Initialize new profile repository with `repository.json` and initial profile. |
-| `ocp repository refresh [name]` | Implemented | Pull latest changes for a specific repository, or for all repositories when no name is provided. Reapplies active profile resolution when refreshed repository data affects the active profile lineage. |
+| `ocp repository refresh [name]` | Implemented | Pull latest changes for git-backed repositories. For file-based repositories, refresh is a no-op with a user-facing message. Reapplies active profile resolution when refreshed repository data affects the active profile lineage. |
 
 ## Operational semantics
 
 ### Repository registration normalization
 
-- `ocp repository add` requires both URI and repository name.
-- Trim URI and repository name before validation and persistence.
-- Compute `localPath` from repository storage directory and configured repository name.
+- `ocp repository add` requires a source string and repository name.
+- Trim source and repository name before validation and persistence.
+- Source detection:
+  - Git URI-like values are treated as remote repositories and cloned.
+  - Local path-like values (including `.`) are resolved to absolute paths and registered as file-based repositories.
+- For Git-backed repositories, compute `localPath` from repository storage directory and repository name.
+- For file-based repositories, persist `uri = null` and `localPath = <normalized absolute path>`.
+
+### Repository deletion semantics
+
+- `ocp repository delete <name>` removes the registry entry in all cases.
+- Git-backed repositories:
+  - If local git changes exist, deletion fails unless `--force` is provided.
+  - With clean working tree, or with `--force`, local clone path is deleted.
+- File-based repositories:
+  - By default, the local folder is preserved.
+  - `--delete-local-path` also removes the local folder.
 
 ### Profile uniqueness
 
@@ -172,6 +189,16 @@ oss/opencode.json
 
 - Running `ocp` without a subcommand starts an interactive full-screen terminal UI when `System.console()` is available and `TERM` is not `dumb`.
 - Interactive mode exposes profile and repository operations (`use`, `create`, `add`, `delete`, and refresh actions) and uses the same service layer semantics as subcommands.
+- In interactive mode, `d` (delete) is context-sensitive: on repository nodes it deletes the repository, and on profile/file/directory nodes it deletes the selected profile.
+- In interactive mode, repository deletion prompts are context-aware:
+  - Git-backed repos with local changes show a warning and require explicit force confirmation.
+  - File-based repos ask whether to also delete the local folder.
+- In interactive mode, `c` (create profile) creates the profile inside the currently selected repository context (repository, profile, or file node), and prompts for optional inheritance using a selectable list of all resolvable profile names across configured repositories.
+- In interactive mode, action keys are explicit: `r` refresh selected repository, `R` refresh all repositories, `u` use selected profile, `e` edit selected file, and `p` jump to the selected profile's parent; `Enter` does not trigger these actions.
+- In interactive mode, refresh (`r`) is shown only when the selected repository context is git-backed; file-based repositories do not offer refresh actions.
+- Interactive tree profile nodes visually show inheritance using a relationship marker (`📦 child ⇢ 📦 parent`).
+- Interactive tree includes inherited parent-only files under child profiles as read-only file nodes with subdued styling; inherited files cannot be edited.
+- In interactive mode, repository scaffold creation prompts for directory name, location path, and optional initial profile name; after scaffolding, the repository is automatically added to the registry.
 - File preview syntax highlighting in interactive mode uses external `bat` when available; if `bat` is unavailable or fails, preview falls back to plain text.
 - If interactive UI initialization fails, behavior falls back to standard Picocli root usage output.
 
@@ -239,7 +266,7 @@ oss/opencode.json
 - Repository config loading
   - missing `config.json`: treated as empty repository list
   - invalid `config.json`: exits `1`, reports registry read failure
-  - repository URI/name normalization: trims URI and name, computes `localPath`
+- repository source/name normalization: trims source and name, computes or normalizes `localPath`
 - Git operations
   - clone command failure: exits `1`, includes exit-code detail
   - interrupted git operation: thread interrupt flag is restored and command fails cleanly

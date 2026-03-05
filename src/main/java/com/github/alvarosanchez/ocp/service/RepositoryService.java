@@ -10,6 +10,7 @@ import io.micronaut.serde.ObjectMapper;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -64,36 +65,50 @@ public final class RepositoryService {
     /**
      * Adds a repository to the registry and clones it locally.
      *
-     * @param repositoryUri repository URI to add
+     * @param repositoryReference repository URI or local path to add
      * @param repositoryName repository name to register
      * @return added repository entry
      */
-    public RepositoryEntry add(String repositoryUri, String repositoryName) {
-        String uri = repositoryUri == null ? "" : repositoryUri.trim();
-        if (uri.isBlank()) {
-            throw new IllegalStateException("Repository URI is required.");
+    public RepositoryEntry add(String repositoryReference, String repositoryName) {
+        String source = repositoryReference == null ? "" : repositoryReference.trim();
+        if (source.isBlank()) {
+            throw new IllegalStateException("Repository URI or local path is required.");
         }
         String name = repositoryName == null ? "" : repositoryName.trim();
         if (name.isBlank()) {
             throw new IllegalStateException("Repository name is required.");
         }
 
+        RepositorySource repositorySource = resolveRepositorySource(source);
+        Path configuredLocalPath = repositorySource.uri() == null
+            ? repositorySource.localPath()
+            : repositoriesDirectory().resolve(name);
+        String normalizedConfiguredLocalPath = normalizeAbsolutePath(configuredLocalPath).toString();
+
         List<RepositoryEntry> repositories = new ArrayList<>(load());
         for (RepositoryEntry repository : repositories) {
-            if (repository.uri().equals(uri)) {
-                throw new IllegalStateException("Repository URI `" + uri + "` is already configured.");
-            }
             if (repository.name().equals(name)) {
                 throw new IllegalStateException("Repository `" + name + "` is already configured.");
             }
+            if (repositorySource.uri() != null && repositorySource.uri().equals(repository.uri())) {
+                throw new IllegalStateException("Repository URI `" + repositorySource.uri() + "` is already configured.");
+            }
+            if (normalizedConfiguredLocalPath.equals(normalizeAbsolutePath(Path.of(repository.localPath())).toString())) {
+                throw new IllegalStateException("Repository local path `" + normalizedConfiguredLocalPath + "` is already configured.");
+            }
         }
 
-        RepositoryEntry added = new RepositoryEntry(name, uri, repositoriesDirectory().resolve(name).toString());
-        Path localPath = Path.of(added.localPath());
-        if (Files.exists(localPath)) {
-            deleteRecursively(localPath);
+        RepositoryEntry added;
+        if (repositorySource.uri() == null) {
+            added = new RepositoryEntry(name, null, normalizedConfiguredLocalPath);
+        } else {
+            Path localPath = configuredLocalPath;
+            added = new RepositoryEntry(name, repositorySource.uri(), localPath.toString());
+            if (Files.exists(localPath)) {
+                deleteRecursively(localPath);
+            }
+            gitRepositoryClient.clone(repositorySource.uri(), localPath);
         }
-        gitRepositoryClient.clone(uri, localPath);
 
         repositories.add(added);
         saveConfig(new OcpConfigFile(loadConfigFile().config(), repositories));
@@ -101,36 +116,56 @@ public final class RepositoryService {
         return added;
     }
 
-    /**
-     * Deletes a configured repository and removes its local clone.
-     *
-     * @param repositoryName repository name to delete
-     * @return deleted repository entry
-     */
     public RepositoryEntry delete(String repositoryName) {
-        if (repositoryName == null || repositoryName.isBlank()) {
-            throw new IllegalStateException("Repository name is required.");
-        }
+        return delete(repositoryName, false, false);
+    }
+
+    public RepositoryEntry delete(String repositoryName, boolean force, boolean deleteLocalPathForFileBased) {
+        String normalizedRepositoryName = normalizeRepositoryName(repositoryName);
 
         List<RepositoryEntry> repositories = new ArrayList<>(load());
-        RepositoryEntry deletedRepository = null;
+        RepositoryEntry deletedRepository = findConfiguredRepository(normalizedRepositoryName, repositories);
+        Path localPath = Path.of(deletedRepository.localPath());
+        boolean gitBacked = isGitBacked(deletedRepository);
+        if (gitBacked && !force && hasGitLocalChanges(localPath)) {
+            throw new IllegalStateException(
+                "Repository `"
+                    + normalizedRepositoryName
+                    + "` has local git changes in `"
+                    + localPath
+                    + "`. Retry with `--force` to delete it."
+            );
+        }
+
         List<RepositoryEntry> remaining = new ArrayList<>();
         for (RepositoryEntry repository : repositories) {
-            if (repository.name().equals(repositoryName)) {
-                deletedRepository = repository;
+            if (repository.name().equals(normalizedRepositoryName)) {
                 continue;
             }
             remaining.add(repository);
         }
 
-        if (deletedRepository == null) {
-            throw new IllegalStateException("Repository `" + repositoryName + "` is not configured.");
+        boolean deleteLocalPath = gitBacked || deleteLocalPathForFileBased;
+        if (deleteLocalPath) {
+            deleteRecursively(localPath);
         }
-
         saveConfig(new OcpConfigFile(loadConfigFile().config(), remaining));
-        deleteRecursively(Path.of(deletedRepository.localPath()));
 
         return deletedRepository;
+    }
+
+    public RepositoryDeletePreview inspectDelete(String repositoryName) {
+        String normalizedRepositoryName = normalizeRepositoryName(repositoryName);
+        RepositoryEntry repository = findConfiguredRepository(normalizedRepositoryName, load());
+        boolean gitBacked = isGitBacked(repository);
+        boolean hasLocalChanges = gitBacked && hasGitLocalChanges(Path.of(repository.localPath()));
+        return new RepositoryDeletePreview(
+            repository.name(),
+            repository.uri(),
+            repository.localPath(),
+            gitBacked,
+            hasLocalChanges
+        );
     }
 
     /**
@@ -141,11 +176,18 @@ public final class RepositoryService {
      * @return absolute path of the created repository
      */
     public Path create(String repositoryName, String profileName) {
+        return create(repositoryName, profileName, null);
+    }
+
+    public Path create(String repositoryName, String profileName, String repositoryLocation) {
         if (repositoryName == null || repositoryName.isBlank()) {
             throw new IllegalStateException("Repository name is required.");
         }
 
-        Path repositoryPath = workingDirectory().resolve(repositoryName.trim()).toAbsolutePath();
+        Path repositoryPath = resolveCreateLocation(repositoryLocation)
+            .resolve(repositoryName.trim())
+            .toAbsolutePath()
+            .normalize();
         if (Files.exists(repositoryPath)) {
             throw new IllegalStateException("Directory already exists: " + repositoryPath);
         }
@@ -165,6 +207,16 @@ public final class RepositoryService {
             return repositoryPath;
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to create repository at " + repositoryPath, e);
+        }
+    }
+
+    public RepositoryEntry createAndAdd(String repositoryName, String profileName, String repositoryLocation) {
+        Path createdRepository = create(repositoryName, profileName, repositoryLocation);
+        try {
+            return add(createdRepository.toString(), repositoryName);
+        } catch (RuntimeException e) {
+            deleteRecursively(createdRepository);
+            throw e;
         }
     }
 
@@ -193,24 +245,141 @@ public final class RepositoryService {
     private List<RepositoryEntry> normalizeEntries(List<RepositoryEntry> entries) {
         List<RepositoryEntry> normalized = new ArrayList<>();
         for (RepositoryEntry entry : entries) {
-            String uri = entry.uri() == null ? "" : entry.uri().trim();
-            if (uri.isBlank()) {
-                continue;
-            }
             String name = entry.name() == null ? "" : entry.name().trim();
             if (name.isBlank()) {
                 continue;
             }
-            Path localPath = repositoriesDirectory().resolve(name);
+
+            String uri = normalizeBlankToNull(entry.uri());
+            String localPath = normalizeBlankToNull(entry.localPath());
+            if (uri != null) {
+                localPath = repositoriesDirectory().resolve(name).toString();
+            } else {
+                if (localPath == null) {
+                    continue;
+                }
+                localPath = normalizeAbsolutePath(Path.of(localPath)).toString();
+            }
+
             normalized.add(
                 new RepositoryEntry(
                     name,
                     uri,
-                    localPath.toString()
+                    localPath
                 )
             );
         }
         return normalized;
+    }
+
+    private RepositorySource resolveRepositorySource(String source) {
+        if (!looksLikeLocalPath(source)) {
+            return new RepositorySource(source, null);
+        }
+
+        Path localPath = resolveLocalPath(source);
+        if (!Files.exists(localPath)) {
+            throw new IllegalStateException("Local repository path does not exist: " + localPath);
+        }
+        if (!Files.isDirectory(localPath)) {
+            throw new IllegalStateException("Local repository path is not a directory: " + localPath);
+        }
+        return new RepositorySource(null, localPath);
+    }
+
+    private boolean looksLikeLocalPath(String source) {
+        if (source.equals(".") || source.equals("..") || source.startsWith("./") || source.startsWith("../")) {
+            return true;
+        }
+        if (source.startsWith("/") || source.startsWith("~/") || source.matches("^[A-Za-z]:[\\\\/].*")) {
+            return true;
+        }
+        try {
+            Path candidate = resolveLocalPath(source);
+            return Files.exists(candidate);
+        } catch (IllegalStateException e) {
+            return false;
+        }
+    }
+
+    private Path resolveLocalPath(String source) {
+        String resolvedSource = source;
+        if (source.startsWith("~/")) {
+            resolvedSource = Path.of(System.getProperty("user.home")).resolve(source.substring(2)).toString();
+        }
+
+        try {
+            Path candidate = Path.of(resolvedSource);
+            if (candidate.isAbsolute()) {
+                return normalizeAbsolutePath(candidate);
+            }
+            return normalizeAbsolutePath(workingDirectory().resolve(candidate));
+        } catch (InvalidPathException e) {
+            throw new IllegalStateException("Invalid local repository path: " + source, e);
+        }
+    }
+
+    private Path resolveCreateLocation(String repositoryLocation) {
+        String location = repositoryLocation == null ? "" : repositoryLocation.trim();
+        if (location.isBlank()) {
+            return workingDirectory().toAbsolutePath().normalize();
+        }
+        return resolveLocalPath(location);
+    }
+
+    private Path normalizeAbsolutePath(Path path) {
+        return path.toAbsolutePath().normalize();
+    }
+
+    private String normalizeBlankToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isBlank() ? null : normalized;
+    }
+
+    private String normalizeRepositoryName(String repositoryName) {
+        String normalizedRepositoryName = repositoryName == null ? "" : repositoryName.trim();
+        if (normalizedRepositoryName.isBlank()) {
+            throw new IllegalStateException("Repository name is required.");
+        }
+        return normalizedRepositoryName;
+    }
+
+    private RepositoryEntry findConfiguredRepository(String repositoryName, List<RepositoryEntry> repositories) {
+        for (RepositoryEntry repository : repositories) {
+            if (repository.name().equals(repositoryName)) {
+                return repository;
+            }
+        }
+        throw new IllegalStateException("Repository `" + repositoryName + "` is not configured.");
+    }
+
+    private boolean hasGitLocalChanges(Path localPath) {
+        if (!Files.exists(localPath) || !Files.isDirectory(localPath)) {
+            return false;
+        }
+        if (!Files.exists(localPath.resolve(".git"))) {
+            return false;
+        }
+        return gitRepositoryClient.hasLocalChanges(localPath);
+    }
+
+    private boolean isGitBacked(RepositoryEntry repositoryEntry) {
+        return repositoryEntry.uri() != null && !repositoryEntry.uri().isBlank();
+    }
+
+    private record RepositorySource(String uri, Path localPath) {
+    }
+
+    public record RepositoryDeletePreview(
+        String name,
+        String uri,
+        String localPath,
+        boolean gitBacked,
+        boolean hasLocalChanges
+    ) {
     }
 
     private List<String> resolvedProfilesFor(RepositoryEntry repositoryEntry) {

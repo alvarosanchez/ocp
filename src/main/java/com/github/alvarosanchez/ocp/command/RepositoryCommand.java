@@ -45,8 +45,8 @@ public class RepositoryCommand implements Runnable {
             this.repositoryService = repositoryService;
         }
 
-        @Parameters(index = "0", description = "Repository URI.")
-        private String repositoryUri;
+        @Parameters(index = "0", description = "Repository URI or local path.")
+        private String repositorySource;
 
         @Option(names = "--name", required = true, description = "Repository name.")
         private String repositoryName;
@@ -59,7 +59,7 @@ public class RepositoryCommand implements Runnable {
         @Override
         public Integer call() {
             try {
-                RepositoryEntry added = repositoryService.add(repositoryUri, repositoryName);
+                RepositoryEntry added = repositoryService.add(repositorySource, repositoryName);
                 Cli.success("Added repository `" + added.name() + "`.");
                 return 0;
             } catch (RuntimeException e) {
@@ -82,6 +82,15 @@ public class RepositoryCommand implements Runnable {
         @Parameters(index = "0", description = "Repository name.")
         private String repositoryName;
 
+        @Option(names = "--force", description = "Force deletion when a git repository has local changes.")
+        private boolean force;
+
+        @Option(
+            names = "--delete-local-path",
+            description = "For file-based repositories, also delete the local folder."
+        )
+        private boolean deleteLocalPath;
+
         /**
          * Deletes a repository from the local registry.
          *
@@ -90,7 +99,7 @@ public class RepositoryCommand implements Runnable {
         @Override
         public Integer call() {
             try {
-                RepositoryEntry deleted = repositoryService.delete(repositoryName);
+                RepositoryEntry deleted = repositoryService.delete(repositoryName, force, deleteLocalPath);
                 Cli.success("Deleted repository `" + deleted.name() + "`.");
                 return 0;
             } catch (RuntimeException e) {

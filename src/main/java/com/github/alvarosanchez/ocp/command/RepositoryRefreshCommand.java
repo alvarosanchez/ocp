@@ -1,21 +1,26 @@
 package com.github.alvarosanchez.ocp.command;
 
+import com.github.alvarosanchez.ocp.config.OcpConfigFile.RepositoryEntry;
 import com.github.alvarosanchez.ocp.service.ProfileService;
+import com.github.alvarosanchez.ocp.service.RepositoryService;
 import jakarta.inject.Inject;
 import picocli.CommandLine;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.concurrent.Callable;
 
 @CommandLine.Command(name = "refresh", description = "Pull latest changes for configured repositories.")
 class RepositoryRefreshCommand implements Callable<Integer> {
 
     private final ProfileService profileService;
+    private final RepositoryService repositoryService;
 
     @Inject
-    RepositoryRefreshCommand(ProfileService profileService) {
+    RepositoryRefreshCommand(ProfileService profileService, RepositoryService repositoryService) {
         this.profileService = profileService;
+        this.repositoryService = repositoryService;
     }
 
     @CommandLine.Parameters(index = "0", arity = "0..1", description = "Repository name.")
@@ -25,9 +30,31 @@ class RepositoryRefreshCommand implements Callable<Integer> {
     public Integer call() {
         try {
             if (repositoryName == null || repositoryName.isBlank()) {
+                List<RepositoryEntry> repositories = repositoryService.load();
+                long gitBackedCount = repositories.stream().filter(this::isGitBacked).count();
+                if (gitBackedCount == 0) {
+                    Cli.info("All configured repositories are file-based; nothing to refresh.");
+                    return 0;
+                }
+                long fileBasedCount = repositories.size() - gitBackedCount;
                 RefreshOutcome refreshOutcome = refreshAllWithConflictResolution();
                 ProfileConfigChangeNotifier.notifyUserConfigChanges(refreshOutcome.refreshResult());
-                Cli.success(refreshOutcome.message());
+                String message = refreshOutcome.message();
+                if (fileBasedCount > 0) {
+                    message = message + " Skipped " + fileBasedCount + " file-based repositories.";
+                }
+                Cli.success(message);
+                return 0;
+            }
+
+            RepositoryEntry repositoryEntry = repositoryService
+                .load()
+                .stream()
+                .filter(entry -> entry.name().equals(repositoryName.trim()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("Repository `" + repositoryName.trim() + "` was not found."));
+            if (!isGitBacked(repositoryEntry)) {
+                Cli.info("Repository `" + repositoryEntry.name() + "` is file-based; nothing to refresh.");
                 return 0;
             }
 
@@ -256,5 +283,9 @@ class RepositoryRefreshCommand implements Callable<Integer> {
     }
 
     private record RefreshOutcome(String message, ProfileService.ProfileRefreshResult refreshResult) {
+    }
+
+    private boolean isGitBacked(RepositoryEntry repositoryEntry) {
+        return repositoryEntry.uri() != null && !repositoryEntry.uri().isBlank();
     }
 }

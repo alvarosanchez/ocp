@@ -27,6 +27,8 @@ final class DetailPaneRenderer {
 
     static Element renderDetailPane(
         NodeRef selectedNode,
+        boolean repositoryRefreshable,
+        boolean selectedProfileHasParent,
         boolean editMode,
         Map<String, Profile> profilesByName,
         Map<String, String> profileParentByName,
@@ -49,11 +51,15 @@ final class DetailPaneRenderer {
         }
 
         if (selectedNode.kind() == NodeKind.REPOSITORY) {
+            List<Element> repositoryElements = new ArrayList<>();
+            repositoryElements.add(text("Repository").bold().fg(Color.CYAN));
+            repositoryElements.add(detailField("Name", selectedNode.repositoryName()));
+            repositoryElements.add(detailField("Path", String.valueOf(selectedNode.path())));
+            if (repositoryRefreshable) {
+                repositoryElements.add(ShortcutHintRenderer.line(List.of(new TreeShortcutHints.Shortcut("r", "refresh repository"))));
+            }
             return column(
-                text("Repository").bold().fg(Color.CYAN),
-                detailField("Name", selectedNode.repositoryName()),
-                detailField("Path", String.valueOf(selectedNode.path())),
-                text("Enter to refresh this repository.").dim()
+                repositoryElements.toArray(Element[]::new)
             )
                 .id(detailId)
                 .focusable()
@@ -63,15 +69,25 @@ final class DetailPaneRenderer {
         if (selectedNode.kind() == NodeKind.PROFILE) {
             Profile profile = profilesByName.get(selectedNode.profileName());
             String parentProfileName = profileParentByName.get(selectedNode.profileName());
+            List<Element> profileElements = new ArrayList<>();
+            profileElements.add(text("Profile").bold().fg(Color.CYAN));
+            profileElements.add(detailField("Name", selectedNode.profileName()));
+            profileElements.add(detailField("Repository", selectedNode.repositoryName()));
+            profileElements.add(detailField("Path", String.valueOf(selectedNode.path())));
+            profileElements.add(detailField("Inherits from", parentProfileName == null ? "none" : parentProfileName));
+            profileElements.add(detailField("Status", profile != null && profile.active() ? "active" : "inactive"));
+            profileElements.add(detailField("Updates", profile != null && profile.updateAvailable() ? "available" : "up to date"));
+            List<TreeShortcutHints.Shortcut> profileShortcuts = new ArrayList<>();
+            profileShortcuts.add(new TreeShortcutHints.Shortcut("u", "activate profile"));
+            if (selectedProfileHasParent) {
+                profileShortcuts.add(new TreeShortcutHints.Shortcut("p", "go parent"));
+            }
+            if (repositoryRefreshable) {
+                profileShortcuts.add(new TreeShortcutHints.Shortcut("r", "refresh repository"));
+            }
+            profileElements.add(ShortcutHintRenderer.line(profileShortcuts));
             return column(
-                text("Profile").bold().fg(Color.CYAN),
-                detailField("Name", selectedNode.profileName()),
-                detailField("Repository", selectedNode.repositoryName()),
-                detailField("Path", String.valueOf(selectedNode.path())),
-                detailField("Inherits from", parentProfileName == null ? "none" : parentProfileName),
-                detailField("Status", profile != null && profile.active() ? "active" : "inactive"),
-                detailField("Updates", profile != null && profile.updateAvailable() ? "available" : "up to date"),
-                text("Enter or u to activate this profile.").dim()
+                profileElements.toArray(Element[]::new)
             )
                 .id(detailId)
                 .focusable()
@@ -82,7 +98,9 @@ final class DetailPaneRenderer {
             return column(
                 text("Directory").bold().fg(Color.CYAN),
                 detailField("Path", String.valueOf(selectedNode.path())),
-                text("Space/Enter to expand or collapse in tree.").dim()
+                ShortcutHintRenderer.line(List.of(
+                    new TreeShortcutHints.Shortcut("Left/Right", "collapse/expand")
+                ))
             )
                 .id(detailId)
                 .focusable()
@@ -124,7 +142,10 @@ final class DetailPaneRenderer {
             if (editMode) {
                 return "Editing mode: Ctrl+S save, Esc exit";
             }
-            return "Press e or Enter to edit selected file | Up/Down/PgUp/PgDn/Home/End scroll preview";
+            if (selectedNode.inherited()) {
+                return "Inherited file (read-only). Up/Down/PgUp/PgDn/Home/End scroll preview";
+            }
+            return "Press e to edit selected file | Up/Down/PgUp/PgDn/Home/End scroll preview";
         }
         return "Detail pane";
     }

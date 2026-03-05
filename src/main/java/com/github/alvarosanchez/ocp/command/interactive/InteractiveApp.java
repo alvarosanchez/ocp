@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static dev.tamboui.toolkit.Toolkit.column;
@@ -49,6 +50,24 @@ public final class InteractiveApp extends ToolkitApp {
     private static final int TREE_MAX_CHILDREN = 200;
     private static final String REPOSITORY_METADATA_FILE = "repository.json";
     private static final String REFRESH_CANCELLED_MESSAGE = "Refresh cancelled. Local changes were left untouched.";
+    private static final List<TreeShortcutHints.Shortcut> GLOBAL_SHORTCUTS = List.of(
+        new TreeShortcutHints.Shortcut("Tab", "switch pane"),
+        new TreeShortcutHints.Shortcut("a", "add existing repo"),
+        new TreeShortcutHints.Shortcut("n", "create new repo"),
+        new TreeShortcutHints.Shortcut("R", "refresh all"),
+        new TreeShortcutHints.Shortcut("q", "quit")
+    );
+    private static final List<TreeShortcutHints.Shortcut> PROMPT_SHORTCUTS = List.of(
+        new TreeShortcutHints.Shortcut("Enter", "next/apply"),
+        new TreeShortcutHints.Shortcut("Backspace", "delete"),
+        new TreeShortcutHints.Shortcut("Esc", "cancel")
+    );
+    private static final List<TreeShortcutHints.Shortcut> PROMPT_OPTION_SHORTCUTS = List.of(
+        new TreeShortcutHints.Shortcut("Up/Down", "select"),
+        new TreeShortcutHints.Shortcut("Enter", "next/apply"),
+        new TreeShortcutHints.Shortcut("Backspace", "clear"),
+        new TreeShortcutHints.Shortcut("Esc", "cancel")
+    );
     private static final String SPLASH_LOGO_RESOURCE = "/splash-logo.txt";
     private static final List<String> DEFAULT_SPLASH_LOGO_LINES = List.of(
         "▒▒▒▒▒▒▒▒▒█░░░░░░░░░░█▒▒▒▒▒▒▒▒▒",
@@ -81,13 +100,13 @@ public final class InteractiveApp extends ToolkitApp {
 
     private List<Profile> profiles = List.of();
     private List<ConfiguredRepository> repositories = List.of();
+    private List<TreeNode<NodeRef>> hierarchyRoots = List.of();
     private Map<String, Profile> profilesByName = Map.of();
     private Map<String, String> profileParentByName = Map.of();
 
     private Pane activePane = Pane.TREE;
     private String status = "Ready. Select a node in the hierarchy.";
     private PromptState prompt;
-    private boolean helpVisible;
     private boolean splashVisible = true;
     private boolean splashMinimumElapsed;
     private boolean initialDataLoaded;
@@ -97,6 +116,7 @@ public final class InteractiveApp extends ToolkitApp {
 
     private RefreshConflictState refreshConflict;
     private RefreshOperation pendingRefreshOperation;
+    private String refreshAllCompletionMessage = "Refreshed all repositories.";
 
     private NodeRef selectedNode;
     private String selectedFileContent = "";
@@ -143,43 +163,37 @@ public final class InteractiveApp extends ToolkitApp {
 
         syncActivePaneFromFocus();
         syncSelectionAndPreview();
+        TreeShortcutHints.ShortcutHints treeShortcutHints = TreeShortcutHints.forSelection(
+            selectedNode,
+            isSelectedRepositoryRefreshable(),
+            selectedProfileHasParent()
+        );
+
+        List<Element> treePaneContent = new ArrayList<>();
+        treePaneContent.add(hierarchyTree.fill());
+        treePaneContent.add(ShortcutHintRenderer.line(treeShortcutHints.navigation()));
+        if (!treeShortcutHints.actions().isEmpty()) {
+            treePaneContent.add(ShortcutHintRenderer.line(treeShortcutHints.actions()));
+        }
 
         Element root = column(
             panel(
                 row(
                     text("OCP - OpenCode Configuration Profiles").bold().fg(Color.CYAN),
                     spacer(),
-                    text("Tab switch pane | q quit").dim()
+                    ShortcutHintRenderer.line(GLOBAL_SHORTCUTS)
                 )
             ).rounded().borderColor(Color.CYAN).length(3),
             row(
                 panel(
-                    hierarchyTree.fill(),
-                    text("Enter: refresh repo / use profile / edit file | Space: expand/collapse").dim(),
-                    text("u use profile | R refresh all | a add repo | d delete repo | n create repo | c create profile").dim()
+                    treePaneContent.toArray(Element[]::new)
                 ).rounded().borderColor(activePane == Pane.TREE ? Color.GREEN : Color.GRAY).fill(),
-                panel(
-                    renderDetailPane(),
-                    text(DetailPaneRenderer.detailHint(selectedNode, editMode)).dim().fg(Color.YELLOW)
-                )
+                panel(renderDetailPane())
                     .rounded()
                     .borderColor(activePane == Pane.DETAIL ? Color.GREEN : Color.GRAY)
                     .fill()
             ).fill(),
-            panel(text(statusLine())).rounded().borderColor(busy ? Color.GREEN : Color.YELLOW).length(3),
-            panel(
-                helpVisible
-                    ? column(
-                        text("Tree: Up/Down select | Left/Right collapse-expand").dim(),
-                        text("      Enter action | Space toggle folder").dim(),
-                        text("Actions: u use profile | R refresh all | a add repo").dim(),
-                        text("         d delete repo | n create repo | c create profile").dim(),
-                        text("File: e edit | Ctrl+S save | Esc exit edit").dim(),
-                        text("      Up/Down/PgUp/PgDn/Home/End scroll preview").dim(),
-                        text("Global: Tab switch pane | r reload | q quit").dim()
-                    )
-                    : text("Press ? for interactive keymap").dim()
-            ).rounded().length(helpVisible ? 10 : 3)
+            panel(text(statusLine())).rounded().borderColor(busy ? Color.GREEN : Color.YELLOW).length(3)
         );
 
         if (prompt != null) {
@@ -236,10 +250,6 @@ public final class InteractiveApp extends ToolkitApp {
             quit();
             return EventResult.HANDLED;
         }
-        if (event.isChar('?')) {
-            helpVisible = !helpVisible;
-            return EventResult.HANDLED;
-        }
         if (handlePreviewScrollKeys(event)) {
             return EventResult.HANDLED;
         }
@@ -248,8 +258,7 @@ public final class InteractiveApp extends ToolkitApp {
             return EventResult.HANDLED;
         }
         if (event.isChar('r')) {
-            reloadState();
-            status = "Reloaded repositories and profiles.";
+            refreshSelectedRepository();
             return EventResult.HANDLED;
         }
         if (event.isChar('R')) {
@@ -257,37 +266,121 @@ public final class InteractiveApp extends ToolkitApp {
             return EventResult.HANDLED;
         }
         if (event.isChar('a')) {
-            prompt = PromptState.multi(PromptAction.ADD_REPOSITORY, "Add repository", List.of("Repository URI", "Repository name"));
+            prompt = PromptState.multi(
+                PromptAction.ADD_REPOSITORY,
+                "Add existing repository",
+                List.of("Repository URI or local path", "Repository name")
+            );
             return EventResult.HANDLED;
         }
         if (event.isChar('d')) {
-            String repositoryName = selectedRepositoryName();
-            if (repositoryName == null) {
-                status = "Select a repository node first.";
+            if (selectedNode == null) {
+                status = "Select a repository, profile, or file first.";
                 return EventResult.HANDLED;
             }
-            prompt = PromptState.single(PromptAction.DELETE_REPOSITORY, "Delete repository", "Type repository name to confirm: " + repositoryName);
-            prompt.expectedConfirmation = repositoryName;
+
+            if (selectedNode.kind() == NodeKind.REPOSITORY) {
+                String repositoryName = selectedRepositoryName();
+                if (repositoryName == null) {
+                    status = "Select a repository, profile, or file first.";
+                    return EventResult.HANDLED;
+                }
+
+                try {
+                    RepositoryService.RepositoryDeletePreview deletePreview = repositoryService.inspectDelete(repositoryName);
+                    if (!deletePreview.gitBacked()) {
+                        prompt = PromptState.multiWithOptions(
+                            PromptAction.DELETE_REPOSITORY_FILE_BASED,
+                            "Delete file-based repository",
+                            List.of(
+                                "Type repository name to confirm: " + repositoryName,
+                                "Delete local folder as well?"
+                            ),
+                            List.of(List.of(), List.of("no", "yes"))
+                        );
+                        prompt.expectedConfirmation = repositoryName;
+                        return EventResult.HANDLED;
+                    }
+
+                    if (deletePreview.hasLocalChanges()) {
+                        prompt = PromptState.single(
+                            PromptAction.DELETE_REPOSITORY_FORCE,
+                            "Delete repository (local changes detected)",
+                            "Type repository name to force delete: " + repositoryName
+                        );
+                        prompt.expectedConfirmation = repositoryName;
+                        return EventResult.HANDLED;
+                    }
+
+                    prompt = PromptState.single(
+                        PromptAction.DELETE_REPOSITORY,
+                        "Delete repository",
+                        "Type repository name to confirm: " + repositoryName
+                    );
+                    prompt.expectedConfirmation = repositoryName;
+                } catch (RuntimeException e) {
+                    status = "Error: " + e.getMessage();
+                }
+                return EventResult.HANDLED;
+            }
+
+            String profileName = selectedProfileName();
+            if (profileName == null) {
+                status = "Select a repository, profile, or file first.";
+                return EventResult.HANDLED;
+            }
+            prompt = PromptState.single(
+                PromptAction.DELETE_PROFILE,
+                "Delete profile",
+                "Type profile name to confirm: " + profileName
+            );
+            prompt.expectedConfirmation = profileName;
             return EventResult.HANDLED;
         }
         if (event.isChar('n')) {
             prompt = PromptState.multi(
                 PromptAction.CREATE_REPOSITORY,
-                "Create repository scaffold",
-                List.of("Repository directory name", "Initial profile name (optional)")
+                "Create repository",
+                List.of("Repository name", "Repository location path", "Initial profile name (optional)")
             );
             return EventResult.HANDLED;
         }
         if (event.isChar('c')) {
-            prompt = PromptState.single(PromptAction.CREATE_PROFILE, "Create profile", "Profile name");
+            String repositoryName = selectedRepositoryName();
+            if (repositoryName == null) {
+                status = "Select a repository, profile, or file first.";
+                return EventResult.HANDLED;
+            }
+            try {
+                List<String> parentOptions = new ArrayList<>();
+                parentOptions.add("");
+                parentOptions.addAll(profileService.listResolvableProfileNames());
+                prompt = PromptState.multiWithOptions(
+                    PromptAction.CREATE_PROFILE,
+                    "Create profile",
+                    List.of("Profile name", "Extends from profile (optional)"),
+                    List.of(List.of(), parentOptions)
+                );
+                prompt.expectedConfirmation = repositoryName;
+            } catch (RuntimeException e) {
+                status = "Error: " + e.getMessage();
+            }
             return EventResult.HANDLED;
         }
         if (event.isChar('u')) {
             useSelectedProfile();
             return EventResult.HANDLED;
         }
+        if (event.isChar('p')) {
+            navigateToParentProfile();
+            return EventResult.HANDLED;
+        }
         if (event.isChar('e')) {
             if (selectedNode != null && selectedNode.kind() == NodeKind.FILE) {
+                if (selectedNode.inherited()) {
+                    status = "Inherited file is read-only and cannot be edited.";
+                    return EventResult.HANDLED;
+                }
                 editMode = true;
                 resetEditorCursorToTop();
                 if (runner() != null) {
@@ -322,46 +415,7 @@ public final class InteractiveApp extends ToolkitApp {
             hierarchyTree.collapseSelected();
             return EventResult.HANDLED;
         }
-        if (event.isChar(' ')) {
-            hierarchyTree.toggleSelected();
-            return EventResult.HANDLED;
-        }
-        if (event.isConfirm()) {
-            return handleTreeConfirm();
-        }
         return EventResult.UNHANDLED;
-    }
-
-    private EventResult handleTreeConfirm() {
-        TreeNode<NodeRef> selected = hierarchyTree.selectedNode();
-        if (selected == null || selected.data() == null) {
-            return EventResult.HANDLED;
-        }
-
-        NodeRef nodeRef = selected.data();
-        if (nodeRef.kind() == NodeKind.REPOSITORY) {
-            refreshSelectedRepository();
-            return EventResult.HANDLED;
-        }
-        if (nodeRef.kind() == NodeKind.PROFILE) {
-            useSelectedProfile();
-            return EventResult.HANDLED;
-        }
-        if (nodeRef.kind() == NodeKind.DIRECTORY) {
-            hierarchyTree.toggleSelected();
-            return EventResult.HANDLED;
-        }
-        if (nodeRef.kind() == NodeKind.FILE) {
-            editMode = true;
-            resetEditorCursorToTop();
-            if (runner() != null) {
-                runner().focusManager().setFocus(EDITOR_ID);
-                activePane = Pane.DETAIL;
-            }
-            status = "Editing `" + nodeRef.path().getFileName() + "`. Ctrl+S to save, Esc to cancel.";
-            return EventResult.HANDLED;
-        }
-        return EventResult.HANDLED;
     }
 
     private EventResult handlePromptKey(KeyEvent event) {
@@ -370,12 +424,16 @@ public final class InteractiveApp extends ToolkitApp {
             status = "Cancelled.";
             return EventResult.HANDLED;
         }
-        if (event.isDeleteBackward()) {
-            prompt.deleteLast();
+        if (prompt.currentFieldHasOptions() && event.isUp()) {
+            prompt.selectPreviousOption();
             return EventResult.HANDLED;
         }
-        if (event.isFocusNext() || event.isKey(dev.tamboui.tui.event.KeyCode.TAB)) {
-            prompt.nextField();
+        if (prompt.currentFieldHasOptions() && event.isDown()) {
+            prompt.selectNextOption();
+            return EventResult.HANDLED;
+        }
+        if (event.isDeleteBackward()) {
+            prompt.deleteLast();
             return EventResult.HANDLED;
         }
         if (event.isConfirm()) {
@@ -398,35 +456,98 @@ public final class InteractiveApp extends ToolkitApp {
         PromptState currentPrompt = prompt;
         prompt = null;
         try {
+            String statusMessage = status;
             switch (currentPrompt.action) {
                 case CREATE_PROFILE -> {
-                    profileService.createProfile(currentPrompt.values.getFirst());
-                    status = "Created profile `" + currentPrompt.values.getFirst() + "`.";
+                    String repositoryName = currentPrompt.expectedConfirmation;
+                    if (repositoryName == null || repositoryName.isBlank()) {
+                        throw new IllegalStateException("Repository selection is required.");
+                    }
+                    String parentProfileName = currentPrompt.values.get(1);
+                    profileService.createProfile(currentPrompt.values.getFirst(), repositoryName, parentProfileName);
+                    if (parentProfileName == null || parentProfileName.isBlank()) {
+                        statusMessage = "Created profile `" + currentPrompt.values.getFirst() + "` in repository `" + repositoryName + "`.";
+                    } else {
+                        statusMessage = "Created profile `"
+                            + currentPrompt.values.getFirst()
+                            + "` in repository `"
+                            + repositoryName
+                            + "` extending from `"
+                            + parentProfileName
+                            + "`.";
+                    }
                 }
                 case ADD_REPOSITORY -> {
                     repositoryService.add(currentPrompt.values.getFirst(), currentPrompt.values.get(1));
-                    status = "Added repository `" + currentPrompt.values.get(1) + "`.";
+                    statusMessage = "Added repository `" + currentPrompt.values.get(1) + "`.";
                 }
                 case DELETE_REPOSITORY -> {
                     String confirmation = currentPrompt.values.getFirst();
                     if (!confirmation.equals(currentPrompt.expectedConfirmation)) {
-                        status = "Delete cancelled: repository name mismatch.";
+                        statusMessage = "Delete cancelled: repository name mismatch.";
                         reloadState();
+                        status = statusMessage;
                         return;
                     }
-                    repositoryService.delete(confirmation);
-                    status = "Deleted repository `" + confirmation + "`.";
+                    repositoryService.delete(confirmation, false, false);
+                    statusMessage = "Deleted repository `" + confirmation + "`.";
+                }
+                case DELETE_REPOSITORY_FORCE -> {
+                    String confirmation = currentPrompt.values.getFirst();
+                    if (!confirmation.equals(currentPrompt.expectedConfirmation)) {
+                        statusMessage = "Delete cancelled: repository name mismatch.";
+                        reloadState();
+                        status = statusMessage;
+                        return;
+                    }
+                    repositoryService.delete(confirmation, true, false);
+                    statusMessage = "Deleted repository `" + confirmation + "` with local changes.";
+                }
+                case DELETE_REPOSITORY_FILE_BASED -> {
+                    String confirmation = currentPrompt.values.getFirst();
+                    if (!confirmation.equals(currentPrompt.expectedConfirmation)) {
+                        statusMessage = "Delete cancelled: repository name mismatch.";
+                        reloadState();
+                        status = statusMessage;
+                        return;
+                    }
+                    boolean deleteLocalFolder = "yes".equalsIgnoreCase(currentPrompt.values.get(1));
+                    repositoryService.delete(confirmation, false, deleteLocalFolder);
+                    if (deleteLocalFolder) {
+                        statusMessage = "Deleted repository `" + confirmation + "` and local folder.";
+                    } else {
+                        statusMessage = "Deleted repository `" + confirmation + "` (local folder kept).";
+                    }
+                }
+                case DELETE_PROFILE -> {
+                    String confirmation = currentPrompt.values.getFirst();
+                    String profileName = currentPrompt.expectedConfirmation;
+                    if (!confirmation.equals(profileName)) {
+                        statusMessage = "Delete cancelled: profile name mismatch.";
+                        reloadState();
+                        status = statusMessage;
+                        return;
+                    }
+                    String repositoryName = selectedRepositoryName();
+                    if (repositoryName == null || repositoryName.isBlank()) {
+                        throw new IllegalStateException("Repository selection is required.");
+                    }
+                    profileService.deleteProfile(profileName, repositoryName);
+                    statusMessage = "Deleted profile `" + profileName + "` from repository `" + repositoryName + "`.";
                 }
                 case CREATE_REPOSITORY -> {
-                    String profileName = currentPrompt.values.get(1).isBlank() ? null : currentPrompt.values.get(1);
-                    repositoryService.create(currentPrompt.values.getFirst(), profileName);
-                    status = "Created repository scaffold `" + currentPrompt.values.getFirst() + "`.";
+                    String repositoryName = currentPrompt.values.getFirst();
+                    String locationPath = currentPrompt.values.get(1);
+                    String profileName = currentPrompt.values.get(2).isBlank() ? null : currentPrompt.values.get(2);
+                    repositoryService.createAndAdd(repositoryName, profileName, locationPath);
+                    statusMessage = "Created and added repository `" + repositoryName + "`.";
                 }
             }
             reloadState();
+            status = statusMessage;
         } catch (RuntimeException e) {
-            status = "Error: " + e.getMessage();
             reloadState();
+            status = "Error: " + e.getMessage();
         }
     }
 
@@ -450,11 +571,24 @@ public final class InteractiveApp extends ToolkitApp {
             status = "Select a repository, profile, or file first.";
             return;
         }
+        if (!isRepositoryRefreshable(repositoryName)) {
+            status = "Repository `" + repositoryName + "` is file-based; nothing to refresh.";
+            return;
+        }
         pendingRefreshOperation = RefreshOperation.singleRepository(repositoryName);
         attemptPendingRefresh();
     }
 
     private void refreshAllRepositories() {
+        int refreshableRepositories = countRefreshableRepositories();
+        if (refreshableRepositories == 0) {
+            status = "All configured repositories are file-based; nothing to refresh.";
+            return;
+        }
+        int skippedFileBased = repositories.size() - refreshableRepositories;
+        refreshAllCompletionMessage = skippedFileBased > 0
+            ? "Refreshed git-backed repositories. Skipped " + skippedFileBased + " file-based repositories."
+            : "Refreshed all repositories.";
         pendingRefreshOperation = RefreshOperation.allRepositories();
         attemptPendingRefresh();
     }
@@ -476,9 +610,36 @@ public final class InteractiveApp extends ToolkitApp {
         runBusyOperation(
             "Refreshing all repositories...",
             profileService::refreshAllRepositories,
-            "Refreshed all repositories.",
-            () -> pendingRefreshOperation = null
+            refreshAllCompletionMessage,
+            () -> {
+                pendingRefreshOperation = null;
+                refreshAllCompletionMessage = "Refreshed all repositories.";
+            }
         );
+    }
+
+    private int countRefreshableRepositories() {
+        int refreshable = 0;
+        for (ConfiguredRepository repository : repositories) {
+            if (repository.uri() != null && !repository.uri().isBlank()) {
+                refreshable++;
+            }
+        }
+        return refreshable;
+    }
+
+    private boolean isSelectedRepositoryRefreshable() {
+        String repositoryName = selectedRepositoryName();
+        return repositoryName != null && isRepositoryRefreshable(repositoryName);
+    }
+
+    private boolean isRepositoryRefreshable(String repositoryName) {
+        for (ConfiguredRepository repository : repositories) {
+            if (repository.name().equals(repositoryName)) {
+                return repository.uri() != null && !repository.uri().isBlank();
+            }
+        }
+        return false;
     }
 
     private void reloadState() {
@@ -505,14 +666,27 @@ public final class InteractiveApp extends ToolkitApp {
         profilesByName = Map.copyOf(byName);
         profileParentByName = loadProfileParentByName();
 
-        List<TreeNode<NodeRef>> roots = buildHierarchyTree();
+        List<TreeNode<NodeRef>> roots;
+        try {
+            roots = buildHierarchyTree();
+        } catch (RuntimeException e) {
+            roots = List.of();
+            status = "Error building hierarchy tree: " + e.getMessage();
+        }
+        hierarchyRoots = roots;
         hierarchyTree.roots(roots.toArray(TreeNode[]::new));
         hierarchyTree.selected(Math.max(0, previousSelection));
         syncSelectionAndPreview();
     }
 
     private List<TreeNode<NodeRef>> buildHierarchyTree() {
-        return HierarchyTreeBuilder.buildHierarchyTree(repositories, profiles, TREE_MAX_DEPTH, TREE_MAX_CHILDREN);
+        return HierarchyTreeBuilder.buildHierarchyTree(
+            repositories,
+            profiles,
+            profileParentByName,
+            TREE_MAX_DEPTH,
+            TREE_MAX_CHILDREN
+        );
     }
 
     private Map<String, String> loadProfileParentByName() {
@@ -537,7 +711,7 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     private StyledElement<?> renderTreeNode(TreeNode<NodeRef> node) {
-        return HierarchyTreeBuilder.renderTreeNode(node, profilesByName);
+        return HierarchyTreeBuilder.renderTreeNode(node, profilesByName, profileParentByName);
     }
 
     private void syncSelectionAndPreview() {
@@ -564,7 +738,6 @@ public final class InteractiveApp extends ToolkitApp {
             requestBatPreview(selectedNode.path(), selectedFileContent);
             editorState.setText(selectedFileContent);
             resetEditorCursorToTop();
-            status = "Loaded `" + selectedNode.path().getFileName() + "`. Press e to edit.";
         } catch (IOException e) {
             selectedFileContent = "";
             selectedFilePreview = DetailPaneRenderer.plainText("");
@@ -576,6 +749,8 @@ public final class InteractiveApp extends ToolkitApp {
     private Element renderDetailPane() {
         return DetailPaneRenderer.renderDetailPane(
             selectedNode,
+            isSelectedRepositoryRefreshable(),
+            selectedProfileHasParent(),
             editMode,
             profilesByName,
             profileParentByName,
@@ -686,6 +861,10 @@ public final class InteractiveApp extends ToolkitApp {
         if (selectedNode == null || selectedNode.kind() != NodeKind.FILE || selectedNode.path() == null) {
             return;
         }
+        if (selectedNode.inherited()) {
+            status = "Inherited file is read-only and cannot be edited.";
+            return;
+        }
         Path filePath = selectedNode.path();
         runBusyOperation(
             "Saving `" + filePath.getFileName() + "`...",
@@ -731,6 +910,64 @@ public final class InteractiveApp extends ToolkitApp {
             return selectedNode.profileName();
         }
         return null;
+    }
+
+    private boolean selectedProfileHasParent() {
+        String profileName = selectedProfileName();
+        return profileName != null && profileParentByName.containsKey(profileName);
+    }
+
+    private void navigateToParentProfile() {
+        String profileName = selectedProfileName();
+        if (profileName == null) {
+            status = "Select a profile or file first.";
+            return;
+        }
+
+        String parentProfileName = profileParentByName.get(profileName);
+        if (parentProfileName == null || parentProfileName.isBlank()) {
+            status = "Profile `" + profileName + "` does not extend another profile.";
+            return;
+        }
+
+        if (!selectProfileNode(parentProfileName)) {
+            status = "Parent profile `" + parentProfileName + "` was not found in the tree.";
+            return;
+        }
+
+        syncSelectionAndPreview();
+        if (runner() != null) {
+            runner().focusManager().setFocus(TREE_ID);
+            activePane = Pane.TREE;
+        }
+        status = "Selected parent profile `" + parentProfileName + "`.";
+    }
+
+    private boolean selectProfileNode(String profileName) {
+        int originalSelection = hierarchyTree.selected();
+        int maxNodes = Math.max(1, countTreeNodes(hierarchyRoots));
+        for (int index = 0; index < maxNodes; index++) {
+            hierarchyTree.selected(index);
+            TreeNode<NodeRef> selectedTreeNode = hierarchyTree.selectedNode();
+            if (selectedTreeNode == null || selectedTreeNode.data() == null) {
+                continue;
+            }
+            NodeRef selectedNodeRef = selectedTreeNode.data();
+            if (selectedNodeRef.kind() == NodeKind.PROFILE && profileName.equals(selectedNodeRef.profileName())) {
+                return true;
+            }
+        }
+        hierarchyTree.selected(originalSelection);
+        return false;
+    }
+
+    private int countTreeNodes(List<TreeNode<NodeRef>> roots) {
+        int count = 0;
+        for (TreeNode<NodeRef> root : roots) {
+            count += 1;
+            count += countTreeNodes(root.children());
+        }
+        return count;
     }
 
     private void prewarmBatAvailability() {
@@ -960,12 +1197,101 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     private Element renderPromptDialog() {
+        int dialogWidth = promptDialogWidth(prompt);
+        List<Element> promptContent = new ArrayList<>();
+        promptContent.add(text(prompt.label()).bold());
+        promptContent.add(text(promptDisplayValue(prompt)));
+        if (prompt.currentFieldHasOptions()) {
+            List<String> options = prompt.currentFieldOptions();
+            int selectedIndex = prompt.currentFieldSelectedOptionIndex();
+            for (int index = 0; index < options.size(); index++) {
+                String value = options.get(index);
+                String optionLabel = value.isBlank() ? "<none>" : value;
+                if (index == selectedIndex) {
+                    promptContent.add(text("-> " + optionLabel).bold().fg(Color.CYAN));
+                } else {
+                    promptContent.add(text("   " + optionLabel).dim());
+                }
+            }
+        }
+        promptContent.add(ShortcutHintRenderer.line(prompt.currentFieldHasOptions() ? PROMPT_OPTION_SHORTCUTS : PROMPT_SHORTCUTS));
+
         return dialog(
             prompt.title,
-            text(prompt.label()).bold(),
-            text(prompt.currentValue()),
-            text("Enter next/apply | Tab next field | Backspace delete | Esc cancel").dim()
-        ).rounded().borderColor(Color.MAGENTA);
+            promptContent.toArray(Element[]::new)
+        ).rounded().borderColor(Color.MAGENTA).width(dialogWidth);
+    }
+
+    static int promptDialogWidthForContent(String title, String label, String currentValue, String shortcutsLine, int maxWidth) {
+        int safeMaxWidth = Math.max(48, maxWidth);
+        int desiredWidth = Math.max(
+            maxDisplayWidth(title, label, currentValue, shortcutsLine) + 8,
+            52
+        );
+        return Math.min(desiredWidth, safeMaxWidth);
+    }
+
+    private int promptDialogWidth(PromptState promptState) {
+        List<String> widthCandidates = new ArrayList<>();
+        widthCandidates.add(promptState.label());
+        widthCandidates.add(promptDisplayValue(promptState));
+        widthCandidates.add(ShortcutHintRenderer.plainLine(promptState.currentFieldHasOptions() ? PROMPT_OPTION_SHORTCUTS : PROMPT_SHORTCUTS));
+        if (promptState.currentFieldHasOptions()) {
+            for (String option : promptState.currentFieldOptions()) {
+                widthCandidates.add((option.isBlank() ? "<none>" : option) + "    ");
+            }
+        }
+        return promptDialogWidthForContent(
+            promptState.title,
+            String.join("\n", widthCandidates),
+            "",
+            "",
+            resolvedPromptDialogMaxWidth()
+        );
+    }
+
+    private String promptDisplayValue(PromptState promptState) {
+        if (!promptState.currentFieldHasOptions()) {
+            return promptState.currentValue();
+        }
+        String value = promptState.currentValue();
+        return value.isBlank() ? "<none>" : value;
+    }
+
+    private int resolvedPromptDialogMaxWidth() {
+        OptionalInt terminalColumns = parseColumns(System.getenv("COLUMNS"));
+        if (terminalColumns.isPresent()) {
+            return Math.max(48, terminalColumns.getAsInt() - 6);
+        }
+        return 120;
+    }
+
+    private static OptionalInt parseColumns(String rawColumns) {
+        if (rawColumns == null || rawColumns.isBlank()) {
+            return OptionalInt.empty();
+        }
+        try {
+            int columns = Integer.parseInt(rawColumns.trim());
+            return columns > 0 ? OptionalInt.of(columns) : OptionalInt.empty();
+        } catch (NumberFormatException ignored) {
+            return OptionalInt.empty();
+        }
+    }
+
+    private static int maxDisplayWidth(String... values) {
+        int maxWidth = 0;
+        for (String value : values) {
+            if (value == null) {
+                continue;
+            }
+            String[] lines = value.split("\\R", -1);
+            for (String line : lines) {
+                if (line.length() > maxWidth) {
+                    maxWidth = line.length();
+                }
+            }
+        }
+        return maxWidth;
     }
 
     private Element splashScreen() {
