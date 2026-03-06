@@ -100,7 +100,7 @@ public final class RepositoryService {
             added = new RepositoryEntry(name, null, normalizedConfiguredLocalPath);
         } else {
             Path localPath = configuredLocalPath;
-            added = new RepositoryEntry(name, repositorySource.uri(), localPath.toString());
+            added = new RepositoryEntry(name, repositorySource.uri(), normalizedConfiguredLocalPath);
             if (Files.exists(localPath)) {
                 deleteRecursively(localPath);
             }
@@ -252,7 +252,7 @@ public final class RepositoryService {
             String uri = normalizeBlankToNull(entry.uri());
             String localPath = normalizeBlankToNull(entry.localPath());
             if (uri != null) {
-                localPath = repositoriesDirectory().resolve(name).toString();
+                localPath = normalizeAbsolutePath(repositoriesDirectory().resolve(name)).toString();
             } else {
                 if (localPath == null) {
                     continue;
@@ -291,6 +291,9 @@ public final class RepositoryService {
             return true;
         }
         if (source.startsWith("/") || source.startsWith("~/") || source.matches("^[A-Za-z]:[\\\\/].*")) {
+            return true;
+        }
+        if (source.matches("^[A-Za-z]:.*")) {
             return true;
         }
         if (source.contains("://") || source.matches("^[A-Za-z][A-Za-z0-9+.-]*:.*") || source.matches("^[^\\s@]+@[^\\s:]+:.*")) {

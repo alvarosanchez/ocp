@@ -171,6 +171,34 @@ class RepositoryServiceTest {
     }
 
     @Test
+    void loadNormalizesGitRepositoryLocalPathToAbsoluteWhenCacheDirIsRelative() throws IOException {
+        String previousCacheDir = System.getProperty("ocp.cache.dir");
+        System.setProperty("ocp.cache.dir", "relative-cache-dir");
+        try {
+            writeConfig(
+                new OcpConfigFile(
+                    new OcpConfigOptions(),
+                    List.of(new RepositoryEntry("alpha-repo", "git@github.com:acme/alpha.git", null))
+                )
+            );
+
+            List<RepositoryEntry> repositories = repositoryService.load();
+
+            assertEquals(1, repositories.size());
+            assertEquals(
+                Path.of("relative-cache-dir", "repositories", "alpha-repo").toAbsolutePath().normalize().toString(),
+                repositories.getFirst().localPath()
+            );
+        } finally {
+            if (previousCacheDir == null) {
+                System.clearProperty("ocp.cache.dir");
+            } else {
+                System.setProperty("ocp.cache.dir", previousCacheDir);
+            }
+        }
+    }
+
+    @Test
     void loadWrapsReadErrorsAsUncheckedIOException() throws IOException {
         Path configDir = Path.of(System.getProperty("ocp.config.dir"));
         Files.createDirectories(configDir);
@@ -346,6 +374,40 @@ class RepositoryServiceTest {
     }
 
     @Test
+    void addTreatsDriveRelativeWindowsPathAsLocalPathAndFailsEarly() {
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> repositoryService.add("C:repo\\dir", "local-repo")
+        );
+
+        assertTrue(thrown.getMessage().contains("Local repository path does not exist"));
+    }
+
+    @Test
+    void addStoresAbsoluteGitRepositoryLocalPathWhenCacheDirIsRelative() throws IOException, InterruptedException {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
+        String previousCacheDir = System.getProperty("ocp.cache.dir");
+        System.setProperty("ocp.cache.dir", "relative-cache-dir");
+        try {
+            Path remote = createRemoteRepository();
+
+            RepositoryEntry added = repositoryService.add(remote.toUri().toString(), "alpha-repo");
+
+            String expectedLocalPath = Path.of("relative-cache-dir", "repositories", "alpha-repo").toAbsolutePath().normalize().toString();
+            assertEquals(expectedLocalPath, added.localPath());
+
+            List<RepositoryEntry> repositories = repositoryService.load();
+            assertEquals(expectedLocalPath, repositories.getFirst().localPath());
+        } finally {
+            if (previousCacheDir == null) {
+                System.clearProperty("ocp.cache.dir");
+            } else {
+                System.setProperty("ocp.cache.dir", previousCacheDir);
+            }
+        }
+    }
+
+    @Test
     void createRejectsRepositoryNameWithPathSeparator() {
         IllegalStateException thrown = assertThrows(
             IllegalStateException.class,
@@ -516,6 +578,31 @@ class RepositoryServiceTest {
         Path repositoryPath = repositoriesRootDirectory().resolve(repositoryName);
         Files.createDirectories(repositoryPath);
         Files.writeString(repositoryPath.resolve("repository.json"), objectMapper.writeValueAsString(repositoryConfigFile));
+    }
+
+    private Path createRemoteRepository() throws IOException, InterruptedException {
+        Path seedRepository = tempDir.resolve("seed");
+        runCommand(List.of("git", "init", seedRepository.toString()));
+        Files.writeString(seedRepository.resolve("repository.json"), objectMapper.writeValueAsString(new RepositoryConfigFile(List.of())));
+        runCommand(List.of("git", "-C", seedRepository.toString(), "add", "repository.json"));
+        runCommand(List.of(
+            "git",
+            "-C",
+            seedRepository.toString(),
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "user.name=test",
+            "commit",
+            "-m",
+            "seed"
+        ));
+
+        Path remoteRepository = tempDir.resolve("remote.git");
+        runCommand(List.of("git", "init", "--bare", remoteRepository.toString()));
+        runCommand(List.of("git", "-C", seedRepository.toString(), "remote", "add", "origin", remoteRepository.toString()));
+        runCommand(List.of("git", "-C", seedRepository.toString(), "push", "origin", "HEAD"));
+        return remoteRepository;
     }
 
     private static void runCommand(List<String> command) throws IOException, InterruptedException {
