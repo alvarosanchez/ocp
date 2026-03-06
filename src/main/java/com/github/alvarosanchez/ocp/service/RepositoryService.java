@@ -296,7 +296,7 @@ public final class RepositoryService {
         if (source.contains("://") || source.matches("^[A-Za-z][A-Za-z0-9+.-]*:.*") || source.matches("^[^\\s@]+@[^\\s:]+:.*")) {
             return false;
         }
-        if (source.contains("/") || source.contains("\\\\")) {
+        if (source.contains("/") || source.contains("\\")) {
             return true;
         }
         try {

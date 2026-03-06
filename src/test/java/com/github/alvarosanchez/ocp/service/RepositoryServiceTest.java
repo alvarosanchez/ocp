@@ -326,6 +326,26 @@ class RepositoryServiceTest {
     }
 
     @Test
+    void addRejectsRepositoryNameWithWindowsInvalidCharacter() {
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> repositoryService.add("git@github.com:acme/repo.git", "bad:name")
+        );
+
+        assertTrue(thrown.getMessage().contains("single safe path segment"));
+    }
+
+    @Test
+    void addTreatsSingleBackslashPathAsLocalPathAndFailsEarly() {
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> repositoryService.add("dir\\subdir", "local-repo")
+        );
+
+        assertTrue(thrown.getMessage().contains("Local repository path does not exist"));
+    }
+
+    @Test
     void createRejectsRepositoryNameWithPathSeparator() {
         IllegalStateException thrown = assertThrows(
             IllegalStateException.class,

@@ -19,6 +19,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -63,6 +64,7 @@ class RepositoryCommandTest {
 
     @Test
     void addClonesRepositoryAndRegistersItInConfig() throws IOException, InterruptedException {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path remote = createRemoteRepository();
         String repositoryName = "team-configs";
 
@@ -81,6 +83,7 @@ class RepositoryCommandTest {
 
     @Test
     void addRemovesUnknownCachedCloneWhenConfigIsMissing() throws IOException, InterruptedException {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path remote = createRemoteRepository();
         String repositoryName = "stale-repo";
         Path localClone = Path.of(System.getProperty("ocp.cache.dir"), "repositories", repositoryName);
@@ -103,6 +106,7 @@ class RepositoryCommandTest {
 
     @Test
     void addRequiresRepositoryNameOption() throws IOException, InterruptedException {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path remote = createRemoteRepository();
 
         CommandResult result = execute("repository", "add", remote.toUri().toString());
@@ -174,6 +178,7 @@ class RepositoryCommandTest {
 
     @Test
     void deleteGitRepositoryWithLocalChangesFailsWithoutForce() throws IOException, InterruptedException {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path localClone = Path.of(System.getProperty("ocp.cache.dir"), "repositories", "repo-dirty");
         Files.createDirectories(localClone);
         runCommand(List.of("git", "init", localClone.toString()));
@@ -199,6 +204,7 @@ class RepositoryCommandTest {
 
     @Test
     void deleteGitRepositoryWithLocalChangesSucceedsWithForce() throws IOException, InterruptedException {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path localClone = Path.of(System.getProperty("ocp.cache.dir"), "repositories", "repo-dirty");
         Files.createDirectories(localClone);
         runCommand(List.of("git", "init", localClone.toString()));
@@ -435,6 +441,18 @@ class RepositoryCommandTest {
         int exitCode = process.waitFor();
         if (exitCode != 0) {
             throw new IllegalStateException("Command failed: " + String.join(" ", command) + "\n" + output);
+        }
+    }
+
+    private static boolean isGitAvailable() {
+        try {
+            runCommand(List.of("git", "--version"));
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (IOException | RuntimeException e) {
+            return false;
         }
     }
 
