@@ -908,11 +908,7 @@ public final class ProfileService {
     }
 
     private String normalizeRepositoryName(String repositoryName) {
-        String normalizedRepositoryName = repositoryName == null ? "" : repositoryName.trim();
-        if (normalizedRepositoryName.isBlank()) {
-            throw new IllegalStateException("Repository name is required.");
-        }
-        return normalizedRepositoryName;
+        return PathSegmentValidator.requireSinglePathSegment(repositoryName, "Repository name");
     }
 
     private String normalizeOptionalProfileName(String profileName) {

@@ -228,6 +228,18 @@ class ProfileServiceTest {
     }
 
     @Test
+    void createProfileRejectsRepositoryNameWithPathTraversal() throws IOException {
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> profileService.createProfile("child", "../selected")
+        );
+
+        assertTrue(thrown.getMessage().contains("single safe path segment"));
+    }
+
+    @Test
     void createProfileRejectsProfileNameWithPathTraversal() throws IOException {
         Path selectedRepository = tempDir.resolve("selected-repository");
         Files.createDirectories(selectedRepository);
