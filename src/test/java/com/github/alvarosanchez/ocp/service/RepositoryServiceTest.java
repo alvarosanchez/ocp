@@ -302,6 +302,36 @@ class RepositoryServiceTest {
     }
 
     @Test
+    void addRejectsRepositoryNameWithPathTraversal() {
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> repositoryService.add("git@github.com:acme/repo.git", "../evil")
+        );
+
+        assertTrue(thrown.getMessage().contains("single safe path segment"));
+    }
+
+    @Test
+    void createRejectsRepositoryNameWithPathSeparator() {
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> repositoryService.create("nested/repo", null)
+        );
+
+        assertTrue(thrown.getMessage().contains("single safe path segment"));
+    }
+
+    @Test
+    void deleteRejectsRepositoryNameWithPathTraversal() {
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> repositoryService.delete("../local", false, false)
+        );
+
+        assertTrue(thrown.getMessage().contains("single safe path segment"));
+    }
+
+    @Test
     void inspectDeleteMarksGitRepositoryWithLocalChanges() throws IOException, InterruptedException {
         Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path localClone = repositoriesRootDirectory().resolve("repo-git");

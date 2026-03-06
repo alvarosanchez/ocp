@@ -74,10 +74,7 @@ public final class RepositoryService {
         if (source.isBlank()) {
             throw new IllegalStateException("Repository URI or local path is required.");
         }
-        String name = repositoryName == null ? "" : repositoryName.trim();
-        if (name.isBlank()) {
-            throw new IllegalStateException("Repository name is required.");
-        }
+        String name = normalizeRepositoryName(repositoryName);
 
         RepositorySource repositorySource = resolveRepositorySource(source);
         Path configuredLocalPath = repositorySource.uri() == null
@@ -183,12 +180,10 @@ public final class RepositoryService {
     }
 
     public Path create(String repositoryName, String profileName, String repositoryLocation) {
-        if (repositoryName == null || repositoryName.isBlank()) {
-            throw new IllegalStateException("Repository name is required.");
-        }
+        String normalizedRepositoryName = normalizeRepositoryName(repositoryName);
 
         Path repositoryPath = resolveCreateLocation(repositoryLocation)
-            .resolve(repositoryName.trim())
+            .resolve(normalizedRepositoryName)
             .toAbsolutePath()
             .normalize();
         if (Files.exists(repositoryPath)) {
@@ -353,7 +348,23 @@ public final class RepositoryService {
         if (normalizedRepositoryName.isBlank()) {
             throw new IllegalStateException("Repository name is required.");
         }
+        validateRepositoryNameSegment(normalizedRepositoryName);
         return normalizedRepositoryName;
+    }
+
+    private void validateRepositoryNameSegment(String repositoryName) {
+        try {
+            Path normalizedName = Path.of(repositoryName).normalize();
+            if (normalizedName.isAbsolute() || normalizedName.getNameCount() != 1 || repositoryName.contains("/") || repositoryName.contains("\\")) {
+                throw new IllegalStateException("Repository name must be a single safe path segment.");
+            }
+            String segment = normalizedName.getFileName().toString();
+            if (!repositoryName.equals(segment) || ".".equals(segment) || "..".equals(segment)) {
+                throw new IllegalStateException("Repository name must be a single safe path segment.");
+            }
+        } catch (InvalidPathException e) {
+            throw new IllegalStateException("Repository name must be a single safe path segment.", e);
+        }
     }
 
     private RepositoryEntry findConfiguredRepository(String repositoryName, List<RepositoryEntry> repositories) {
@@ -480,6 +491,10 @@ public final class RepositoryService {
          */
         public ConfiguredRepository {
             resolvedProfiles = resolvedProfiles == null ? List.of() : List.copyOf(resolvedProfiles);
+        }
+
+        public boolean isGitBacked() {
+            return uri != null && !uri.isBlank();
         }
     }
 

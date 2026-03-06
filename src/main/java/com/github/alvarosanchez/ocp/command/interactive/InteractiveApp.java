@@ -632,7 +632,7 @@ public final class InteractiveApp extends ToolkitApp {
     private int countRefreshableRepositories() {
         int refreshable = 0;
         for (ConfiguredRepository repository : repositories) {
-            if (repository.uri() != null && !repository.uri().isBlank()) {
+            if (repository.isGitBacked()) {
                 refreshable++;
             }
         }
@@ -647,7 +647,7 @@ public final class InteractiveApp extends ToolkitApp {
     private boolean isRepositoryRefreshable(String repositoryName) {
         for (ConfiguredRepository repository : repositories) {
             if (repository.name().equals(repositoryName)) {
-                return repository.uri() != null && !repository.uri().isBlank();
+                return repository.isGitBacked();
             }
         }
         return false;

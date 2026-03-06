@@ -11,7 +11,6 @@ import dev.tamboui.toolkit.element.StyledElement;
 import dev.tamboui.widgets.tree.TreeNode;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -333,7 +332,7 @@ final class HierarchyTreeBuilder {
                 );
             }
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to read profile directory `" + profilePath + "`.", e);
+            return;
         }
     }
 
