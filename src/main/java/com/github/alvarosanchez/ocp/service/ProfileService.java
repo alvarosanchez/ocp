@@ -904,11 +904,7 @@ public final class ProfileService {
     }
 
     private String normalizeProfileName(String profileName) {
-        String normalizedProfileName = profileName == null ? "" : profileName.trim();
-        if (normalizedProfileName.isBlank()) {
-            throw new IllegalStateException("Profile name is required.");
-        }
-        return normalizedProfileName;
+        return PathSegmentValidator.requireSinglePathSegment(profileName, "Profile name");
     }
 
     private String normalizeRepositoryName(String repositoryName) {

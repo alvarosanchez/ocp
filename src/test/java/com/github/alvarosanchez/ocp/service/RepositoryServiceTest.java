@@ -157,6 +157,20 @@ class RepositoryServiceTest {
     }
 
     @Test
+    void loadRejectsRepositoryEntryWithUnsafeName() throws IOException {
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("../repo", "git@github.com:acme/repo.git", null))
+            )
+        );
+
+        IllegalStateException thrown = assertThrows(IllegalStateException.class, repositoryService::load);
+
+        assertTrue(thrown.getMessage().contains("single safe path segment"));
+    }
+
+    @Test
     void loadWrapsReadErrorsAsUncheckedIOException() throws IOException {
         Path configDir = Path.of(System.getProperty("ocp.config.dir"));
         Files.createDirectories(configDir);

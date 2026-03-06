@@ -247,6 +247,7 @@ public final class RepositoryService {
             if (name.isBlank()) {
                 continue;
             }
+            PathSegmentValidator.validateSinglePathSegment(name, "Repository name");
 
             String uri = normalizeBlankToNull(entry.uri());
             String localPath = normalizeBlankToNull(entry.localPath());
@@ -344,27 +345,7 @@ public final class RepositoryService {
     }
 
     private String normalizeRepositoryName(String repositoryName) {
-        String normalizedRepositoryName = repositoryName == null ? "" : repositoryName.trim();
-        if (normalizedRepositoryName.isBlank()) {
-            throw new IllegalStateException("Repository name is required.");
-        }
-        validateRepositoryNameSegment(normalizedRepositoryName);
-        return normalizedRepositoryName;
-    }
-
-    private void validateRepositoryNameSegment(String repositoryName) {
-        try {
-            Path normalizedName = Path.of(repositoryName).normalize();
-            if (normalizedName.isAbsolute() || normalizedName.getNameCount() != 1 || repositoryName.contains("/") || repositoryName.contains("\\")) {
-                throw new IllegalStateException("Repository name must be a single safe path segment.");
-            }
-            String segment = normalizedName.getFileName().toString();
-            if (!repositoryName.equals(segment) || ".".equals(segment) || "..".equals(segment)) {
-                throw new IllegalStateException("Repository name must be a single safe path segment.");
-            }
-        } catch (InvalidPathException e) {
-            throw new IllegalStateException("Repository name must be a single safe path segment.", e);
-        }
+        return PathSegmentValidator.requireSinglePathSegment(repositoryName, "Repository name");
     }
 
     private RepositoryEntry findConfiguredRepository(String repositoryName, List<RepositoryEntry> repositories) {
