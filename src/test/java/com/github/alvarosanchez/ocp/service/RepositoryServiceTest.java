@@ -336,6 +336,16 @@ class RepositoryServiceTest {
     }
 
     @Test
+    void createRejectsInitialProfileNameWithPathTraversal() {
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> repositoryService.create("repo", "../evil")
+        );
+
+        assertTrue(thrown.getMessage().contains("single safe path segment"));
+    }
+
+    @Test
     void deleteRejectsRepositoryNameWithPathTraversal() {
         IllegalStateException thrown = assertThrows(
             IllegalStateException.class,

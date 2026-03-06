@@ -209,6 +209,25 @@ class ProfileServiceTest {
     }
 
     @Test
+    void createProfileRejectsParentProfileNameWithPathTraversal() throws IOException {
+        Path selectedRepository = tempDir.resolve("selected-repository");
+        Files.createDirectories(selectedRepository);
+        Files.writeString(
+            selectedRepository.resolve("repository.json"),
+            objectMapper.writeValueAsString(new RepositoryConfigFile(List.of(new ProfileEntry("existing"))))
+        );
+        writeConfig(List.of(new RepositoryEntry("selected", null, selectedRepository.toString())));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> profileService.createProfile("child", "selected", "../base")
+        );
+
+        assertTrue(thrown.getMessage().contains("single safe path segment"));
+    }
+
+    @Test
     void createProfileRejectsProfileNameWithPathTraversal() throws IOException {
         Path selectedRepository = tempDir.resolve("selected-repository");
         Files.createDirectories(selectedRepository);

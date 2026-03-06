@@ -194,7 +194,7 @@ public final class RepositoryService {
             Files.createDirectories(repositoryPath);
             List<ProfileEntry> profiles = new ArrayList<>();
             if (profileName != null && !profileName.isBlank()) {
-                String normalizedProfileName = profileName.trim();
+                String normalizedProfileName = PathSegmentValidator.requireSinglePathSegment(profileName, "Profile name");
                 profiles.add(new ProfileEntry(normalizedProfileName));
                 Files.createDirectories(repositoryPath.resolve(normalizedProfileName));
             }

@@ -920,7 +920,10 @@ public final class ProfileService {
             return null;
         }
         String normalizedProfileName = profileName.trim();
-        return normalizedProfileName.isBlank() ? null : normalizedProfileName;
+        if (normalizedProfileName.isBlank()) {
+            return null;
+        }
+        return PathSegmentValidator.requireSinglePathSegment(normalizedProfileName, "Parent profile name");
     }
 
     private RepositoryEntry findRepositoryEntry(String normalizedRepositoryName) {
