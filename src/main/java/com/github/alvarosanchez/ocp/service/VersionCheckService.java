@@ -8,13 +8,10 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -31,22 +28,25 @@ public final class VersionCheckService {
     private static final Duration HTTP_TIMEOUT = Duration.ofSeconds(3);
 
     private final ObjectMapper objectMapper;
+    private final RepositoryService repositoryService;
     private final Clock clock;
     private final HttpClient httpClient;
     private final URI releasesUri;
 
     @Inject
-    VersionCheckService(ObjectMapper objectMapper) {
+    VersionCheckService(ObjectMapper objectMapper, RepositoryService repositoryService) {
         this(
             objectMapper,
+            repositoryService,
             Clock.systemUTC(),
             HttpClient.newBuilder().connectTimeout(HTTP_TIMEOUT).build(),
             DEFAULT_RELEASES_URI
         );
     }
 
-    VersionCheckService(ObjectMapper objectMapper, Clock clock, HttpClient httpClient, URI releasesUri) {
+    VersionCheckService(ObjectMapper objectMapper, RepositoryService repositoryService, Clock clock, HttpClient httpClient, URI releasesUri) {
         this.objectMapper = objectMapper;
+        this.repositoryService = repositoryService;
         this.clock = clock;
         this.httpClient = httpClient;
         this.releasesUri = releasesUri;
@@ -54,7 +54,7 @@ public final class VersionCheckService {
 
     public VersionCheckResult check() {
         String currentVersion = OcpVersionProvider.readVersion();
-        OcpConfigFile configFile = loadConfigFile();
+        OcpConfigFile configFile = repositoryService.loadConfigFile();
         OcpConfigOptions config = configFile.config();
         Instant now = clock.instant();
         Instant lastCheckedAt = instantOf(config.lastOcpVersionCheckEpochSeconds());
@@ -71,7 +71,7 @@ public final class VersionCheckService {
             latestVersion = config.latestOcpVersion();
         }
 
-        saveConfig(new OcpConfigFile(updatedOptions(config, now, latestVersion), configFile.repositories()));
+        repositoryService.saveConfig(new OcpConfigFile(updatedOptions(config, now, latestVersion), configFile.repositories()));
         return VersionCheckResult.from(currentVersion, latestVersion);
     }
 
@@ -101,40 +101,6 @@ public final class VersionCheckService {
             now.getEpochSecond(),
             latestVersion
         );
-    }
-
-    private OcpConfigFile loadConfigFile() {
-        Path file = configFile();
-        if (!Files.exists(file)) {
-            return new OcpConfigFile(new OcpConfigOptions(), List.of());
-        }
-        try {
-            return objectMapper.readValue(Files.readString(file), OcpConfigFile.class);
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to read OCP config file at " + file, e);
-        }
-    }
-
-    private void saveConfig(OcpConfigFile configFile) {
-        Path file = configFile();
-        try {
-            Files.createDirectories(configDirectory());
-            Files.writeString(file, objectMapper.writeValueAsString(configFile));
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to write OCP config file at " + file, e);
-        }
-    }
-
-    private Path configFile() {
-        return configDirectory().resolve("config.json");
-    }
-
-    private Path configDirectory() {
-        String configuredPath = System.getProperty("ocp.config.dir");
-        if (configuredPath != null && !configuredPath.isBlank()) {
-            return Path.of(configuredPath);
-        }
-        return Path.of(System.getProperty("user.home"), ".config", "ocp");
     }
 
     private static Instant instantOf(Long epochSeconds) {

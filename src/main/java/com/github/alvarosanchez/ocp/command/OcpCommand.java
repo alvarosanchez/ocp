@@ -58,11 +58,12 @@ public class OcpCommand implements Runnable {
 
         ApplicationContextBuilder builder = ApplicationContext.builder(OcpCommand.class, Environment.CLI)
             .propertySources(new CommandLinePropertySource(io.micronaut.core.cli.CommandLine.parse(args)));
+        int exitCode;
         try (ApplicationContext context = builder.start()) {
             runStartupVersionCheck(context, args);
-            int exitCode = new CommandLine(OcpCommand.class, new MicronautFactory(context)).execute(args);
-            System.exit(exitCode);
+            exitCode = new CommandLine(OcpCommand.class, new MicronautFactory(context)).execute(args);
         }
+        System.exit(exitCode);
     }
 
     static void runStartupVersionCheck(ApplicationContext context, String[] args) {

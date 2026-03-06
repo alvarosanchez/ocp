@@ -40,12 +40,14 @@ class VersionCheckServiceTest {
 
     private ApplicationContext applicationContext;
     private ObjectMapper objectMapper;
+    private RepositoryService repositoryService;
     private String previousConfigDir;
 
     @BeforeEach
     void setUp() {
         applicationContext = ApplicationContext.run();
         objectMapper = applicationContext.getBean(ObjectMapper.class);
+        repositoryService = applicationContext.getBean(RepositoryService.class);
         previousConfigDir = System.getProperty("ocp.config.dir");
         System.setProperty("ocp.config.dir", tempDir.resolve("config").toString());
     }
@@ -68,7 +70,7 @@ class VersionCheckServiceTest {
         HttpClient httpClient = new StubHttpClient(requests, body);
         Instant now = Instant.parse("2026-03-06T12:00:00Z");
 
-        VersionCheckService firstService = new VersionCheckService(objectMapper, Clock.fixed(now, ZoneOffset.UTC), httpClient, uri);
+        VersionCheckService firstService = newService(Clock.fixed(now, ZoneOffset.UTC), httpClient, uri);
         VersionCheckService.VersionCheckResult firstResult = firstService.check();
 
         assertTrue(firstResult.updateAvailable());
@@ -79,12 +81,7 @@ class VersionCheckServiceTest {
         assertEquals(now.getEpochSecond(), storedConfig.config().lastOcpVersionCheckEpochSeconds());
         assertEquals("999.0.0", storedConfig.config().latestOcpVersion());
 
-        VersionCheckService secondService = new VersionCheckService(
-            objectMapper,
-            Clock.fixed(now.plusSeconds(3600), ZoneOffset.UTC),
-            httpClient,
-            uri
-        );
+        VersionCheckService secondService = newService(Clock.fixed(now.plusSeconds(3600), ZoneOffset.UTC), httpClient, uri);
         VersionCheckService.VersionCheckResult secondResult = secondService.check();
 
         assertTrue(secondResult.updateAvailable());
@@ -105,11 +102,10 @@ class VersionCheckServiceTest {
         HttpClient httpClient = new StubHttpClient(requests, body);
         Instant now = Instant.parse("2026-03-06T12:00:00Z");
 
-        new VersionCheckService(objectMapper, Clock.fixed(now, ZoneOffset.UTC), httpClient, uri).check();
+        newService(Clock.fixed(now, ZoneOffset.UTC), httpClient, uri).check();
         body.set("{\"tag_name\":\"v999.1.0\"}");
 
-        VersionCheckService.VersionCheckResult refreshedResult = new VersionCheckService(
-            objectMapper,
+        VersionCheckService.VersionCheckResult refreshedResult = newService(
             Clock.fixed(now.plus(VersionCheckService.VERSION_CHECK_INTERVAL).plusSeconds(1), ZoneOffset.UTC),
             httpClient,
             uri
@@ -128,19 +124,14 @@ class VersionCheckServiceTest {
         HttpClient httpClient = new StubHttpClient(requests, body);
         Instant now = Instant.parse("2026-03-06T12:00:00Z");
 
-        VersionCheckService firstService = new VersionCheckService(objectMapper, Clock.fixed(now, ZoneOffset.UTC), httpClient, uri);
+        VersionCheckService firstService = newService(Clock.fixed(now, ZoneOffset.UTC), httpClient, uri);
         VersionCheckService.VersionCheckResult firstResult = firstService.check();
 
         assertFalse(firstResult.updateAvailable());
         assertEquals(1, requests.get());
         assertEquals(now.getEpochSecond(), readStoredConfig().config().lastOcpVersionCheckEpochSeconds());
 
-        VersionCheckService secondService = new VersionCheckService(
-            objectMapper,
-            Clock.fixed(now.plusSeconds(1800), ZoneOffset.UTC),
-            httpClient,
-            uri
-        );
+        VersionCheckService secondService = newService(Clock.fixed(now.plusSeconds(1800), ZoneOffset.UTC), httpClient, uri);
         VersionCheckService.VersionCheckResult secondResult = secondService.check();
 
         assertFalse(secondResult.updateAvailable());
@@ -154,8 +145,7 @@ class VersionCheckServiceTest {
 
         AtomicInteger requests = new AtomicInteger();
         AtomicReference<String> body = new AtomicReference<>("{\"tag_name\":\"v999.0.0\"}");
-        VersionCheckService service = new VersionCheckService(
-            objectMapper,
+        VersionCheckService service = newService(
             Clock.fixed(Instant.parse("2026-03-06T12:00:00Z"), ZoneOffset.UTC),
             new StubHttpClient(requests, body),
             URI.create("https://example.test/releases/latest")
@@ -175,8 +165,7 @@ class VersionCheckServiceTest {
 
         AtomicInteger requests = new AtomicInteger();
         AtomicReference<String> body = new AtomicReference<>("{\"tag_name\":\"release-next\"}");
-        VersionCheckService service = new VersionCheckService(
-            objectMapper,
+        VersionCheckService service = newService(
             Clock.fixed(Instant.parse("2026-03-06T12:00:00Z"), ZoneOffset.UTC),
             new StubHttpClient(requests, body),
             URI.create("https://example.test/releases/latest")
@@ -196,8 +185,7 @@ class VersionCheckServiceTest {
 
         AtomicInteger requests = new AtomicInteger();
         AtomicReference<String> body = new AtomicReference<>("{\"tag_name\":\"v999.1.0\"}");
-        VersionCheckService service = new VersionCheckService(
-            objectMapper,
+        VersionCheckService service = newService(
             Clock.fixed(now, ZoneOffset.UTC),
             new StubHttpClient(requests, body),
             URI.create("https://example.test/releases/latest")
@@ -239,6 +227,10 @@ class VersionCheckServiceTest {
 
     private Path configFile() {
         return Path.of(System.getProperty("ocp.config.dir")).resolve("config.json");
+    }
+
+    private VersionCheckService newService(Clock clock, HttpClient httpClient, URI uri) {
+        return new VersionCheckService(objectMapper, repositoryService, clock, httpClient, uri);
     }
 
     private static final class StubHttpClient extends HttpClient {

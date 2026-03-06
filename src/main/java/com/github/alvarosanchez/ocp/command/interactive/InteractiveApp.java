@@ -8,7 +8,6 @@ import com.github.alvarosanchez.ocp.service.ProfileService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
 import com.github.alvarosanchez.ocp.service.RepositoryService.ConfiguredRepository;
 import dev.tamboui.style.Color;
-import dev.tamboui.text.Line;
 import dev.tamboui.text.Text;
 import dev.tamboui.toolkit.Toolkit;
 import dev.tamboui.toolkit.app.ToolkitApp;
