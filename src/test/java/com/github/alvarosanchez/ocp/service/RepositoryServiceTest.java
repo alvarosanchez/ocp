@@ -277,6 +277,7 @@ class RepositoryServiceTest {
 
     @Test
     void createSupportsCustomLocationRelativeToWorkingDirectory() throws IOException {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path workingDirectory = Path.of(System.getProperty("ocp.working.dir"));
         Files.createDirectories(workingDirectory.resolve("custom-location"));
 
@@ -291,6 +292,7 @@ class RepositoryServiceTest {
 
     @Test
     void createAndAddCreatesRepositoryAndRegistersItAsFileBased() throws IOException {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path location = tempDir.resolve("location");
         Files.createDirectories(location);
 
@@ -313,6 +315,7 @@ class RepositoryServiceTest {
 
     @Test
     void createAndAddRollsBackCreatedRepositoryWhenAddFails() throws IOException {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path existingRepository = tempDir.resolve("existing-repository");
         writeConfig(
             new OcpConfigFile(

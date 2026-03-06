@@ -47,18 +47,19 @@ class RepositoryRefreshCommand implements Callable<Integer> {
                 return 0;
             }
 
+            String normalizedRepositoryName = repositoryName.trim();
             RepositoryEntry repositoryEntry = repositoryService
                 .load()
                 .stream()
-                .filter(entry -> entry.name().equals(repositoryName.trim()))
+                .filter(entry -> entry.name().equals(normalizedRepositoryName))
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException("Repository `" + repositoryName.trim() + "` was not found."));
+                .orElseThrow(() -> new IllegalStateException("Repository `" + normalizedRepositoryName + "` was not found."));
             if (!repositoryEntry.isGitBacked()) {
                 Cli.info("Repository `" + repositoryEntry.name() + "` is file-based; nothing to refresh.");
                 return 0;
             }
 
-            RefreshOutcome refreshOutcome = refreshSingleWithConflictResolution(repositoryName);
+            RefreshOutcome refreshOutcome = refreshSingleWithConflictResolution(normalizedRepositoryName);
             ProfileConfigChangeNotifier.notifyUserConfigChanges(refreshOutcome.refreshResult());
             Cli.success(refreshOutcome.message());
             return 0;
