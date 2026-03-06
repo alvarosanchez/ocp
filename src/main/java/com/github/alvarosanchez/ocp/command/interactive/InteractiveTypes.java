@@ -20,6 +20,9 @@ enum PromptAction {
     CREATE_PROFILE,
     ADD_REPOSITORY,
     DELETE_REPOSITORY,
+    DELETE_REPOSITORY_FORCE,
+    DELETE_REPOSITORY_FILE_BASED,
+    DELETE_PROFILE,
     CREATE_REPOSITORY
 }
 
@@ -33,21 +36,37 @@ enum RefreshConflictKind {
     MERGED_FILES
 }
 
-record NodeRef(NodeKind kind, String repositoryName, String profileName, Path path) {
+record NodeRef(
+    NodeKind kind,
+    String repositoryName,
+    String profileName,
+    Path path,
+    boolean inherited,
+    String inheritedFromProfile
+) {
     static NodeRef repository(String repositoryName, Path path) {
-        return new NodeRef(NodeKind.REPOSITORY, repositoryName, null, path);
+        return new NodeRef(NodeKind.REPOSITORY, repositoryName, null, path, false, null);
     }
 
     static NodeRef profile(String repositoryName, String profileName, Path path) {
-        return new NodeRef(NodeKind.PROFILE, repositoryName, profileName, path);
+        return new NodeRef(NodeKind.PROFILE, repositoryName, profileName, path, false, null);
     }
 
     static NodeRef directory(String repositoryName, String profileName, Path path) {
-        return new NodeRef(NodeKind.DIRECTORY, repositoryName, profileName, path);
+        return new NodeRef(NodeKind.DIRECTORY, repositoryName, profileName, path, false, null);
     }
 
     static NodeRef file(String repositoryName, String profileName, Path path) {
-        return new NodeRef(NodeKind.FILE, repositoryName, profileName, path);
+        return new NodeRef(NodeKind.FILE, repositoryName, profileName, path, false, null);
+    }
+
+    static NodeRef inheritedFile(
+        String repositoryName,
+        String profileName,
+        Path path,
+        String inheritedFromProfile
+    ) {
+        return new NodeRef(NodeKind.FILE, repositoryName, profileName, path, true, inheritedFromProfile);
     }
 }
 

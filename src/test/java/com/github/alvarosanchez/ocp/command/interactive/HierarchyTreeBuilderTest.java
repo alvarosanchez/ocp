@@ -59,6 +59,7 @@ class HierarchyTreeBuilderTest {
         List<TreeNode<NodeRef>> roots = HierarchyTreeBuilder.buildHierarchyTree(
             List.of(repository),
             List.of(activeProfile),
+            Map.of(),
             4,
             10
         );
@@ -95,6 +96,7 @@ class HierarchyTreeBuilderTest {
         List<TreeNode<NodeRef>> roots = HierarchyTreeBuilder.buildHierarchyTree(
             List.of(repository),
             List.of(),
+            Map.of(),
             0,
             10
         );
@@ -110,7 +112,7 @@ class HierarchyTreeBuilderTest {
     void renderTreeNodeFallsBackToPlainTextWhenDataIsMissing() {
         TreeNode<NodeRef> node = TreeNode.of("group");
 
-        StyledElement<?> rendered = HierarchyTreeBuilder.renderTreeNode(node, Map.of());
+        StyledElement<?> rendered = HierarchyTreeBuilder.renderTreeNode(node, Map.of(), Map.of());
 
         TextElement text = assertInstanceOf(TextElement.class, rendered);
         assertEquals("group", text.content());
@@ -135,7 +137,11 @@ class HierarchyTreeBuilderTest {
             false
         );
 
-        StyledElement<?> rendered = HierarchyTreeBuilder.renderTreeNode(node, Map.of("active-profile", profile));
+        StyledElement<?> rendered = HierarchyTreeBuilder.renderTreeNode(
+            node,
+            Map.of("repo-a/active-profile", profile),
+            Map.of("repo-a/active-profile", "base-profile")
+        );
 
         RichTextElement richText = assertInstanceOf(RichTextElement.class, rendered);
         var spans = richText.text().lines().getFirst().spans();
@@ -143,12 +149,166 @@ class HierarchyTreeBuilderTest {
         assertEquals("\uD83D\uDC64 ", spans.get(0).content());
         assertEquals(Color.MAGENTA, spans.get(0).style().fg().orElseThrow());
         assertTrue(spans.get(0).style().effectiveModifiers().contains(Modifier.BOLD));
-        assertEquals("active-profile", spans.get(1).content());
+        assertEquals("active-profile ⇢ 👤 base-profile", spans.get(1).content());
         assertEquals(Color.BRIGHT_WHITE, spans.get(1).style().fg().orElseThrow());
         assertTrue(spans.get(1).style().effectiveModifiers().contains(Modifier.BOLD));
         assertEquals(" \u2713", spans.get(2).content());
         assertEquals(Color.GREEN, spans.get(2).style().fg().orElseThrow());
         assertEquals(" \u2744", spans.get(3).content());
         assertEquals(Color.YELLOW, spans.get(3).style().fg().orElseThrow());
+    }
+
+    @Test
+    void renderTreeNodeMakesInheritedFileNodesVisiblyDistinct() {
+        TreeNode<NodeRef> node = TreeNode.of(
+            "shared.json",
+            NodeRef.inheritedFile("repo-a", "child", Path.of("/tmp/repo-a/base/shared.json"), "base")
+        );
+
+        StyledElement<?> rendered = HierarchyTreeBuilder.renderTreeNode(node, Map.of(), Map.of());
+
+        RichTextElement richText = assertInstanceOf(RichTextElement.class, rendered);
+        var spans = richText.text().lines().getFirst().spans();
+        assertEquals(2, spans.size());
+        assertEquals("🔒 ", spans.get(0).content());
+        assertEquals(Color.GRAY, spans.get(0).style().fg().orElseThrow());
+        assertEquals("shared.json", spans.get(1).content());
+        assertEquals(Color.GRAY, spans.get(1).style().fg().orElseThrow());
+        assertTrue(spans.get(1).style().effectiveModifiers().contains(Modifier.DIM));
+    }
+
+    @Test
+    void buildHierarchyTreeIncludesInheritedParentFilesAsReadOnlyNodes() throws IOException {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path baseProfilePath = repositoryPath.resolve("base");
+        Path childProfilePath = repositoryPath.resolve("child");
+        Files.createDirectories(baseProfilePath.resolve("nested"));
+        Files.createDirectories(childProfilePath);
+        Path inheritedFile = baseProfilePath.resolve("nested/shared.json");
+        Files.writeString(inheritedFile, "{}");
+        Path localFile = childProfilePath.resolve("local.json");
+        Files.writeString(localFile, "{}");
+
+        ConfiguredRepository repository = new ConfiguredRepository(
+            "repo-a",
+            "git@example/repo-a.git",
+            repositoryPath.toString(),
+            List.of("base", "child")
+        );
+
+        List<TreeNode<NodeRef>> roots = HierarchyTreeBuilder.buildHierarchyTree(
+            List.of(repository),
+            List.of(),
+            Map.of("repo-a/child", "base"),
+            4,
+            20
+        );
+
+        TreeNode<NodeRef> childProfileNode = roots.getFirst().children().stream()
+            .filter(node -> "child".equals(node.label()))
+            .findFirst()
+            .orElseThrow();
+        TreeNode<NodeRef> nestedDirectory = childProfileNode.children().stream()
+            .filter(node -> "nested/".equals(node.label()))
+            .findFirst()
+            .orElseThrow();
+        TreeNode<NodeRef> inheritedFileNode = nestedDirectory.children().getFirst();
+
+        assertEquals("shared.json", inheritedFileNode.label());
+        assertTrue(inheritedFileNode.data().inherited());
+        assertEquals("base", inheritedFileNode.data().inheritedFromProfile());
+        assertEquals(inheritedFile, inheritedFileNode.data().path());
+    }
+
+    @Test
+    void buildHierarchyTreePrefersChildFileOverInheritedParentFile() throws IOException {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path baseProfilePath = repositoryPath.resolve("base");
+        Path childProfilePath = repositoryPath.resolve("child");
+        Files.createDirectories(baseProfilePath.resolve("nested"));
+        Files.createDirectories(childProfilePath.resolve("nested"));
+        Path parentFile = baseProfilePath.resolve("nested/settings.json");
+        Path childFile = childProfilePath.resolve("nested/settings.json");
+        Files.writeString(parentFile, "{\"source\":\"parent\"}");
+        Files.writeString(childFile, "{\"source\":\"child\"}");
+
+        ConfiguredRepository repository = new ConfiguredRepository(
+            "repo-a",
+            "git@example/repo-a.git",
+            repositoryPath.toString(),
+            List.of("base", "child")
+        );
+
+        List<TreeNode<NodeRef>> roots = HierarchyTreeBuilder.buildHierarchyTree(
+            List.of(repository),
+            List.of(),
+            Map.of("repo-a/child", "base"),
+            4,
+            20
+        );
+
+        TreeNode<NodeRef> childProfileNode = roots.getFirst().children().stream()
+            .filter(node -> "child".equals(node.label()))
+            .findFirst()
+            .orElseThrow();
+        TreeNode<NodeRef> nestedDirectory = childProfileNode.children().stream()
+            .filter(node -> "nested/".equals(node.label()))
+            .findFirst()
+            .orElseThrow();
+
+        assertEquals(1, nestedDirectory.children().size());
+        TreeNode<NodeRef> settingsNode = nestedDirectory.children().getFirst();
+        assertEquals("settings.json", settingsNode.label());
+        assertEquals(childFile, settingsNode.data().path());
+        assertFalse(settingsNode.data().inherited());
+    }
+
+    @Test
+    void buildHierarchyTreeResolvesInheritedFilesFromParentInAnotherRepository() throws IOException {
+        Path childRepositoryPath = tempDir.resolve("repo-child");
+        Path parentRepositoryPath = tempDir.resolve("repo-parent");
+        Path childProfilePath = childRepositoryPath.resolve("child");
+        Path parentProfilePath = parentRepositoryPath.resolve("base");
+        Files.createDirectories(childProfilePath);
+        Files.createDirectories(parentProfilePath.resolve("nested"));
+        Path inheritedFile = parentProfilePath.resolve("nested/shared.json");
+        Files.writeString(inheritedFile, "{}");
+
+        ConfiguredRepository childRepository = new ConfiguredRepository(
+            "repo-child",
+            "git@example/repo-child.git",
+            childRepositoryPath.toString(),
+            List.of("child")
+        );
+        ConfiguredRepository parentRepository = new ConfiguredRepository(
+            "repo-parent",
+            "git@example/repo-parent.git",
+            parentRepositoryPath.toString(),
+            List.of("base")
+        );
+
+        List<TreeNode<NodeRef>> roots = HierarchyTreeBuilder.buildHierarchyTree(
+            List.of(childRepository, parentRepository),
+            List.of(),
+            Map.of("repo-child/child", "base"),
+            4,
+            20
+        );
+
+        TreeNode<NodeRef> childRepositoryNode = roots.stream()
+            .filter(node -> "repo-child".equals(node.label()))
+            .findFirst()
+            .orElseThrow();
+        TreeNode<NodeRef> childProfileNode = childRepositoryNode.children().getFirst();
+        TreeNode<NodeRef> nestedDirectory = childProfileNode.children().stream()
+            .filter(node -> "nested/".equals(node.label()))
+            .findFirst()
+            .orElseThrow();
+        TreeNode<NodeRef> inheritedFileNode = nestedDirectory.children().getFirst();
+
+        assertEquals("shared.json", inheritedFileNode.label());
+        assertTrue(inheritedFileNode.data().inherited());
+        assertEquals("base", inheritedFileNode.data().inheritedFromProfile());
+        assertEquals(inheritedFile, inheritedFileNode.data().path());
     }
 }

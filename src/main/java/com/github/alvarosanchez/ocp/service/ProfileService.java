@@ -108,21 +108,145 @@ public final class ProfileService {
      * @return {@code true} when the profile is created
      */
     public boolean createProfile(String profileName) {
+        return createProfileInRepository(profileName, workingDirectory(), null);
+    }
+
+    /**
+     * Creates a profile scaffold in the current working repository with optional inheritance.
+     *
+     * @param profileName profile name to create
+     * @param parentProfileName optional parent profile name to extend from
+     * @return {@code true} when the profile is created
+     */
+    public boolean createProfileWithParent(String profileName, String parentProfileName) {
+        return createProfileInRepository(profileName, workingDirectory(), parentProfileName);
+    }
+
+    /**
+     * Creates a profile scaffold in a configured repository.
+     *
+     * @param profileName profile name to create
+     * @param repositoryName configured repository name
+     * @return {@code true} when the profile is created
+     */
+    public boolean createProfile(String profileName, String repositoryName) {
+        return createProfile(profileName, repositoryName, null);
+    }
+
+    /**
+     * Creates a profile scaffold in a configured repository with optional inheritance.
+     *
+     * @param profileName profile name to create
+     * @param repositoryName configured repository name
+     * @param parentProfileName optional parent profile name to extend from
+     * @return {@code true} when the profile is created
+     */
+    public boolean createProfile(String profileName, String repositoryName, String parentProfileName) {
+        String normalizedRepositoryName = normalizeRepositoryName(repositoryName);
+        RepositoryEntry repositoryEntry = findRepositoryEntry(normalizedRepositoryName);
+
+        return createProfileInRepository(profileName, Path.of(repositoryEntry.localPath()), parentProfileName);
+    }
+
+    /**
+     * Lists profile names in a configured repository.
+     *
+     * @param repositoryName configured repository name
+     * @return sorted profile names available in the repository metadata
+     */
+    public List<String> listProfilesInRepository(String repositoryName) {
+        String normalizedRepositoryName = normalizeRepositoryName(repositoryName);
+        RepositoryEntry repositoryEntry = findRepositoryEntry(normalizedRepositoryName);
+        RepositoryConfigFile repositoryConfigFile = readRepositoryConfigFile(Path.of(repositoryEntry.localPath()).resolve("repository.json"));
+
+        return repositoryConfigFile
+            .profiles()
+            .stream()
+            .map(ProfileEntry::name)
+            .filter(name -> name != null && !name.isBlank())
+            .map(String::trim)
+            .sorted()
+            .toList();
+    }
+
+    public List<String> listResolvableProfileNames() {
+        List<String> profileNames = new ArrayList<>(discoverProfilesByName().keySet());
+        profileNames.sort(String::compareTo);
+        return profileNames;
+    }
+
+    /**
+     * Deletes a profile from a configured repository.
+     *
+     * @param profileName profile name to delete
+     * @param repositoryName configured repository name
+     * @return {@code true} when the profile is deleted
+     */
+    public boolean deleteProfile(String profileName, String repositoryName) {
         String normalizedProfileName = normalizeProfileName(profileName);
-        Path repositoryPath = workingDirectory();
+        String normalizedRepositoryName = normalizeRepositoryName(repositoryName);
+        RepositoryEntry repositoryEntry = findRepositoryEntry(normalizedRepositoryName);
+
+        Path repositoryPath = Path.of(repositoryEntry.localPath());
         Path metadataFile = repositoryPath.resolve("repository.json");
         RepositoryConfigFile repositoryConfigFile = readRepositoryConfigFile(metadataFile);
 
+        List<ProfileEntry> remainingProfiles = new ArrayList<>();
+        boolean deleted = false;
         for (ProfileEntry profileEntry : repositoryConfigFile.profiles()) {
-            if (normalizedProfileName.equals(profileEntry.name())) {
+            String existingName = profileEntry.name() == null ? "" : profileEntry.name().trim();
+            if (existingName.equals(normalizedProfileName)) {
+                deleted = true;
+                continue;
+            }
+            remainingProfiles.add(profileEntry);
+        }
+        if (!deleted) {
+            throw new IllegalStateException(
+                "Profile `" + normalizedProfileName + "` was not found in repository `" + normalizedRepositoryName + "`."
+            );
+        }
+
+        writeRepositoryConfigFile(metadataFile, new RepositoryConfigFile(remainingProfiles));
+        deleteRecursively(repositoryPath.resolve(normalizedProfileName));
+
+        if (normalizedProfileName.equals(currentActiveProfileName())) {
+            writeActiveProfile(null);
+        }
+        return true;
+    }
+
+    private boolean createProfileInRepository(String profileName, Path repositoryPath, String parentProfileName) {
+        String normalizedProfileName = normalizeProfileName(profileName);
+        String normalizedParentProfileName = normalizeOptionalProfileName(parentProfileName);
+        Path metadataFile = repositoryPath.resolve("repository.json");
+        RepositoryConfigFile repositoryConfigFile = readRepositoryConfigFile(metadataFile);
+
+        Set<String> existingProfileNames = new HashSet<>();
+
+        for (ProfileEntry profileEntry : repositoryConfigFile.profiles()) {
+            String existingProfileName = profileEntry.name() == null ? "" : profileEntry.name().trim();
+            if (existingProfileName.isBlank()) {
+                continue;
+            }
+            existingProfileNames.add(existingProfileName);
+            if (normalizedProfileName.equals(existingProfileName)) {
                 throw new IllegalStateException("Profile `" + normalizedProfileName + "` already exists.");
             }
+        }
+
+        Set<String> resolvableProfileNames = new HashSet<>(existingProfileNames);
+        resolvableProfileNames.addAll(discoverProfilesByName().keySet());
+        if (normalizedParentProfileName != null && !resolvableProfileNames.contains(normalizedParentProfileName)) {
+            throw new IllegalStateException(
+                "Parent profile `" + normalizedParentProfileName + "` was not found among resolvable profiles."
+            );
         }
 
         try {
             Files.createDirectories(repositoryPath.resolve(normalizedProfileName));
             List<ProfileEntry> profiles = new ArrayList<>(repositoryConfigFile.profiles());
-            profiles.add(new ProfileEntry(normalizedProfileName));
+            profiles.add(new ProfileEntry(normalizedProfileName, null, normalizedParentProfileName));
             writeRepositoryConfigFile(metadataFile, new RepositoryConfigFile(profiles));
             return true;
         } catch (IOException e) {
@@ -780,19 +904,31 @@ public final class ProfileService {
     }
 
     private String normalizeProfileName(String profileName) {
-        String normalizedProfileName = profileName == null ? "" : profileName.trim();
-        if (normalizedProfileName.isBlank()) {
-            throw new IllegalStateException("Profile name is required.");
-        }
-        return normalizedProfileName;
+        return PathSegmentValidator.requireSinglePathSegment(profileName, "Profile name");
     }
 
     private String normalizeRepositoryName(String repositoryName) {
-        String normalizedRepositoryName = repositoryName == null ? "" : repositoryName.trim();
-        if (normalizedRepositoryName.isBlank()) {
-            throw new IllegalStateException("Repository name is required.");
+        return PathSegmentValidator.requireSinglePathSegment(repositoryName, "Repository name");
+    }
+
+    private String normalizeOptionalProfileName(String profileName) {
+        if (profileName == null) {
+            return null;
         }
-        return normalizedRepositoryName;
+        String normalizedProfileName = profileName.trim();
+        if (normalizedProfileName.isBlank()) {
+            return null;
+        }
+        return PathSegmentValidator.requireSinglePathSegment(normalizedProfileName, "Parent profile name");
+    }
+
+    private RepositoryEntry findRepositoryEntry(String normalizedRepositoryName) {
+        return repositoryService
+            .load()
+            .stream()
+            .filter(entry -> entry.name().equals(normalizedRepositoryName))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("Repository `" + normalizedRepositoryName + "` was not found."));
     }
 
     private Optional<ProfileSwitchResult> refreshActiveProfileIfAffectedByRepository(String refreshedRepositoryName) {
@@ -860,6 +996,9 @@ public final class ProfileService {
     }
 
     private void refreshRepository(RepositoryEntry repositoryEntry) {
+        if (!repositoryEntry.isGitBacked()) {
+            return;
+        }
         Path localPath = Path.of(repositoryEntry.localPath());
         if (gitRepositoryClient.hasLocalChanges(localPath)) {
             throw new ProfileRefreshConflictException(
@@ -872,6 +1011,10 @@ public final class ProfileService {
     }
 
     private RepositoryStatus repositoryStatusFor(RepositoryEntry repositoryEntry) {
+        if (!repositoryEntry.isGitBacked()) {
+            return new RepositoryStatus("-", 0L, "Local file repository", false, false);
+        }
+
         Path localPath = Path.of(repositoryEntry.localPath());
 
         String shortSha = "-";

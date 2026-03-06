@@ -16,6 +16,7 @@ class InteractiveTypesTest {
         NodeRef profile = NodeRef.profile("repo", "profile", samplePath);
         NodeRef directory = NodeRef.directory("repo", "profile", samplePath);
         NodeRef file = NodeRef.file("repo", "profile", samplePath);
+        NodeRef inheritedFile = NodeRef.inheritedFile("repo", "profile", samplePath, "base");
 
         assertEquals(NodeKind.REPOSITORY, repository.kind());
         assertNull(repository.profileName());
@@ -24,6 +25,9 @@ class InteractiveTypesTest {
         assertEquals(NodeKind.DIRECTORY, directory.kind());
         assertEquals(NodeKind.FILE, file.kind());
         assertEquals(samplePath, file.path());
+        assertEquals(false, file.inherited());
+        assertEquals(true, inheritedFile.inherited());
+        assertEquals("base", inheritedFile.inheritedFromProfile());
     }
 
     @Test

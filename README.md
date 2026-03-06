@@ -25,6 +25,12 @@ Requirements:
 # Add a profile repository
 ocp repository add git@github.com:my-org/opencode-profiles.git --name my-org-opencode-profiles
 
+# Add a local repository directly (no Git remote required)
+ocp repository add /absolute/path/to/opencode-profiles --name local-profiles
+
+# Add current folder as repository
+ocp repository add . --name local-current
+
 # List configured repositories and discovered profiles
 ocp repository list
 
@@ -72,7 +78,7 @@ oss/opencode.json
 }
 ```
 
-When `extends_from` is set, parent profiles are resolved first. Shared JSON/JSONC files are deep-merged recursively, while parent-only files are inherited unchanged.
+When `extends_from` is set, parent profiles are resolved first. Shared JSON/JSONC files are deep-merged recursively, while parent-only files are kept unchanged from the parent profile.
 
 ## Commands
 
@@ -80,13 +86,13 @@ When `extends_from` is set, parent profiles are resolved first. Shared JSON/JSON
 - `ocp help <command>` - print command help.
 - `ocp profile list` - list discovered profiles.
 - `ocp profile` - show active profile metadata.
-- `ocp profile create [name]` - create a profile in the current repository (`default` if omitted).
+- `ocp profile create [name] [--extends-from <parent>]` - create a profile in the current repository (`default` if omitted), optionally extending from an existing profile.
 - `ocp profile use <name>` - switch to profile by name.
-- `ocp repository add <uri> --name <name>` - clone and register a repository.
+- `ocp repository add <uri-or-path> --name <name>` - add and register a repository from a Git URI or local path.
 - `ocp repository list` - list configured repositories with URI, local path, and resolved profiles.
-- `ocp repository delete <name>` - remove repository and local clone.
+- `ocp repository delete <name> [--force] [--delete-local-path]` - remove repository from registry; `--force` is required for dirty git repos, and `--delete-local-path` removes local folders for file-based repos.
 - `ocp repository create <name> [--profile-name <profile>]` - scaffold a new profile repository.
-- `ocp repository refresh [name]` - pull latest changes for one repository by name or all repositories.
+- `ocp repository refresh [name]` - pull latest changes for git-backed repositories; for file-based repositories this is a no-op with a message.
 
 ## File locations
 

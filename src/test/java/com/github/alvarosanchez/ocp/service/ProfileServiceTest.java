@@ -136,6 +136,286 @@ class ProfileServiceTest {
     }
 
     @Test
+    void createProfileCreatesProfileInConfiguredRepository() throws IOException {
+        Path selectedRepository = tempDir.resolve("selected-repository");
+        Files.createDirectories(selectedRepository);
+        Files.writeString(
+            selectedRepository.resolve("repository.json"),
+            objectMapper.writeValueAsString(new RepositoryConfigFile(List.of(new ProfileEntry("existing"))))
+        );
+        writeConfig(List.of(new RepositoryEntry("selected", null, selectedRepository.toString())));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        assertTrue(profileService.createProfile("new-profile", "selected"));
+        assertTrue(Files.isDirectory(selectedRepository.resolve("new-profile")));
+
+        RepositoryConfigFile metadata = objectMapper.readValue(
+            Files.readString(selectedRepository.resolve("repository.json")),
+            RepositoryConfigFile.class
+        );
+        assertEquals(List.of("existing", "new-profile"), metadata.profiles().stream().map(ProfileEntry::name).toList());
+    }
+
+    @Test
+    void createProfileStoresParentWhenInheritanceIsConfigured() throws IOException {
+        Path selectedRepository = tempDir.resolve("selected-repository");
+        Files.createDirectories(selectedRepository);
+        Files.writeString(
+            selectedRepository.resolve("repository.json"),
+            objectMapper.writeValueAsString(new RepositoryConfigFile(List.of(new ProfileEntry("base"))))
+        );
+        writeConfig(List.of(new RepositoryEntry("selected", null, selectedRepository.toString())));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        assertTrue(profileService.createProfile("child", "selected", "base"));
+
+        RepositoryConfigFile metadata = objectMapper.readValue(
+            Files.readString(selectedRepository.resolve("repository.json")),
+            RepositoryConfigFile.class
+        );
+        ProfileEntry child = metadata.profiles().stream().filter(profile -> profile.name().equals("child")).findFirst().orElseThrow();
+        assertEquals("base", child.extendsFrom());
+    }
+
+    @Test
+    void createProfileThrowsWhenConfiguredRepositoryDoesNotExist() {
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> profileService.createProfile("new-profile", "missing")
+        );
+
+        assertTrue(thrown.getMessage().contains("Repository `missing` was not found."));
+    }
+
+    @Test
+    void createProfileThrowsWhenParentProfileIsMissing() throws IOException {
+        Path selectedRepository = tempDir.resolve("selected-repository");
+        Files.createDirectories(selectedRepository);
+        Files.writeString(
+            selectedRepository.resolve("repository.json"),
+            objectMapper.writeValueAsString(new RepositoryConfigFile(List.of(new ProfileEntry("existing"))))
+        );
+        writeConfig(List.of(new RepositoryEntry("selected", null, selectedRepository.toString())));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> profileService.createProfile("child", "selected", "missing-parent")
+        );
+
+        assertTrue(thrown.getMessage().contains("Parent profile `missing-parent` was not found"));
+    }
+
+    @Test
+    void createProfileRejectsParentProfileNameWithPathTraversal() throws IOException {
+        Path selectedRepository = tempDir.resolve("selected-repository");
+        Files.createDirectories(selectedRepository);
+        Files.writeString(
+            selectedRepository.resolve("repository.json"),
+            objectMapper.writeValueAsString(new RepositoryConfigFile(List.of(new ProfileEntry("existing"))))
+        );
+        writeConfig(List.of(new RepositoryEntry("selected", null, selectedRepository.toString())));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> profileService.createProfile("child", "selected", "../base")
+        );
+
+        assertTrue(thrown.getMessage().contains("single safe path segment"));
+    }
+
+    @Test
+    void createProfileRejectsRepositoryNameWithPathTraversal() throws IOException {
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> profileService.createProfile("child", "../selected")
+        );
+
+        assertTrue(thrown.getMessage().contains("single safe path segment"));
+    }
+
+    @Test
+    void createProfileRejectsProfileNameWithPathTraversal() throws IOException {
+        Path selectedRepository = tempDir.resolve("selected-repository");
+        Files.createDirectories(selectedRepository);
+        Files.writeString(
+            selectedRepository.resolve("repository.json"),
+            objectMapper.writeValueAsString(new RepositoryConfigFile(List.of(new ProfileEntry("existing"))))
+        );
+        writeConfig(List.of(new RepositoryEntry("selected", null, selectedRepository.toString())));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> profileService.createProfile("../outside", "selected")
+        );
+
+        assertTrue(thrown.getMessage().contains("single safe path segment"));
+    }
+
+    @Test
+    void listProfilesInRepositoryReturnsSortedNames() throws IOException {
+        Path selectedRepository = tempDir.resolve("selected-repository");
+        Files.createDirectories(selectedRepository);
+        Files.writeString(
+            selectedRepository.resolve("repository.json"),
+            objectMapper.writeValueAsString(
+                new RepositoryConfigFile(List.of(new ProfileEntry("zeta"), new ProfileEntry("alpha"), new ProfileEntry("beta")))
+            )
+        );
+        writeConfig(List.of(new RepositoryEntry("selected", null, selectedRepository.toString())));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        List<String> profiles = profileService.listProfilesInRepository("selected");
+
+        assertEquals(List.of("alpha", "beta", "zeta"), profiles);
+    }
+
+    @Test
+    void listResolvableProfileNamesReturnsSortedNamesAcrossRepositories() throws IOException {
+        writeRepositoryMetadata("repo-one", List.of("zeta", "alpha"));
+        writeRepositoryMetadata("repo-two", List.of("beta"));
+        writeConfig(List.of(
+            new RepositoryEntry("repo-one", "git@github.com:acme/repo-one.git", null),
+            new RepositoryEntry("repo-two", "git@github.com:acme/repo-two.git", null)
+        ));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        List<String> profileNames = profileService.listResolvableProfileNames();
+
+        assertEquals(List.of("alpha", "beta", "zeta"), profileNames);
+    }
+
+    @Test
+    void createProfileAllowsParentFromAnotherRepository() throws IOException {
+        Path targetRepository = tempDir.resolve("target-repository");
+        Files.createDirectories(targetRepository);
+        Files.writeString(
+            targetRepository.resolve("repository.json"),
+            objectMapper.writeValueAsString(new RepositoryConfigFile(List.of(new ProfileEntry("target-base"))))
+        );
+
+        Path sharedRepository = tempDir.resolve("shared-repository");
+        Files.createDirectories(sharedRepository);
+        Files.writeString(
+            sharedRepository.resolve("repository.json"),
+            objectMapper.writeValueAsString(new RepositoryConfigFile(List.of(new ProfileEntry("shared-base"))))
+        );
+
+        writeConfig(List.of(
+            new RepositoryEntry("target", null, targetRepository.toString()),
+            new RepositoryEntry("shared", null, sharedRepository.toString())
+        ));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        assertTrue(profileService.createProfile("child", "target", "shared-base"));
+
+        RepositoryConfigFile targetMetadata = objectMapper.readValue(
+            Files.readString(targetRepository.resolve("repository.json")),
+            RepositoryConfigFile.class
+        );
+        ProfileEntry child = targetMetadata.profiles().stream().filter(profile -> profile.name().equals("child")).findFirst().orElseThrow();
+        assertEquals("shared-base", child.extendsFrom());
+    }
+
+    @Test
+    void deleteProfileRemovesProfileDirectoryAndMetadataInConfiguredRepository() throws IOException {
+        Path selectedRepository = tempDir.resolve("selected-repository");
+        Files.createDirectories(selectedRepository);
+        Files.writeString(
+            selectedRepository.resolve("repository.json"),
+            objectMapper.writeValueAsString(
+                new RepositoryConfigFile(
+                    List.of(
+                        new ProfileEntry("keep", "Keep profile"),
+                        new ProfileEntry("remove", "Remove profile")
+                    )
+                )
+            )
+        );
+        Files.createDirectories(selectedRepository.resolve("keep"));
+        Files.createDirectories(selectedRepository.resolve("remove"));
+        writeConfig(List.of(new RepositoryEntry("selected", null, selectedRepository.toString())));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        assertTrue(profileService.deleteProfile("remove", "selected"));
+
+        assertTrue(Files.isDirectory(selectedRepository.resolve("keep")));
+        assertTrue(Files.notExists(selectedRepository.resolve("remove")));
+
+        RepositoryConfigFile metadata = objectMapper.readValue(
+            Files.readString(selectedRepository.resolve("repository.json")),
+            RepositoryConfigFile.class
+        );
+        assertEquals(List.of("keep"), metadata.profiles().stream().map(ProfileEntry::name).toList());
+    }
+
+    @Test
+    void deleteProfileClearsActiveProfileWhenDeletingCurrentOne() throws IOException {
+        Path selectedRepository = tempDir.resolve("selected-repository");
+        Files.createDirectories(selectedRepository);
+        Files.writeString(
+            selectedRepository.resolve("repository.json"),
+            objectMapper.writeValueAsString(new RepositoryConfigFile(List.of(new ProfileEntry("active"))))
+        );
+        Files.createDirectories(selectedRepository.resolve("active"));
+
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions("active"),
+                List.of(new RepositoryEntry("selected", null, selectedRepository.toString()))
+            )
+        );
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        assertTrue(profileService.deleteProfile("active", "selected"));
+        assertEquals(null, repositoryService.loadConfigFile().config().activeProfile());
+    }
+
+    @Test
+    void deleteProfileThrowsWhenProfileIsMissingInConfiguredRepository() throws IOException {
+        Path selectedRepository = tempDir.resolve("selected-repository");
+        Files.createDirectories(selectedRepository);
+        Files.writeString(
+            selectedRepository.resolve("repository.json"),
+            objectMapper.writeValueAsString(new RepositoryConfigFile(List.of(new ProfileEntry("existing"))))
+        );
+        writeConfig(List.of(new RepositoryEntry("selected", null, selectedRepository.toString())));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> profileService.deleteProfile("missing", "selected")
+        );
+
+        assertTrue(thrown.getMessage().contains("Profile `missing` was not found in repository `selected`."));
+    }
+
+    @Test
+    void deleteProfileRejectsProfileNameWithPathSeparator() throws IOException {
+        Path selectedRepository = tempDir.resolve("selected-repository");
+        Files.createDirectories(selectedRepository);
+        Files.writeString(
+            selectedRepository.resolve("repository.json"),
+            objectMapper.writeValueAsString(new RepositoryConfigFile(List.of(new ProfileEntry("existing"))))
+        );
+        writeConfig(List.of(new RepositoryEntry("selected", null, selectedRepository.toString())));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> profileService.deleteProfile("nested/remove", "selected")
+        );
+
+        assertTrue(thrown.getMessage().contains("single safe path segment"));
+    }
+
+    @Test
     void useProfileMergesSharedJsonAndKeepsParentOnlyJson() throws IOException {
         writeRepositoryMetadata(
             "repo-local",
@@ -272,6 +552,25 @@ class ProfileServiceTest {
         }
     }
 
+    @Test
+    void refreshRepositorySkipsGitOperationsForFileBasedRepository() throws IOException {
+        Path localRepository = tempDir.resolve("local-file-repository");
+        Files.createDirectories(localRepository);
+        Files.writeString(
+            localRepository.resolve("repository.json"),
+            objectMapper.writeValueAsString(new RepositoryConfigFile(List.of(new ProfileEntry("work"))))
+        );
+        Files.createDirectories(localRepository.resolve("work"));
+        Files.writeString(localRepository.resolve("work").resolve("opencode.json"), "{}");
+
+        writeConfig(List.of(new RepositoryEntry("repo-local", null, localRepository.toString())));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        assertTrue(profileService.refreshRepository("repo-local"));
+        List<Profile> profiles = profileService.getAllProfiles();
+        assertEquals(List.of("work"), profiles.stream().map(Profile::name).toList());
+    }
+
     private Path repositoriesRootDirectory() {
         String configuredCacheDir = System.getProperty("ocp.cache.dir");
         if (configuredCacheDir != null && !configuredCacheDir.isBlank()) {
@@ -281,9 +580,12 @@ class ProfileServiceTest {
     }
 
     private void writeConfig(List<RepositoryEntry> repositories) throws IOException {
+        writeConfig(new OcpConfigFile(new OcpConfigOptions(), repositories));
+    }
+
+    private void writeConfig(OcpConfigFile configFile) throws IOException {
         Path configDir = Path.of(System.getProperty("ocp.config.dir"));
         Files.createDirectories(configDir);
-        OcpConfigFile configFile = new OcpConfigFile(new OcpConfigOptions(), repositories);
         Files.writeString(configDir.resolve("config.json"), objectMapper.writeValueAsString(configFile));
     }
 

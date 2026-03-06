@@ -19,6 +19,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -63,6 +64,7 @@ class RepositoryCommandTest {
 
     @Test
     void addClonesRepositoryAndRegistersItInConfig() throws IOException, InterruptedException {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path remote = createRemoteRepository();
         String repositoryName = "team-configs";
 
@@ -81,6 +83,7 @@ class RepositoryCommandTest {
 
     @Test
     void addRemovesUnknownCachedCloneWhenConfigIsMissing() throws IOException, InterruptedException {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path remote = createRemoteRepository();
         String repositoryName = "stale-repo";
         Path localClone = Path.of(System.getProperty("ocp.cache.dir"), "repositories", repositoryName);
@@ -103,12 +106,51 @@ class RepositoryCommandTest {
 
     @Test
     void addRequiresRepositoryNameOption() throws IOException, InterruptedException {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path remote = createRemoteRepository();
 
         CommandResult result = execute("repository", "add", remote.toUri().toString());
 
         assertEquals(2, result.exitCode());
         assertTrue(result.stderr().contains("--name"));
+    }
+
+    @Test
+    void addRegistersLocalPathRepositoryWithNullUri() throws IOException {
+        Path localRepository = tempDir.resolve("my-local-repository");
+        Files.createDirectories(localRepository);
+        Files.writeString(localRepository.resolve("repository.json"), serializeAsJson(new RepositoryConfigFile(List.of())));
+
+        CommandResult result = execute("repository", "add", localRepository.toString(), "--name", "my-local-repository");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("Added repository `my-local-repository`"));
+
+        OcpConfigFile configFile = readOcpConfig(Path.of(System.getProperty("ocp.config.dir"), "config.json"));
+        assertEquals(1, configFile.repositories().size());
+        RepositoryEntry entry = configFile.repositories().getFirst();
+        assertEquals("my-local-repository", entry.name());
+        assertEquals(null, entry.uri());
+        assertEquals(localRepository.toAbsolutePath().normalize().toString(), entry.localPath());
+    }
+
+    @Test
+    void addSupportsCurrentDirectoryShortcutForLocalRepository() throws IOException {
+        Path workingDirectory = Path.of(System.getProperty("ocp.working.dir"));
+        Files.createDirectories(workingDirectory);
+        Files.writeString(workingDirectory.resolve("repository.json"), serializeAsJson(new RepositoryConfigFile(List.of())));
+
+        CommandResult result = execute("repository", "add", ".", "--name", "cwd-repo");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("Added repository `cwd-repo`"));
+
+        OcpConfigFile configFile = readOcpConfig(Path.of(System.getProperty("ocp.config.dir"), "config.json"));
+        assertEquals(1, configFile.repositories().size());
+        RepositoryEntry entry = configFile.repositories().getFirst();
+        assertEquals("cwd-repo", entry.name());
+        assertEquals(null, entry.uri());
+        assertEquals(workingDirectory.toAbsolutePath().normalize().toString(), entry.localPath());
     }
 
     @Test
@@ -129,6 +171,102 @@ class RepositoryCommandTest {
         assertEquals(0, result.exitCode());
         assertTrue(result.stdout().contains("Deleted repository `repo-one`"));
         assertTrue(Files.notExists(localClone));
+
+        OcpConfigFile configFile = readOcpConfig(Path.of(System.getProperty("ocp.config.dir"), "config.json"));
+        assertTrue(configFile.repositories().isEmpty());
+    }
+
+    @Test
+    void deleteGitRepositoryWithLocalChangesFailsWithoutForce() throws IOException, InterruptedException {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
+        Path localClone = Path.of(System.getProperty("ocp.cache.dir"), "repositories", "repo-dirty");
+        Files.createDirectories(localClone);
+        runCommand(List.of("git", "init", localClone.toString()));
+        Files.writeString(localClone.resolve("dirty.txt"), "dirty");
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-dirty", "git@github.com:acme/repo-dirty.git", localClone.toString()))
+            )
+        );
+
+        CommandResult result = execute("repository", "delete", "repo-dirty");
+
+        assertEquals(1, result.exitCode());
+        assertTrue(result.stderr().contains("--force"));
+        assertTrue(Files.exists(localClone));
+
+        OcpConfigFile configFile = readOcpConfig(Path.of(System.getProperty("ocp.config.dir"), "config.json"));
+        assertEquals(1, configFile.repositories().size());
+        assertEquals("repo-dirty", configFile.repositories().getFirst().name());
+    }
+
+    @Test
+    void deleteGitRepositoryWithLocalChangesSucceedsWithForce() throws IOException, InterruptedException {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
+        Path localClone = Path.of(System.getProperty("ocp.cache.dir"), "repositories", "repo-dirty");
+        Files.createDirectories(localClone);
+        runCommand(List.of("git", "init", localClone.toString()));
+        Files.writeString(localClone.resolve("dirty.txt"), "dirty");
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-dirty", "git@github.com:acme/repo-dirty.git", localClone.toString()))
+            )
+        );
+
+        CommandResult result = execute("repository", "delete", "repo-dirty", "--force");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("Deleted repository `repo-dirty`"));
+        assertTrue(Files.notExists(localClone));
+
+        OcpConfigFile configFile = readOcpConfig(Path.of(System.getProperty("ocp.config.dir"), "config.json"));
+        assertTrue(configFile.repositories().isEmpty());
+    }
+
+    @Test
+    void deleteFileBasedRepositoryKeepsLocalFolderByDefault() throws IOException {
+        Path localRepository = tempDir.resolve("local-repository");
+        Files.createDirectories(localRepository);
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("local", null, localRepository.toString()))
+            )
+        );
+
+        CommandResult result = execute("repository", "delete", "local");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("Deleted repository `local`"));
+        assertTrue(Files.exists(localRepository));
+
+        OcpConfigFile configFile = readOcpConfig(Path.of(System.getProperty("ocp.config.dir"), "config.json"));
+        assertTrue(configFile.repositories().isEmpty());
+    }
+
+    @Test
+    void deleteFileBasedRepositoryDeletesLocalFolderWhenFlagIsProvided() throws IOException {
+        Path localRepository = tempDir.resolve("local-repository");
+        Files.createDirectories(localRepository);
+        Files.writeString(localRepository.resolve("repository.json"), serializeAsJson(new RepositoryConfigFile(List.of())));
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("local", null, localRepository.toString()))
+            )
+        );
+
+        CommandResult result = execute("repository", "delete", "local", "--delete-local-path");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("Deleted repository `local`"));
+        assertTrue(Files.notExists(localRepository));
 
         OcpConfigFile configFile = readOcpConfig(Path.of(System.getProperty("ocp.config.dir"), "config.json"));
         assertTrue(configFile.repositories().isEmpty());
@@ -303,6 +441,18 @@ class RepositoryCommandTest {
         int exitCode = process.waitFor();
         if (exitCode != 0) {
             throw new IllegalStateException("Command failed: " + String.join(" ", command) + "\n" + output);
+        }
+    }
+
+    private static boolean isGitAvailable() {
+        try {
+            runCommand(List.of("git", "--version"));
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (IOException | RuntimeException e) {
+            return false;
         }
     }
 

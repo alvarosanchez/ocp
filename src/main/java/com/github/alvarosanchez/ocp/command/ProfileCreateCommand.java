@@ -19,6 +19,12 @@ class ProfileCreateCommand implements Callable<Integer> {
     @CommandLine.Parameters(index = "0", arity = "0..1", defaultValue = "default", description = "Profile name.")
     private String profileName;
 
+    @CommandLine.Option(
+        names = {"--extends-from"},
+        description = "Optional parent profile name to extend from."
+    )
+    private String parentProfileName;
+
     /**
      * Creates a profile in the current repository.
      *
@@ -27,8 +33,12 @@ class ProfileCreateCommand implements Callable<Integer> {
     @Override
     public Integer call() {
         try {
-            profileService.createProfile(profileName);
-            Cli.success("Created profile `" + profileName + "`.");
+            profileService.createProfileWithParent(profileName, parentProfileName);
+            if (parentProfileName == null || parentProfileName.isBlank()) {
+                Cli.success("Created profile `" + profileName + "`.");
+            } else {
+                Cli.success("Created profile `" + profileName + "` extending from `" + parentProfileName.trim() + "`.");
+            }
             return 0;
         } catch (RuntimeException e) {
             Cli.error(e.getMessage());

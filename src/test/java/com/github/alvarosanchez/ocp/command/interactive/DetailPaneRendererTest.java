@@ -16,10 +16,15 @@ class DetailPaneRendererTest {
     @Test
     void detailHintReturnsFileSpecificHints() {
         NodeRef file = NodeRef.file("repo", "profile", Path.of("config.json"));
+        NodeRef inheritedFile = NodeRef.inheritedFile("repo", "profile", Path.of("config.json"), "base");
 
         assertEquals(
-            "Press e or Enter to edit selected file | Up/Down/PgUp/PgDn/Home/End scroll preview",
+            "Press e to edit selected file | Up/Down/PgUp/PgDn/Home/End scroll preview",
             DetailPaneRenderer.detailHint(file, false)
+        );
+        assertEquals(
+            "Inherited file (read-only). Up/Down/PgUp/PgDn/Home/End scroll preview",
+            DetailPaneRenderer.detailHint(inheritedFile, false)
         );
         assertEquals("Editing mode: Ctrl+S save, Esc exit", DetailPaneRenderer.detailHint(file, true));
     }
