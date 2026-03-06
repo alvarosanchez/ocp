@@ -109,7 +109,6 @@ final class TreeShortcutHints {
         static final Shortcut CREATE_PROFILE = new Shortcut("c", "create profile");
         static final Shortcut DELETE_REPOSITORY = new Shortcut("d", "delete repo");
         static final Shortcut USE_PROFILE = new Shortcut("u", "use profile");
-        static final Shortcut ACTIVATE_PROFILE = new Shortcut("u", "activate profile");
         static final Shortcut DELETE_PROFILE = new Shortcut("d", "delete profile");
         static final Shortcut EDIT_FILE = new Shortcut("e", "edit file");
         static final Shortcut GO_PARENT = new Shortcut("p", "go parent");
