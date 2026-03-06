@@ -6,6 +6,10 @@ import dev.tamboui.style.Color;
 import dev.tamboui.style.Style;
 import dev.tamboui.text.Line;
 import dev.tamboui.text.Span;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import picocli.CommandLine;
 
 /**
@@ -16,7 +20,9 @@ public final class Cli {
     private static final String CLEAR_LINE = "\r\u001B[2K";
     private static final int MIN_LINE_WIDTH = 80;
     private static final int MAX_RENDER_LINE_WIDTH = 240;
+    private static final Pattern NOTICE_HIGHLIGHT_PATTERN = Pattern.compile("\\b\\d+\\.\\d+\\.\\d+(?:[-+][A-Za-z0-9.]+)?\\b|brew upgrade ocp");
     private static volatile boolean ansiEnabled = true;
+    private static volatile String startupNotice;
 
     private Cli() {
     }
@@ -37,6 +43,10 @@ public final class Cli {
      */
     public static void info(String message) {
         printStyled("", Color.CYAN, message, false);
+    }
+
+    public static void infoWithCodeHighlights(String message) {
+        printWithCodeHighlights(message, false);
     }
 
     /**
@@ -71,6 +81,17 @@ public final class Cli {
      */
     public static void init() {
         ansiEnabled = CommandLine.Help.Ansi.AUTO.enabled();
+        startupNotice = null;
+    }
+
+    public static void setStartupNotice(String message) {
+        startupNotice = message == null || message.isBlank() ? null : message;
+    }
+
+    public static String consumeStartupNotice() {
+        String message = startupNotice;
+        startupNotice = null;
+        return message;
     }
 
     /**
@@ -110,6 +131,28 @@ public final class Cli {
         System.out.println(output);
     }
 
+    private static void printWithCodeHighlights(String message, boolean stderr) {
+        String normalizedMessage = message == null ? "" : message;
+        if (!ansiEnabled) {
+            if (stderr) {
+                System.err.println(normalizedMessage);
+            } else {
+                System.out.println(normalizedMessage);
+            }
+            return;
+        }
+
+        String[] lines = normalizedMessage.split("\\R", -1);
+        for (String line : lines) {
+            String output = styledLineWithCodeHighlights(line);
+            if (stderr) {
+                System.err.println(output);
+            } else {
+                System.out.println(output);
+            }
+        }
+    }
+
     private static String styledLine(String label, Color color, String message) {
         String normalizedLabel = label == null || label.isBlank() ? "" : label + " ";
         String normalizedMessage = message == null ? "" : message;
@@ -133,6 +176,40 @@ public final class Cli {
             )
         );
         return buffer.toAnsiStringTrimmed();
+    }
+
+    private static String styledLineWithCodeHighlights(String message) {
+        String normalizedMessage = message == null ? "" : message;
+        int width = Math.min(MAX_RENDER_LINE_WIDTH, Math.max(MIN_LINE_WIDTH, normalizedMessage.length() + 2));
+        Buffer buffer = Buffer.empty(Rect.of(width, 1));
+        buffer.setLine(0, 0, Line.from(codeHighlightSpans(normalizedMessage).toArray(Span[]::new)));
+        return buffer.toAnsiStringTrimmed();
+    }
+
+    private static List<Span> codeHighlightSpans(String message) {
+        List<Span> spans = new ArrayList<>();
+        if (message == null || message.isEmpty()) {
+            spans.add(Span.raw(""));
+            return spans;
+        }
+
+        Matcher matcher = NOTICE_HIGHLIGHT_PATTERN.matcher(message);
+        int index = 0;
+        while (matcher.find()) {
+            if (matcher.start() > index) {
+                spans.add(Span.raw(message.substring(index, matcher.start())));
+            }
+            spans.add(Span.styled(matcher.group(), Style.EMPTY.bold().fg(Color.CYAN)));
+            index = matcher.end();
+        }
+        if (index < message.length()) {
+            spans.add(Span.raw(message.substring(index)));
+        }
+
+        if (spans.isEmpty()) {
+            spans.add(Span.raw(""));
+        }
+        return spans;
     }
 
     private static String truncateToRenderWidth(String value, int maxWidth) {

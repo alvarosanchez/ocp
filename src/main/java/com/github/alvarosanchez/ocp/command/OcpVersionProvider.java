@@ -19,6 +19,10 @@ public final class OcpVersionProvider implements IVersionProvider {
      */
     @Override
     public String[] getVersion() {
+        return new String[] {readVersion()};
+    }
+
+    public static String readVersion() {
         try (var inputStream = OcpVersionProvider.class.getResourceAsStream(VERSION_RESOURCE_PATH)) {
             if (inputStream == null) {
                 throw new IllegalStateException("Version resource not found: " + VERSION_RESOURCE_PATH);
@@ -29,7 +33,7 @@ public final class OcpVersionProvider implements IVersionProvider {
                 throw new IllegalStateException("Version resource is empty: " + VERSION_RESOURCE_PATH);
             }
 
-            return new String[] {version};
+            return version;
         } catch (IOException e) {
             throw new UncheckedIOException("Cannot read version resource: " + VERSION_RESOURCE_PATH, e);
         }

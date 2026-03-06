@@ -27,15 +27,17 @@ public record OcpConfigFile(OcpConfigOptions config, List<RepositoryEntry> repos
      * Global OCP configuration options.
      *
      * @param activeProfile currently active profile name
+     * @param lastOcpVersionCheckEpochSeconds epoch seconds of the last CLI update check attempt
+     * @param latestOcpVersion latest known OCP release version from the last successful check
      */
     @Serdeable
-    public record OcpConfigOptions(String activeProfile) {
+    public record OcpConfigOptions(String activeProfile, Long lastOcpVersionCheckEpochSeconds, String latestOcpVersion) {
 
         /**
          * Creates configuration options.
          */
         public OcpConfigOptions() {
-            this(null);
+            this(null, null, null);
         }
 
         /**
@@ -43,8 +45,20 @@ public record OcpConfigFile(OcpConfigOptions config, List<RepositoryEntry> repos
          *
          * @param activeProfile currently active profile name
          */
+        public OcpConfigOptions(String activeProfile) {
+            this(activeProfile, null, null);
+        }
+
+        /**
+         * Creates configuration options.
+         *
+         * @param activeProfile currently active profile name
+         * @param lastOcpVersionCheckEpochSeconds epoch seconds of the last CLI update check attempt
+         * @param latestOcpVersion latest known OCP release version from the last successful check
+         */
         public OcpConfigOptions {
             activeProfile = activeProfile == null || activeProfile.isBlank() ? null : activeProfile;
+            latestOcpVersion = latestOcpVersion == null || latestOcpVersion.isBlank() ? null : latestOcpVersion.trim();
         }
     }
 
