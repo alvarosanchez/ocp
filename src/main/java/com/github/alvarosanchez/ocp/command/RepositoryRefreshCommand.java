@@ -31,7 +31,7 @@ class RepositoryRefreshCommand implements Callable<Integer> {
         try {
             if (repositoryName == null || repositoryName.isBlank()) {
                 List<RepositoryEntry> repositories = repositoryService.load();
-                long gitBackedCount = repositories.stream().filter(this::isGitBacked).count();
+                long gitBackedCount = repositories.stream().filter(RepositoryEntry::isGitBacked).count();
                 if (gitBackedCount == 0) {
                     Cli.info("All configured repositories are file-based; nothing to refresh.");
                     return 0;
@@ -53,7 +53,7 @@ class RepositoryRefreshCommand implements Callable<Integer> {
                 .filter(entry -> entry.name().equals(repositoryName.trim()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("Repository `" + repositoryName.trim() + "` was not found."));
-            if (!isGitBacked(repositoryEntry)) {
+            if (!repositoryEntry.isGitBacked()) {
                 Cli.info("Repository `" + repositoryEntry.name() + "` is file-based; nothing to refresh.");
                 return 0;
             }
@@ -285,7 +285,4 @@ class RepositoryRefreshCommand implements Callable<Integer> {
     private record RefreshOutcome(String message, ProfileService.ProfileRefreshResult refreshResult) {
     }
 
-    private boolean isGitBacked(RepositoryEntry repositoryEntry) {
-        return repositoryEntry.uri() != null && !repositoryEntry.uri().isBlank();
-    }
 }

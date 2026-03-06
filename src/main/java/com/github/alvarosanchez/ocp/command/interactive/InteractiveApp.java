@@ -330,7 +330,12 @@ public final class InteractiveApp extends ToolkitApp {
             }
 
             String profileName = selectedProfileName();
+            String repositoryName = selectedRepositoryName();
             if (profileName == null) {
+                status = STATUS_SELECT_NODE_FIRST;
+                return EventResult.HANDLED;
+            }
+            if (repositoryName == null) {
                 status = STATUS_SELECT_NODE_FIRST;
                 return EventResult.HANDLED;
             }
@@ -340,6 +345,7 @@ public final class InteractiveApp extends ToolkitApp {
                 "Type profile name to confirm: " + profileName
             );
             prompt.expectedConfirmation = profileName;
+            prompt.contextRepositoryName = repositoryName;
             return EventResult.HANDLED;
         }
         if (event.isChar('n')) {
@@ -533,7 +539,7 @@ public final class InteractiveApp extends ToolkitApp {
                         status = statusMessage;
                         return;
                     }
-                    String repositoryName = selectedRepositoryName();
+                    String repositoryName = currentPrompt.contextRepositoryName;
                     if (repositoryName == null || repositoryName.isBlank()) {
                         throw new IllegalStateException(ERROR_REPOSITORY_SELECTION_REQUIRED);
                     }
@@ -666,7 +672,7 @@ public final class InteractiveApp extends ToolkitApp {
 
         Map<String, Profile> byName = new HashMap<>();
         for (Profile profile : profiles) {
-            byName.put(profile.name(), profile);
+            byName.put(profileKey(profile.repositoryName(), profile.name()), profile);
         }
         profilesByName = Map.copyOf(byName);
         profileParentByName = loadProfileParentByName();
@@ -705,7 +711,10 @@ public final class InteractiveApp extends ToolkitApp {
                 RepositoryConfigFile repositoryConfig = objectMapper.readValue(Files.readString(metadataFile), RepositoryConfigFile.class);
                 for (RepositoryConfigFile.ProfileEntry profileEntry : repositoryConfig.profiles()) {
                     if (profileEntry.extendsFrom() != null && !profileEntry.extendsFrom().isBlank()) {
-                        parentByName.put(profileEntry.name(), profileEntry.extendsFrom());
+                        parentByName.put(
+                            profileKey(repository.name(), profileEntry.name()),
+                            profileEntry.extendsFrom()
+                        );
                     }
                 }
             } catch (IOException | RuntimeException e) {
@@ -918,24 +927,28 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     private boolean selectedProfileHasParent() {
+        String repositoryName = selectedRepositoryName();
         String profileName = selectedProfileName();
-        return profileName != null && profileParentByName.containsKey(profileName);
+        return repositoryName != null
+            && profileName != null
+            && profileParentByName.containsKey(profileKey(repositoryName, profileName));
     }
 
     private void navigateToParentProfile() {
+        String repositoryName = selectedRepositoryName();
         String profileName = selectedProfileName();
-        if (profileName == null) {
+        if (repositoryName == null || profileName == null) {
             status = "Select a profile or file first.";
             return;
         }
 
-        String parentProfileName = profileParentByName.get(profileName);
+        String parentProfileName = profileParentByName.get(profileKey(repositoryName, profileName));
         if (parentProfileName == null || parentProfileName.isBlank()) {
             status = "Profile `" + profileName + "` does not extend another profile.";
             return;
         }
 
-        if (!selectProfileNode(parentProfileName)) {
+        if (!selectProfileNode(repositoryName, parentProfileName)) {
             status = "Parent profile `" + parentProfileName + "` was not found in the tree.";
             return;
         }
@@ -948,7 +961,7 @@ public final class InteractiveApp extends ToolkitApp {
         status = "Selected parent profile `" + parentProfileName + "`.";
     }
 
-    private boolean selectProfileNode(String profileName) {
+    private boolean selectProfileNode(String repositoryName, String profileName) {
         int originalSelection = hierarchyTree.selected();
         int maxNodes = Math.max(1, countTreeNodes(hierarchyRoots));
         for (int index = 0; index < maxNodes; index++) {
@@ -958,12 +971,18 @@ public final class InteractiveApp extends ToolkitApp {
                 continue;
             }
             NodeRef selectedNodeRef = selectedTreeNode.data();
-            if (selectedNodeRef.kind() == NodeKind.PROFILE && profileName.equals(selectedNodeRef.profileName())) {
+            if (selectedNodeRef.kind() == NodeKind.PROFILE
+                && repositoryName.equals(selectedNodeRef.repositoryName())
+                && profileName.equals(selectedNodeRef.profileName())) {
                 return true;
             }
         }
         hierarchyTree.selected(originalSelection);
         return false;
+    }
+
+    private String profileKey(String repositoryName, String profileName) {
+        return repositoryName + "/" + profileName;
     }
 
     private int countTreeNodes(List<TreeNode<NodeRef>> roots) {

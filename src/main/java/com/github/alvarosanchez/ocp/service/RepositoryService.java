@@ -126,7 +126,7 @@ public final class RepositoryService {
         List<RepositoryEntry> repositories = new ArrayList<>(load());
         RepositoryEntry deletedRepository = findConfiguredRepository(normalizedRepositoryName, repositories);
         Path localPath = Path.of(deletedRepository.localPath());
-        boolean gitBacked = isGitBacked(deletedRepository);
+        boolean gitBacked = deletedRepository.isGitBacked();
         if (gitBacked && !force && hasGitLocalChanges(localPath)) {
             throw new IllegalStateException(
                 "Repository `"
@@ -157,7 +157,7 @@ public final class RepositoryService {
     public RepositoryDeletePreview inspectDelete(String repositoryName) {
         String normalizedRepositoryName = normalizeRepositoryName(repositoryName);
         RepositoryEntry repository = findConfiguredRepository(normalizedRepositoryName, load());
-        boolean gitBacked = isGitBacked(repository);
+        boolean gitBacked = repository.isGitBacked();
         boolean hasLocalChanges = gitBacked && hasGitLocalChanges(Path.of(repository.localPath()));
         return new RepositoryDeletePreview(
             repository.name(),
@@ -294,9 +294,15 @@ public final class RepositoryService {
         if (source.startsWith("/") || source.startsWith("~/") || source.matches("^[A-Za-z]:[\\\\/].*")) {
             return true;
         }
+        if (source.contains("://") || source.matches("^[A-Za-z][A-Za-z0-9+.-]*:.*") || source.matches("^[^\\s@]+@[^\\s:]+:.*")) {
+            return false;
+        }
+        if (source.contains("/") || source.contains("\\\\")) {
+            return true;
+        }
         try {
-            Path candidate = resolveLocalPath(source);
-            return Files.exists(candidate);
+            resolveLocalPath(source);
+            return true;
         } catch (IllegalStateException e) {
             return false;
         }
@@ -364,10 +370,6 @@ public final class RepositoryService {
             return false;
         }
         return gitRepositoryClient.hasLocalChanges(localPath);
-    }
-
-    private boolean isGitBacked(RepositoryEntry repositoryEntry) {
-        return repositoryEntry.uri() != null && !repositoryEntry.uri().isBlank();
     }
 
     private record RepositorySource(String uri, Path localPath) {

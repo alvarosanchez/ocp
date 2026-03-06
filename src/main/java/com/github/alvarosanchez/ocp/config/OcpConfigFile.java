@@ -57,5 +57,8 @@ public record OcpConfigFile(OcpConfigOptions config, List<RepositoryEntry> repos
      */
     @Serdeable
     public record RepositoryEntry(String name, String uri, String localPath) {
+        public boolean isGitBacked() {
+            return uri != null && !uri.isBlank();
+        }
     }
 }

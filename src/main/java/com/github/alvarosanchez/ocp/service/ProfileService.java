@@ -1001,7 +1001,7 @@ public final class ProfileService {
     }
 
     private void refreshRepository(RepositoryEntry repositoryEntry) {
-        if (!isGitBacked(repositoryEntry)) {
+        if (!repositoryEntry.isGitBacked()) {
             return;
         }
         Path localPath = Path.of(repositoryEntry.localPath());
@@ -1016,7 +1016,7 @@ public final class ProfileService {
     }
 
     private RepositoryStatus repositoryStatusFor(RepositoryEntry repositoryEntry) {
-        if (!isGitBacked(repositoryEntry)) {
+        if (!repositoryEntry.isGitBacked()) {
             return new RepositoryStatus("-", 0L, "Local file repository", false, false);
         }
 
@@ -1046,10 +1046,6 @@ public final class ProfileService {
         }
 
         return new RepositoryStatus(shortSha, commitEpochSeconds, message, updateAvailable, versionCheckFailed);
-    }
-
-    private boolean isGitBacked(RepositoryEntry repositoryEntry) {
-        return repositoryEntry.uri() != null && !repositoryEntry.uri().isBlank();
     }
 
     private Profile toProfile(DiscoveredProfile discoveredProfile, RepositoryStatus repositoryStatus, boolean active) {

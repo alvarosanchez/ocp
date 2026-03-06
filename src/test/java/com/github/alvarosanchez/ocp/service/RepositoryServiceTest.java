@@ -20,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -291,7 +292,18 @@ class RepositoryServiceTest {
     }
 
     @Test
+    void addTreatsMissingRelativePathAsLocalPathAndFailsEarly() {
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> repositoryService.add("missing-local-repo", "missing-local")
+        );
+
+        assertTrue(thrown.getMessage().contains("Local repository path does not exist"));
+    }
+
+    @Test
     void inspectDeleteMarksGitRepositoryWithLocalChanges() throws IOException, InterruptedException {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path localClone = repositoriesRootDirectory().resolve("repo-git");
         Files.createDirectories(localClone);
         runCommand(List.of("git", "init", localClone.toString()));
@@ -312,6 +324,7 @@ class RepositoryServiceTest {
 
     @Test
     void deleteGitRepositoryWithLocalChangesRequiresForce() throws IOException, InterruptedException {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path localClone = repositoriesRootDirectory().resolve("repo-git");
         Files.createDirectories(localClone);
         runCommand(List.of("git", "init", localClone.toString()));
@@ -396,6 +409,18 @@ class RepositoryServiceTest {
         int exitCode = process.waitFor();
         if (exitCode != 0) {
             throw new IllegalStateException("Command failed: " + String.join(" ", command) + "\n" + output);
+        }
+    }
+
+    private static boolean isGitAvailable() {
+        try {
+            runCommand(List.of("git", "--version"));
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (IOException | RuntimeException e) {
+            return false;
         }
     }
 }

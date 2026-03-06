@@ -11,6 +11,7 @@ final class PromptState {
     final List<List<String>> options;
     int currentField;
     String expectedConfirmation;
+    String contextRepositoryName;
 
     private PromptState(PromptAction action, String title, List<String> labels, List<List<String>> options) {
         this.action = action;

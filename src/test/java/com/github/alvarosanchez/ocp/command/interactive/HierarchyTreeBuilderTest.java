@@ -139,8 +139,8 @@ class HierarchyTreeBuilderTest {
 
         StyledElement<?> rendered = HierarchyTreeBuilder.renderTreeNode(
             node,
-            Map.of("active-profile", profile),
-            Map.of("active-profile", "base-profile")
+            Map.of("repo-a/active-profile", profile),
+            Map.of("repo-a/active-profile", "base-profile")
         );
 
         RichTextElement richText = assertInstanceOf(RichTextElement.class, rendered);
@@ -199,7 +199,7 @@ class HierarchyTreeBuilderTest {
         List<TreeNode<NodeRef>> roots = HierarchyTreeBuilder.buildHierarchyTree(
             List.of(repository),
             List.of(),
-            Map.of("child", "base"),
+            Map.of("repo-a/child", "base"),
             4,
             20
         );
@@ -242,7 +242,7 @@ class HierarchyTreeBuilderTest {
         List<TreeNode<NodeRef>> roots = HierarchyTreeBuilder.buildHierarchyTree(
             List.of(repository),
             List.of(),
-            Map.of("child", "base"),
+            Map.of("repo-a/child", "base"),
             4,
             20
         );

@@ -123,7 +123,7 @@ final class HierarchyTreeBuilder {
         boolean isCurrentProfile = false;
         boolean hasUpdates = false;
         if (data.kind() == NodeKind.PROFILE) {
-            Profile profile = profilesByName.get(data.profileName());
+            Profile profile = profilesByName.get(profileKey(data.repositoryName(), data.profileName()));
             if (profile != null && profile.active()) {
                 labelStyle = labelStyle.bold().fg(Color.BRIGHT_WHITE);
                 isCurrentProfile = true;
@@ -131,7 +131,7 @@ final class HierarchyTreeBuilder {
             if (profile != null && profile.updateAvailable()) {
                 hasUpdates = true;
             }
-            String parentProfileName = profileParentByName.get(data.profileName());
+            String parentProfileName = profileParentByName.get(profileKey(data.repositoryName(), data.profileName()));
             if (parentProfileName != null && !parentProfileName.isBlank()) {
                 labelStyle = labelStyle.fg(Color.BRIGHT_WHITE);
             }
@@ -143,7 +143,7 @@ final class HierarchyTreeBuilder {
         List<Span> spans = new ArrayList<>();
         spans.add(Span.styled(icon, Style.EMPTY.bold().fg(iconColor)));
         if (data.kind() == NodeKind.PROFILE) {
-            String parentProfileName = profileParentByName.get(data.profileName());
+            String parentProfileName = profileParentByName.get(profileKey(data.repositoryName(), data.profileName()));
             if (parentProfileName != null && !parentProfileName.isBlank()) {
                 spans.add(Span.styled(node.label() + " ⇢ 👤 " + parentProfileName, labelStyle));
             } else {
@@ -176,6 +176,7 @@ final class HierarchyTreeBuilder {
         int treeMaxChildren
     ) {
         List<ResolvedProfileFile> resolvedFiles = resolveProfileFiles(
+            repositoryName,
             profileName,
             profilePathByName,
             profileParentByName
@@ -280,20 +281,26 @@ final class HierarchyTreeBuilder {
     }
 
     private static List<ResolvedProfileFile> resolveProfileFiles(
+        String repositoryName,
         String profileName,
         Map<String, Path> profilePathByName,
         Map<String, String> profileParentByName
     ) {
         Map<Path, ResolvedProfileFile> filesByRelativePath = new LinkedHashMap<>();
 
-        Path profilePath = profilePathByName.get(profileName);
+        Path profilePath = profilePathByName.get(profileKey(repositoryName, profileName));
         collectOwnFiles(profilePath, profileName, false, filesByRelativePath);
 
         Set<String> visitedProfiles = new HashSet<>();
-        String currentParent = profileParentByName.get(profileName);
+        String currentParent = profileParentByName.get(profileKey(repositoryName, profileName));
         while (currentParent != null && !currentParent.isBlank() && visitedProfiles.add(currentParent)) {
-            collectOwnFiles(profilePathByName.get(currentParent), currentParent, true, filesByRelativePath);
-            currentParent = profileParentByName.get(currentParent);
+            collectOwnFiles(
+                profilePathByName.get(profileKey(repositoryName, currentParent)),
+                currentParent,
+                true,
+                filesByRelativePath
+            );
+            currentParent = profileParentByName.get(profileKey(repositoryName, currentParent));
         }
 
         return filesByRelativePath.values().stream()
@@ -333,10 +340,14 @@ final class HierarchyTreeBuilder {
         for (ConfiguredRepository repository : repositories) {
             Path repositoryPath = Path.of(repository.localPath());
             for (String profileName : repository.resolvedProfiles()) {
-                profilePathByName.put(profileName, repositoryPath.resolve(profileName));
+                profilePathByName.put(profileKey(repository.name(), profileName), repositoryPath.resolve(profileName));
             }
         }
         return profilePathByName;
+    }
+
+    private static String profileKey(String repositoryName, String profileName) {
+        return repositoryName + "/" + profileName;
     }
 
     private static String profileLabel(String profileName) {

@@ -67,8 +67,9 @@ final class DetailPaneRenderer {
         }
 
         if (selectedNode.kind() == NodeKind.PROFILE) {
-            Profile profile = profilesByName.get(selectedNode.profileName());
-            String parentProfileName = profileParentByName.get(selectedNode.profileName());
+            String profileKey = profileKey(selectedNode.repositoryName(), selectedNode.profileName());
+            Profile profile = profilesByName.get(profileKey);
+            String parentProfileName = profileParentByName.get(profileKey);
             List<Element> profileElements = new ArrayList<>();
             profileElements.add(text("Profile").bold().fg(Color.CYAN));
             profileElements.add(detailField("Name", selectedNode.profileName()));
@@ -181,5 +182,9 @@ final class DetailPaneRenderer {
                 )
             )
         );
+    }
+
+    private static String profileKey(String repositoryName, String profileName) {
+        return repositoryName + "/" + profileName;
     }
 }
