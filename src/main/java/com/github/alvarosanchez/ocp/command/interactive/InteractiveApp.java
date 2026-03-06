@@ -709,17 +709,23 @@ public final class InteractiveApp extends ToolkitApp {
             }
             try {
                 RepositoryConfigFile repositoryConfig = objectMapper.readValue(Files.readString(metadataFile), RepositoryConfigFile.class);
-                for (RepositoryConfigFile.ProfileEntry profileEntry : repositoryConfig.profiles()) {
-                    if (profileEntry.extendsFrom() != null && !profileEntry.extendsFrom().isBlank()) {
-                        parentByName.put(
-                            profileKey(repository.name(), profileEntry.name()),
-                            profileEntry.extendsFrom()
-                        );
-                    }
-                }
+                parentByName.putAll(profileParentByName(repository.name(), repositoryConfig));
             } catch (IOException | RuntimeException e) {
                 status = "Error loading metadata from `" + metadataFile + "`: " + e.getMessage();
             }
+        }
+        return Map.copyOf(parentByName);
+    }
+
+    static Map<String, String> profileParentByName(String repositoryName, RepositoryConfigFile repositoryConfig) {
+        Map<String, String> parentByName = new HashMap<>();
+        for (RepositoryConfigFile.ProfileEntry profileEntry : repositoryConfig.profiles()) {
+            String profileName = profileEntry.name() == null ? "" : profileEntry.name().trim();
+            String parentProfileName = profileEntry.extendsFrom() == null ? "" : profileEntry.extendsFrom().trim();
+            if (profileName.isBlank() || parentProfileName.isBlank()) {
+                continue;
+            }
+            parentByName.put(profileKey(repositoryName, profileName), parentProfileName);
         }
         return Map.copyOf(parentByName);
     }
@@ -991,7 +997,7 @@ public final class InteractiveApp extends ToolkitApp {
         return null;
     }
 
-    private String profileKey(String repositoryName, String profileName) {
+    private static String profileKey(String repositoryName, String profileName) {
         return repositoryName + "/" + profileName;
     }
 
