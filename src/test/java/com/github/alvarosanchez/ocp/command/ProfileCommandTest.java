@@ -667,6 +667,14 @@ class ProfileCommandTest {
     }
 
     @Test
+    void repositoryRefreshRejectsUnsafeRepositoryName() throws IOException {
+        CommandResult result = execute("repository", "refresh", "../repo");
+
+        assertEquals(1, result.exitCode());
+        assertTrue(result.stderr().contains("single safe path segment"));
+    }
+
+    @Test
     void repositoryRefreshForFileBasedRepositoryIsNoOpWithMessage() throws IOException {
         Path fileBasedRepository = tempDir.resolve("file-based-repo");
         Files.createDirectories(fileBasedRepository);

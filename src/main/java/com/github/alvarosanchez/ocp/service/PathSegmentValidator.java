@@ -3,14 +3,14 @@ package com.github.alvarosanchez.ocp.service;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 
-final class PathSegmentValidator {
+public final class PathSegmentValidator {
 
     private static final String WINDOWS_INVALID_FILENAME_CHARS = ":*?\"<>|";
 
     private PathSegmentValidator() {
     }
 
-    static String requireSinglePathSegment(String value, String fieldLabel) {
+    public static String requireSinglePathSegment(String value, String fieldLabel) {
         String normalizedValue = value == null ? "" : value.trim();
         if (normalizedValue.isBlank()) {
             throw new IllegalStateException(fieldLabel + " is required.");
@@ -19,7 +19,7 @@ final class PathSegmentValidator {
         return normalizedValue;
     }
 
-    static void validateSinglePathSegment(String value, String fieldLabel) {
+    public static void validateSinglePathSegment(String value, String fieldLabel) {
         try {
             Path normalizedPath = Path.of(value).normalize();
             if (

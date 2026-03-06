@@ -1,6 +1,7 @@
 package com.github.alvarosanchez.ocp.command;
 
 import com.github.alvarosanchez.ocp.config.OcpConfigFile.RepositoryEntry;
+import com.github.alvarosanchez.ocp.service.PathSegmentValidator;
 import com.github.alvarosanchez.ocp.service.ProfileService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
 import jakarta.inject.Inject;
@@ -47,7 +48,7 @@ class RepositoryRefreshCommand implements Callable<Integer> {
                 return 0;
             }
 
-            String normalizedRepositoryName = repositoryName.trim();
+            String normalizedRepositoryName = PathSegmentValidator.requireSinglePathSegment(repositoryName, "Repository name");
             RepositoryEntry repositoryEntry = repositoryService
                 .load()
                 .stream()
