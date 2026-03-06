@@ -435,6 +435,9 @@ public final class InteractiveApp extends ToolkitApp {
             status = "Cancelled.";
             return EventResult.HANDLED;
         }
+        if (event.isFocusNext() || event.isFocusPrevious() || event.isKey(dev.tamboui.tui.event.KeyCode.TAB)) {
+            return EventResult.HANDLED;
+        }
         if (prompt.currentFieldHasOptions() && event.isUp()) {
             prompt.selectPreviousOption();
             return EventResult.HANDLED;
@@ -598,10 +601,15 @@ public final class InteractiveApp extends ToolkitApp {
         }
         int skippedFileBased = repositories.size() - refreshableRepositories;
         refreshAllCompletionMessage = skippedFileBased > 0
-            ? "Refreshed git-backed repositories. Skipped " + skippedFileBased + " file-based repositories."
+            ? "Refreshed git-backed repositories. " + skippedFileBasedRepositoriesMessage(skippedFileBased)
             : "Refreshed all repositories.";
         pendingRefreshOperation = RefreshOperation.allRepositories();
         attemptPendingRefresh();
+    }
+
+    static String skippedFileBasedRepositoriesMessage(int skippedFileBased) {
+        String noun = skippedFileBased == 1 ? "repository" : "repositories";
+        return "Skipped " + skippedFileBased + " file-based " + noun + ".";
     }
 
     private void attemptPendingRefresh() {

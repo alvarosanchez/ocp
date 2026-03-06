@@ -41,7 +41,7 @@ class RepositoryRefreshCommand implements Callable<Integer> {
                 ProfileConfigChangeNotifier.notifyUserConfigChanges(refreshOutcome.refreshResult());
                 String message = refreshOutcome.message();
                 if (fileBasedCount > 0) {
-                    message = message + " Skipped " + fileBasedCount + " file-based repositories.";
+                    message = message + " " + skippedFileBasedRepositoriesMessage(fileBasedCount);
                 }
                 Cli.success(message);
                 return 0;
@@ -284,6 +284,11 @@ class RepositoryRefreshCommand implements Callable<Integer> {
     }
 
     private record RefreshOutcome(String message, ProfileService.ProfileRefreshResult refreshResult) {
+    }
+
+    private static String skippedFileBasedRepositoriesMessage(long fileBasedCount) {
+        String noun = fileBasedCount == 1 ? "repository" : "repositories";
+        return "Skipped " + fileBasedCount + " file-based " + noun + ".";
     }
 
 }

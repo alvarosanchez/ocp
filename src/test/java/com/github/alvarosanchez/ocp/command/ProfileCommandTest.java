@@ -625,6 +625,48 @@ class ProfileCommandTest {
     }
 
     @Test
+    void repositoryRefreshWithoutRepositoryNamePluralizesSingleSkippedFileBasedRepository() throws IOException, InterruptedException {
+        RemoteRepositoryState state = createRemoteProfileRepository("ops");
+        Path fileBasedRepository = tempDir.resolve("file-based-repo");
+        Files.createDirectories(fileBasedRepository);
+        Files.writeString(fileBasedRepository.resolve("repository.json"), serializeAsJson(new RepositoryConfigFile(List.of())));
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(
+                    new RepositoryEntry("repo-refresh", state.remoteUri(), null),
+                    new RepositoryEntry("repo-file", null, fileBasedRepository.toString())
+                )
+            )
+        );
+
+        runCommand(List.of("git", "clone", state.remoteUri(), state.localClone().toString()));
+        Path updateWorktree = tempDir.resolve("update-worktree-single-skipped");
+        runCommand(List.of("git", "clone", state.remoteUri(), updateWorktree.toString()));
+        Files.writeString(updateWorktree.resolve("new-file.txt"), "new");
+        runCommand(List.of("git", "-C", updateWorktree.toString(), "add", "new-file.txt"));
+        runCommand(List.of(
+            "git",
+            "-C",
+            updateWorktree.toString(),
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "user.name=test",
+            "commit",
+            "-m",
+            "update"
+        ));
+        runCommand(List.of("git", "-C", updateWorktree.toString(), "push", "origin", "HEAD"));
+
+        CommandResult result = execute("repository", "refresh");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("Skipped 1 file-based repository."));
+    }
+
+    @Test
     void repositoryRefreshForFileBasedRepositoryIsNoOpWithMessage() throws IOException {
         Path fileBasedRepository = tempDir.resolve("file-based-repo");
         Files.createDirectories(fileBasedRepository);
