@@ -8,9 +8,7 @@ import com.github.alvarosanchez.ocp.service.ProfileService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
 import com.github.alvarosanchez.ocp.service.RepositoryService.ConfiguredRepository;
 import dev.tamboui.style.Color;
-import dev.tamboui.style.Style;
 import dev.tamboui.text.Line;
-import dev.tamboui.text.Span;
 import dev.tamboui.text.Text;
 import dev.tamboui.toolkit.Toolkit;
 import dev.tamboui.toolkit.app.ToolkitApp;
@@ -35,8 +33,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalInt;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static dev.tamboui.toolkit.Toolkit.column;
@@ -64,7 +60,6 @@ public final class InteractiveApp extends ToolkitApp {
     private static final String STATUS_DELETE_CANCELLED_REPOSITORY_MISMATCH = "Delete cancelled: repository name mismatch.";
     private static final String STATUS_DELETE_CANCELLED_PROFILE_MISMATCH = "Delete cancelled: profile name mismatch.";
     private static final String STARTUP_UPDATE_DIALOG_TITLE = "OCP Update Available";
-    private static final Pattern NOTICE_HIGHLIGHT_PATTERN = Pattern.compile("\\b\\d+\\.\\d+\\.\\d+(?:[-+][A-Za-z0-9.]+)?\\b|brew upgrade ocp");
     private static final List<TreeShortcutHints.Shortcut> GLOBAL_SHORTCUTS = List.of(
         TreeShortcutHints.Shortcut.TAB_SWITCH_PANE,
         TreeShortcutHints.Shortcut.ADD_EXISTING_REPOSITORY,
@@ -1308,7 +1303,7 @@ public final class InteractiveApp extends ToolkitApp {
         List<Element> content = new ArrayList<>();
         String notice = startupUpdateNotice == null ? "" : startupUpdateNotice;
         for (String line : notice.split("\\R", -1)) {
-            content.add(richText(Text.from(Line.from(codeHighlightedSpans(line).toArray(Span[]::new)))));
+            content.add(richText(Text.from(Cli.highlightedNoticeLine(line))));
         }
         content.add(spacer());
         content.add(ShortcutHintRenderer.line(List.of(TreeShortcutHints.Shortcut.ESC_CANCEL)));
@@ -1316,32 +1311,6 @@ public final class InteractiveApp extends ToolkitApp {
             .rounded()
             .borderColor(Color.CYAN)
             .width(88);
-    }
-
-    private List<Span> codeHighlightedSpans(String line) {
-        List<Span> spans = new ArrayList<>();
-        if (line == null || line.isEmpty()) {
-            spans.add(Span.raw(""));
-            return spans;
-        }
-
-        Matcher matcher = NOTICE_HIGHLIGHT_PATTERN.matcher(line);
-        int index = 0;
-        while (matcher.find()) {
-            if (matcher.start() > index) {
-                spans.add(Span.raw(line.substring(index, matcher.start())));
-            }
-            spans.add(Span.styled(matcher.group(), Style.EMPTY.bold().fg(Color.CYAN)));
-            index = matcher.end();
-        }
-        if (index < line.length()) {
-            spans.add(Span.raw(line.substring(index)));
-        }
-
-        if (spans.isEmpty()) {
-            spans.add(Span.raw(""));
-        }
-        return spans;
     }
 
     static int promptDialogWidthForContent(String title, String label, String currentValue, String shortcutsLine, int maxWidth) {

@@ -20,8 +20,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.Map;
 
 @Singleton
 public final class VersionCheckService {
@@ -30,7 +29,6 @@ public final class VersionCheckService {
     static final URI DEFAULT_RELEASES_URI = URI.create("https://api.github.com/repos/alvarosanchez/ocp/releases/latest");
 
     private static final Duration HTTP_TIMEOUT = Duration.ofSeconds(3);
-    private static final Pattern TAG_NAME_PATTERN = Pattern.compile("\"tag_name\"\\s*:\\s*\"([^\"]+)\"");
 
     private final ObjectMapper objectMapper;
     private final Clock clock;
@@ -89,11 +87,12 @@ public final class VersionCheckService {
             throw new IllegalStateException("Version endpoint returned HTTP " + response.statusCode());
         }
 
-        Matcher matcher = TAG_NAME_PATTERN.matcher(response.body());
-        if (!matcher.find()) {
+        Map<?, ?> payload = objectMapper.readValue(response.body(), Map.class);
+        Object tagNameValue = payload.get("tag_name");
+        if (!(tagNameValue instanceof String tagName) || tagName.isBlank()) {
             throw new IllegalStateException("Version endpoint response did not include tag_name");
         }
-        return normalizeVersion(matcher.group(1));
+        return normalizeVersion(tagName);
     }
 
     private OcpConfigOptions updatedOptions(OcpConfigOptions currentOptions, Instant now, String latestVersion) {
@@ -112,16 +111,17 @@ public final class VersionCheckService {
         try {
             return objectMapper.readValue(Files.readString(file), OcpConfigFile.class);
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to read repository registry", e);
+            throw new UncheckedIOException("Failed to read OCP config file at " + file, e);
         }
     }
 
     private void saveConfig(OcpConfigFile configFile) {
+        Path file = configFile();
         try {
             Files.createDirectories(configDirectory());
-            Files.writeString(configFile(), objectMapper.writeValueAsString(configFile));
+            Files.writeString(file, objectMapper.writeValueAsString(configFile));
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to write repository registry", e);
+            throw new UncheckedIOException("Failed to write OCP config file at " + file, e);
         }
     }
 
@@ -200,6 +200,11 @@ public final class VersionCheckService {
             String normalized = normalizeVersion(version);
             if (normalized.isBlank()) {
                 return new ParsedVersion(List.of(0), "");
+            }
+
+            int buildMetadataIndex = normalized.indexOf('+');
+            if (buildMetadataIndex >= 0) {
+                normalized = normalized.substring(0, buildMetadataIndex);
             }
 
             String[] mainAndQualifier = normalized.split("-", 2);

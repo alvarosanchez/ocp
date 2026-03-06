@@ -221,6 +221,13 @@ class VersionCheckServiceTest {
         );
     }
 
+    @Test
+    void compareVersionsIgnoresBuildMetadataForPrecedence() {
+        VersionCheckService.VersionCheckResult result = VersionCheckService.VersionCheckResult.from("1.2.3", "1.2.3+build.5");
+
+        assertFalse(result.updateAvailable());
+    }
+
     private OcpConfigFile readStoredConfig() throws IOException {
         return objectMapper.readValue(Files.readString(configFile()), OcpConfigFile.class);
     }

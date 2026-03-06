@@ -4,8 +4,11 @@ import com.github.alvarosanchez.ocp.command.interactive.InteractiveApp;
 import com.github.alvarosanchez.ocp.service.ProfileService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
 import com.github.alvarosanchez.ocp.service.VersionCheckService;
-import io.micronaut.configuration.picocli.PicocliRunner;
+import io.micronaut.configuration.picocli.MicronautFactory;
 import io.micronaut.context.ApplicationContext;
+import io.micronaut.context.ApplicationContextBuilder;
+import io.micronaut.context.env.CommandLinePropertySource;
+import io.micronaut.context.env.Environment;
 import io.micronaut.serde.ObjectMapper;
 import jakarta.inject.Inject;
 import picocli.CommandLine;
@@ -53,14 +56,17 @@ public class OcpCommand implements Runnable {
             return;
         }
 
-        runStartupVersionCheck(args);
-
-        int exitCode = PicocliRunner.execute(OcpCommand.class, args);
-        System.exit(exitCode);
+        ApplicationContextBuilder builder = ApplicationContext.builder(OcpCommand.class, Environment.CLI)
+            .propertySources(new CommandLinePropertySource(io.micronaut.core.cli.CommandLine.parse(args)));
+        try (ApplicationContext context = builder.start()) {
+            runStartupVersionCheck(context, args);
+            int exitCode = new CommandLine(OcpCommand.class, new MicronautFactory(context)).execute(args);
+            System.exit(exitCode);
+        }
     }
 
-    static void runStartupVersionCheck(String[] args) {
-        try (ApplicationContext context = ApplicationContext.run()) {
+    static void runStartupVersionCheck(ApplicationContext context, String[] args) {
+        try {
             VersionCheckService.VersionCheckResult result = context.getBean(VersionCheckService.class).check();
             presentStartupVersionNotice(args, result.noticeMessage(), isInteractiveTerminal());
         } catch (RuntimeException e) {

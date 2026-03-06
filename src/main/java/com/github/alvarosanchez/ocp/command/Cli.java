@@ -6,6 +6,7 @@ import dev.tamboui.style.Color;
 import dev.tamboui.style.Style;
 import dev.tamboui.text.Line;
 import dev.tamboui.text.Span;
+import dev.tamboui.text.Text;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -47,6 +48,20 @@ public final class Cli {
 
     public static void infoWithCodeHighlights(String message) {
         printWithCodeHighlights(message, false);
+    }
+
+    public static Line highlightedNoticeLine(String message) {
+        return Line.from(codeHighlightSpans(message).toArray(Span[]::new));
+    }
+
+    public static Text highlightedNoticeText(String message) {
+        String normalizedMessage = message == null ? "" : message;
+        String[] lines = normalizedMessage.split("\\R", -1);
+        ArrayList<Line> styledLines = new ArrayList<>();
+        for (String line : lines) {
+            styledLines.add(highlightedNoticeLine(line));
+        }
+        return Text.from(styledLines.toArray(Line[]::new));
     }
 
     /**
@@ -182,7 +197,7 @@ public final class Cli {
         String normalizedMessage = message == null ? "" : message;
         int width = Math.min(MAX_RENDER_LINE_WIDTH, Math.max(MIN_LINE_WIDTH, normalizedMessage.length() + 2));
         Buffer buffer = Buffer.empty(Rect.of(width, 1));
-        buffer.setLine(0, 0, Line.from(codeHighlightSpans(normalizedMessage).toArray(Span[]::new)));
+        buffer.setLine(0, 0, highlightedNoticeLine(normalizedMessage));
         return buffer.toAnsiStringTrimmed();
     }
 
