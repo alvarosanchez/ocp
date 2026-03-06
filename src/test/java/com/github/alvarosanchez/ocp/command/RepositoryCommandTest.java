@@ -247,6 +247,7 @@ class RepositoryCommandTest {
     void deleteFileBasedRepositoryDeletesLocalFolderWhenFlagIsProvided() throws IOException {
         Path localRepository = tempDir.resolve("local-repository");
         Files.createDirectories(localRepository);
+        Files.writeString(localRepository.resolve("repository.json"), serializeAsJson(new RepositoryConfigFile(List.of())));
 
         writeOcpConfig(
             new OcpConfigFile(

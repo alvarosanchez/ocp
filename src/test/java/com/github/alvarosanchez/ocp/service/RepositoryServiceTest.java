@@ -369,6 +369,7 @@ class RepositoryServiceTest {
     void deleteFileBasedRepositoryDeletesLocalPathWhenRequested() throws IOException {
         Path localRepository = tempDir.resolve("local-repository");
         Files.createDirectories(localRepository);
+        Files.writeString(localRepository.resolve("repository.json"), objectMapper.writeValueAsString(new RepositoryConfigFile(List.of())));
         writeConfig(
             new OcpConfigFile(
                 new OcpConfigOptions(),
@@ -381,6 +382,46 @@ class RepositoryServiceTest {
         assertEquals("local", deleted.name());
         assertTrue(Files.notExists(localRepository));
         assertTrue(repositoryService.load().isEmpty());
+    }
+
+    @Test
+    void deleteFileBasedRepositoryRejectsDeletingDirectoryWithoutRepositoryMetadata() throws IOException {
+        Path localRepository = tempDir.resolve("local-repository");
+        Files.createDirectories(localRepository);
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("local", null, localRepository.toString()))
+            )
+        );
+
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> repositoryService.delete("local", false, true)
+        );
+
+        assertTrue(thrown.getMessage().contains("repository.json"));
+        assertTrue(Files.exists(localRepository));
+        assertEquals(1, repositoryService.load().size());
+    }
+
+    @Test
+    void deleteFileBasedRepositoryRejectsDeletingHomeDirectory() throws IOException {
+        Path homeDirectory = Path.of(System.getProperty("user.home")).toAbsolutePath().normalize();
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("local", null, homeDirectory.toString()))
+            )
+        );
+
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> repositoryService.delete("local", false, true)
+        );
+
+        assertTrue(thrown.getMessage().contains("Refusing to delete home directory"));
+        assertEquals(1, repositoryService.load().size());
     }
 
     private Path repositoriesRootDirectory() {

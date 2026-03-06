@@ -372,7 +372,7 @@ public final class InteractiveApp extends ToolkitApp {
                     List.of("Profile name", "Extends from profile (optional)"),
                     List.of(List.of(), parentOptions)
                 );
-                prompt.expectedConfirmation = repositoryName;
+                prompt.contextRepositoryName = repositoryName;
             } catch (RuntimeException e) {
                 status = "Error: " + e.getMessage();
             }
@@ -470,7 +470,7 @@ public final class InteractiveApp extends ToolkitApp {
             String statusMessage = status;
             switch (currentPrompt.action) {
                 case CREATE_PROFILE -> {
-                    String repositoryName = currentPrompt.expectedConfirmation;
+                    String repositoryName = currentPrompt.contextRepositoryName;
                     if (repositoryName == null || repositoryName.isBlank()) {
                         throw new IllegalStateException(ERROR_REPOSITORY_SELECTION_REQUIRED);
                     }

@@ -147,6 +147,9 @@ public final class RepositoryService {
 
         boolean deleteLocalPath = gitBacked || deleteLocalPathForFileBased;
         if (deleteLocalPath) {
+            if (!gitBacked && deleteLocalPathForFileBased) {
+                validateFileBasedDeletionTarget(deletedRepository, localPath);
+            }
             deleteRecursively(localPath);
         }
         saveConfig(new OcpConfigFile(loadConfigFile().config(), remaining));
@@ -370,6 +373,31 @@ public final class RepositoryService {
             return false;
         }
         return gitRepositoryClient.hasLocalChanges(localPath);
+    }
+
+    private void validateFileBasedDeletionTarget(RepositoryEntry repository, Path localPath) {
+        Path normalizedLocalPath = normalizeAbsolutePath(localPath);
+        Path homeDirectory = normalizeAbsolutePath(Path.of(System.getProperty("user.home")));
+        if (normalizedLocalPath.getParent() == null) {
+            throw new IllegalStateException(
+                "Refusing to delete local path `" + normalizedLocalPath + "` for file-based repository `" + repository.name() + "`."
+            );
+        }
+        if (normalizedLocalPath.equals(homeDirectory)) {
+            throw new IllegalStateException(
+                "Refusing to delete home directory `" + normalizedLocalPath + "` for file-based repository `" + repository.name() + "`."
+            );
+        }
+        Path metadataFile = normalizedLocalPath.resolve("repository.json");
+        if (Files.exists(normalizedLocalPath) && !Files.isRegularFile(metadataFile)) {
+            throw new IllegalStateException(
+                "Refusing to delete local path `"
+                    + normalizedLocalPath
+                    + "` for file-based repository `"
+                    + repository.name()
+                    + "` because `repository.json` was not found."
+            );
+        }
     }
 
     private record RepositorySource(String uri, Path localPath) {
