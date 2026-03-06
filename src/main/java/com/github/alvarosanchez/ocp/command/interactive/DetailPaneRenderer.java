@@ -79,7 +79,7 @@ final class DetailPaneRenderer {
             profileElements.add(detailField("Status", profile != null && profile.active() ? "active" : "inactive"));
             profileElements.add(detailField("Updates", profile != null && profile.updateAvailable() ? "available" : "up to date"));
             List<TreeShortcutHints.Shortcut> profileShortcuts = new ArrayList<>();
-            profileShortcuts.add(TreeShortcutHints.Shortcut.ACTIVATE_PROFILE);
+            profileShortcuts.add(TreeShortcutHints.Shortcut.USE_PROFILE);
             if (selectedProfileHasParent) {
                 profileShortcuts.add(TreeShortcutHints.Shortcut.GO_PARENT);
             }
