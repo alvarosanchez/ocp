@@ -287,6 +287,7 @@ final class HierarchyTreeBuilder {
         Map<String, String> profileParentByName
     ) {
         Map<Path, ResolvedProfileFile> filesByRelativePath = new LinkedHashMap<>();
+        Map<String, String> profileKeyByProfileName = profileKeyByProfileName(profilePathByName);
 
         Path profilePath = profilePathByName.get(profileKey(repositoryName, profileName));
         collectOwnFiles(profilePath, profileName, false, filesByRelativePath);
@@ -294,13 +295,14 @@ final class HierarchyTreeBuilder {
         Set<String> visitedProfiles = new HashSet<>();
         String currentParent = profileParentByName.get(profileKey(repositoryName, profileName));
         while (currentParent != null && !currentParent.isBlank() && visitedProfiles.add(currentParent)) {
+            String parentProfileKey = profileKeyByProfileName.get(currentParent);
             collectOwnFiles(
-                profilePathByName.get(profileKey(repositoryName, currentParent)),
+                profilePathByName.get(parentProfileKey),
                 currentParent,
                 true,
                 filesByRelativePath
             );
-            currentParent = profileParentByName.get(profileKey(repositoryName, currentParent));
+            currentParent = parentProfileKey == null ? null : profileParentByName.get(parentProfileKey);
         }
 
         return filesByRelativePath.values().stream()
@@ -344,6 +346,24 @@ final class HierarchyTreeBuilder {
             }
         }
         return profilePathByName;
+    }
+
+    private static Map<String, String> profileKeyByProfileName(Map<String, Path> profilePathByName) {
+        Map<String, String> byName = new HashMap<>();
+        Set<String> ambiguousNames = new HashSet<>();
+        for (String qualifiedKey : profilePathByName.keySet()) {
+            int separatorIndex = qualifiedKey.indexOf('/');
+            String profileName = separatorIndex < 0 ? qualifiedKey : qualifiedKey.substring(separatorIndex + 1);
+            if (ambiguousNames.contains(profileName)) {
+                continue;
+            }
+            String previous = byName.putIfAbsent(profileName, qualifiedKey);
+            if (previous != null && !previous.equals(qualifiedKey)) {
+                byName.remove(profileName);
+                ambiguousNames.add(profileName);
+            }
+        }
+        return byName;
     }
 
     private static String profileKey(String repositoryName, String profileName) {

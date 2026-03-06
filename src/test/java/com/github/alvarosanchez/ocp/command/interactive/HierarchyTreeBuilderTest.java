@@ -262,4 +262,53 @@ class HierarchyTreeBuilderTest {
         assertEquals(childFile, settingsNode.data().path());
         assertFalse(settingsNode.data().inherited());
     }
+
+    @Test
+    void buildHierarchyTreeResolvesInheritedFilesFromParentInAnotherRepository() throws IOException {
+        Path childRepositoryPath = tempDir.resolve("repo-child");
+        Path parentRepositoryPath = tempDir.resolve("repo-parent");
+        Path childProfilePath = childRepositoryPath.resolve("child");
+        Path parentProfilePath = parentRepositoryPath.resolve("base");
+        Files.createDirectories(childProfilePath);
+        Files.createDirectories(parentProfilePath.resolve("nested"));
+        Path inheritedFile = parentProfilePath.resolve("nested/shared.json");
+        Files.writeString(inheritedFile, "{}");
+
+        ConfiguredRepository childRepository = new ConfiguredRepository(
+            "repo-child",
+            "git@example/repo-child.git",
+            childRepositoryPath.toString(),
+            List.of("child")
+        );
+        ConfiguredRepository parentRepository = new ConfiguredRepository(
+            "repo-parent",
+            "git@example/repo-parent.git",
+            parentRepositoryPath.toString(),
+            List.of("base")
+        );
+
+        List<TreeNode<NodeRef>> roots = HierarchyTreeBuilder.buildHierarchyTree(
+            List.of(childRepository, parentRepository),
+            List.of(),
+            Map.of("repo-child/child", "base"),
+            4,
+            20
+        );
+
+        TreeNode<NodeRef> childRepositoryNode = roots.stream()
+            .filter(node -> "repo-child".equals(node.label()))
+            .findFirst()
+            .orElseThrow();
+        TreeNode<NodeRef> childProfileNode = childRepositoryNode.children().getFirst();
+        TreeNode<NodeRef> nestedDirectory = childProfileNode.children().stream()
+            .filter(node -> "nested/".equals(node.label()))
+            .findFirst()
+            .orElseThrow();
+        TreeNode<NodeRef> inheritedFileNode = nestedDirectory.children().getFirst();
+
+        assertEquals("shared.json", inheritedFileNode.label());
+        assertTrue(inheritedFileNode.data().inherited());
+        assertEquals("base", inheritedFileNode.data().inheritedFromProfile());
+        assertEquals(inheritedFile, inheritedFileNode.data().path());
+    }
 }

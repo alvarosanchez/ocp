@@ -948,7 +948,8 @@ public final class InteractiveApp extends ToolkitApp {
             return;
         }
 
-        if (!selectProfileNode(repositoryName, parentProfileName)) {
+        String parentRepositoryName = repositoryNameForProfile(parentProfileName);
+        if (parentRepositoryName == null || !selectProfileNode(parentRepositoryName, parentProfileName)) {
             status = "Parent profile `" + parentProfileName + "` was not found in the tree.";
             return;
         }
@@ -979,6 +980,15 @@ public final class InteractiveApp extends ToolkitApp {
         }
         hierarchyTree.selected(originalSelection);
         return false;
+    }
+
+    private String repositoryNameForProfile(String profileName) {
+        for (Profile profile : profiles) {
+            if (profileName.equals(profile.name())) {
+                return profile.repositoryName();
+            }
+        }
+        return null;
     }
 
     private String profileKey(String repositoryName, String profileName) {
