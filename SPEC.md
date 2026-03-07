@@ -205,6 +205,7 @@ oss/opencode.json
 - Interactive tree includes inherited parent-only files under child profiles as read-only file nodes with subdued styling; inherited files cannot be edited.
 - In interactive mode, repository scaffold creation prompts for directory name, location path, and optional initial profile name; after scaffolding, the repository is automatically added to the registry.
 - File preview syntax highlighting in interactive mode uses external `bat` when available; if `bat` is unavailable or fails, preview falls back to plain text.
+- On first interactive launch, when `config.json` does not exist and `~/.config/opencode/` contains whitelisted top-level config files (`opencode.json`, `opencode.jsonc`, `tui.json`, `tui.jsonc`, `oh-my-opencode.json`, `oh-my-opencode.jsonc`), the UI offers to import those files into a newly created local repository under `~/.config/ocp/repositories/`, asks for a repository name and profile name, and activates that profile.
 - If interactive UI initialization fails, behavior falls back to standard Picocli root usage output.
 
 ### Profile switching and backups (target behavior)
@@ -250,6 +251,8 @@ oss/opencode.json
 - `ocp help`
   - exits `0`
   - output contains `Usage: ocp`
+- `ocp`
+  - in interactive first-run mode with no existing `config.json` and importable whitelisted OpenCode config files, offers onboarding to import them into a local repository, create a named profile, and activate it
 - `ocp profile list`
   - with no repositories/profiles: exits `0`, prints helpful empty-state message
   - with multiple repositories: outputs a table sorted by profile name with columns `NAME`, `DESCRIPTION`, `ACTIVE`, `VERSION`, `LAST UPDATED`, `MESSAGE`, and includes `REPOSITORY` when it fits within the width budget (repository name)
