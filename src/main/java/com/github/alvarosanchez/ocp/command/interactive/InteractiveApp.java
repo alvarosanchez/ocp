@@ -1134,24 +1134,18 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     private void loadInitialDataInBackground() {
-        OnboardingService.OnboardingCandidate onboardingCandidate = null;
-        String onboardingLoadErrorStatus = null;
+        OnboardingLoadResult onboardingLoadResult = new OnboardingLoadResult(null, null);
         try {
             reloadState();
-            try {
-                onboardingCandidate = onboardingService.detect().orElse(null);
-            } catch (RuntimeException e) {
-                onboardingLoadErrorStatus = "Error loading onboarding: " + e.getMessage();
-            }
+            onboardingLoadResult = detectOnboardingCandidate();
         } finally {
             if (runner() != null) {
-                OnboardingService.OnboardingCandidate finalOnboardingCandidate = onboardingCandidate;
-                String finalOnboardingLoadErrorStatus = onboardingLoadErrorStatus;
+                OnboardingLoadResult finalOnboardingLoadResult = onboardingLoadResult;
                 runner().runOnRenderThread(() -> {
-                    applyInitialDataLoad(finalOnboardingCandidate, finalOnboardingLoadErrorStatus);
+                    applyInitialDataLoad(finalOnboardingLoadResult.candidate(), finalOnboardingLoadResult.errorStatus());
                 });
             } else {
-                applyInitialDataLoad(onboardingCandidate, onboardingLoadErrorStatus);
+                applyInitialDataLoad(onboardingLoadResult.candidate(), onboardingLoadResult.errorStatus());
             }
         }
     }
@@ -1166,7 +1160,20 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     private void maybePromptForStartupOnboarding() {
-        maybePromptForStartupOnboarding(onboardingService.detect().orElse(null));
+        OnboardingLoadResult onboardingLoadResult = detectOnboardingCandidate();
+        if (onboardingLoadResult.errorStatus() != null) {
+            status = onboardingLoadResult.errorStatus();
+            return;
+        }
+        maybePromptForStartupOnboarding(onboardingLoadResult.candidate());
+    }
+
+    private OnboardingLoadResult detectOnboardingCandidate() {
+        try {
+            return new OnboardingLoadResult(onboardingService.detect().orElse(null), null);
+        } catch (RuntimeException e) {
+            return new OnboardingLoadResult(null, "Error loading onboarding: " + e.getMessage());
+        }
     }
 
     private void maybePromptForStartupOnboarding(OnboardingService.OnboardingCandidate candidate) {
@@ -1554,6 +1561,9 @@ public final class InteractiveApp extends ToolkitApp {
         } catch (IOException | RuntimeException e) {
             status = "Error loading splash logo file: " + e.getMessage();
         }
+    }
+
+    private record OnboardingLoadResult(OnboardingService.OnboardingCandidate candidate, String errorStatus) {
     }
 
 }
