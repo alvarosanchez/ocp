@@ -464,7 +464,12 @@ public final class ProfileService {
 
     private void writeActiveProfile(String profileName) {
         OcpConfigFile currentConfig = repositoryService.loadConfigFile();
-        OcpConfigOptions nextOptions = new OcpConfigOptions(profileName);
+        OcpConfigOptions currentOptions = currentConfig.config();
+        OcpConfigOptions nextOptions = new OcpConfigOptions(
+            profileName,
+            currentOptions.lastOcpVersionCheckEpochSeconds(),
+            currentOptions.latestOcpVersion()
+        );
         repositoryService.saveConfig(new OcpConfigFile(nextOptions, currentConfig.repositories()));
     }
 

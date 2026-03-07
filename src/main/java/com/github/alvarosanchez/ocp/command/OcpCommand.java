@@ -3,9 +3,15 @@ package com.github.alvarosanchez.ocp.command;
 import com.github.alvarosanchez.ocp.command.interactive.InteractiveApp;
 import com.github.alvarosanchez.ocp.service.ProfileService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
-import io.micronaut.configuration.picocli.PicocliRunner;
+import com.github.alvarosanchez.ocp.service.VersionCheckService;
+import io.micronaut.configuration.picocli.MicronautFactory;
+import io.micronaut.context.ApplicationContext;
+import io.micronaut.context.ApplicationContextBuilder;
+import io.micronaut.context.env.CommandLinePropertySource;
+import io.micronaut.context.env.Environment;
 import io.micronaut.serde.ObjectMapper;
 import jakarta.inject.Inject;
+import java.nio.file.Path;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 
@@ -41,7 +47,7 @@ public class OcpCommand implements Runnable {
      *
      * @param args command-line arguments
      */
-    static void main(String[] args) {
+    public static void main(String[] args) {
         Cli.init();
         try {
             SystemDependencies.verifyAll();
@@ -51,8 +57,84 @@ public class OcpCommand implements Runnable {
             return;
         }
 
-        int exitCode = PicocliRunner.execute(OcpCommand.class, args);
+        ApplicationContextBuilder builder = ApplicationContext.builder(OcpCommand.class, Environment.CLI)
+            .propertySources(new CommandLinePropertySource(io.micronaut.core.cli.CommandLine.parse(args)));
+        int exitCode;
+        try (ApplicationContext context = builder.start()) {
+            runStartupVersionCheck(context, args);
+            exitCode = new CommandLine(OcpCommand.class, new MicronautFactory(context)).execute(args);
+        }
         System.exit(exitCode);
+    }
+
+    static void runStartupVersionCheck(ApplicationContext context, String[] args) {
+        try {
+            VersionCheckService.VersionCheckResult result = context.getBean(VersionCheckService.class).check();
+            presentStartupVersionNotice(args, result.noticeMessage(), isInteractiveTerminal());
+        } catch (RuntimeException e) {
+            String message = startupVersionCheckFailureMessage(e);
+            if (shouldDeferVersionNoticeToInteractiveUi(args, isInteractiveTerminal())) {
+                Cli.setStartupNotice(message);
+                return;
+            }
+            Cli.warning(message);
+        }
+    }
+
+    static String startupVersionCheckFailureMessage(RuntimeException exception) {
+        String baseMessage = "Could not check for newer ocp releases."
+            + " Verify your OCP config file: "
+            + resolvedConfigFilePath();
+        String detail = sanitizedStartupFailureDetail(exception);
+        if (detail == null || detail.isBlank()) {
+            return baseMessage;
+        }
+        return baseMessage + " Details: " + detail;
+    }
+
+    private static String sanitizedStartupFailureDetail(RuntimeException exception) {
+        if (exception == null) {
+            return null;
+        }
+        String detail = exception.getMessage();
+        if (detail == null || detail.isBlank()) {
+            return null;
+        }
+        if (detail.contains("repository registry")) {
+            return "Unable to read or write OCP config file at " + resolvedConfigFilePath();
+        }
+        return detail;
+    }
+
+    private static Path resolvedConfigFilePath() {
+        String configuredPath = System.getProperty("ocp.config.dir");
+        if (configuredPath != null && !configuredPath.isBlank()) {
+            return Path.of(configuredPath).resolve("config.json");
+        }
+        return Path.of(System.getProperty("user.home"), ".config", "ocp", "config.json");
+    }
+
+    static void presentStartupVersionNotice(String[] args, String noticeMessage, boolean interactiveTerminal) {
+        if (noticeMessage == null || noticeMessage.isBlank()) {
+            return;
+        }
+        if (shouldDeferVersionNoticeToInteractiveUi(args, interactiveTerminal)) {
+            Cli.setStartupNotice(noticeMessage);
+            return;
+        }
+        Cli.infoWithCodeHighlights(noticeMessage);
+    }
+
+    static boolean shouldDeferVersionNoticeToInteractiveUi(String[] args, boolean interactiveTerminal) {
+        return interactiveTerminal && args.length == 0;
+    }
+
+    static boolean isInteractiveTerminal() {
+        String terminal = System.getenv("TERM");
+        if (terminal == null || terminal.isBlank() || "dumb".equalsIgnoreCase(terminal.trim())) {
+            return false;
+        }
+        return System.console() != null;
     }
 
     /**
@@ -73,10 +155,6 @@ public class OcpCommand implements Runnable {
     }
 
     private boolean shouldStartInteractiveMode() {
-        String terminal = System.getenv("TERM");
-        if (terminal == null || terminal.isBlank() || "dumb".equalsIgnoreCase(terminal.trim())) {
-            return false;
-        }
-        return System.console() != null;
+        return isInteractiveTerminal();
     }
 }

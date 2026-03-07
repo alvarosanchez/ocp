@@ -1,6 +1,8 @@
 package com.github.alvarosanchez.ocp.command.interactive;
 
+import com.github.alvarosanchez.ocp.command.OcpVersionProvider;
 import com.github.alvarosanchez.ocp.config.RepositoryConfigFile;
+import com.github.alvarosanchez.ocp.command.Cli;
 import com.github.alvarosanchez.ocp.model.Profile;
 import com.github.alvarosanchez.ocp.service.ProfileService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
@@ -35,6 +37,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static dev.tamboui.toolkit.Toolkit.column;
 import static dev.tamboui.toolkit.Toolkit.dialog;
 import static dev.tamboui.toolkit.Toolkit.panel;
+import static dev.tamboui.toolkit.Toolkit.richText;
 import static dev.tamboui.toolkit.Toolkit.row;
 import static dev.tamboui.toolkit.Toolkit.spacer;
 import static dev.tamboui.toolkit.Toolkit.text;
@@ -55,6 +58,7 @@ public final class InteractiveApp extends ToolkitApp {
     private static final String ERROR_REPOSITORY_SELECTION_REQUIRED = "Repository selection is required.";
     private static final String STATUS_DELETE_CANCELLED_REPOSITORY_MISMATCH = "Delete cancelled: repository name mismatch.";
     private static final String STATUS_DELETE_CANCELLED_PROFILE_MISMATCH = "Delete cancelled: profile name mismatch.";
+    private static final String STARTUP_UPDATE_DIALOG_TITLE = "OCP Notice";
     private static final List<TreeShortcutHints.Shortcut> GLOBAL_SHORTCUTS = List.of(
         TreeShortcutHints.Shortcut.TAB_SWITCH_PANE,
         TreeShortcutHints.Shortcut.ADD_EXISTING_REPOSITORY,
@@ -87,6 +91,7 @@ public final class InteractiveApp extends ToolkitApp {
     private final ProfileService profileService;
     private final RepositoryService repositoryService;
     private final ObjectMapper objectMapper;
+    private final String currentVersion = OcpVersionProvider.readVersion();
     private final BatPreviewRenderer batPreviewRenderer = new BatPreviewRenderer();
 
     private final TreeElement<NodeRef> hierarchyTree = Toolkit.<NodeRef>tree()
@@ -117,6 +122,7 @@ public final class InteractiveApp extends ToolkitApp {
     private boolean initialDataLoaded;
     private boolean busy;
     private String busyMessage;
+    private String startupUpdateNotice;
     private int spinnerIndex;
 
     private RefreshConflictState refreshConflict;
@@ -136,6 +142,7 @@ public final class InteractiveApp extends ToolkitApp {
         this.profileService = profileService;
         this.repositoryService = repositoryService;
         this.objectMapper = objectMapper;
+        startupUpdateNotice = Cli.consumeStartupNotice();
     }
 
     @Override
@@ -198,8 +205,18 @@ public final class InteractiveApp extends ToolkitApp {
                     .borderColor(activePane == Pane.DETAIL ? Color.GREEN : Color.GRAY)
                     .fill()
             ).fill(),
-            panel(text(statusLine())).rounded().borderColor(busy ? Color.GREEN : Color.YELLOW).length(3)
+            panel(
+                row(
+                    text(statusLine()),
+                    spacer(),
+                    text("v" + currentVersion).bold().fg(Color.CYAN)
+                )
+            ).rounded().borderColor(busy ? Color.GREEN : Color.YELLOW).length(3)
         );
+
+        if (startupUpdateNotice != null) {
+            return column(root, renderStartupUpdateDialog());
+        }
 
         if (prompt != null) {
             return column(root, renderPromptDialog());
@@ -216,6 +233,17 @@ public final class InteractiveApp extends ToolkitApp {
         if (splashVisible) {
             if (initialDataLoaded) {
                 splashVisible = false;
+            }
+            return EventResult.HANDLED;
+        }
+
+        if (startupUpdateNotice != null) {
+            if (event.isCancel()) {
+                startupUpdateNotice = null;
+                return EventResult.HANDLED;
+            }
+            if (event.isQuit()) {
+                quit();
             }
             return EventResult.HANDLED;
         }
@@ -1270,6 +1298,20 @@ public final class InteractiveApp extends ToolkitApp {
         ).rounded().borderColor(Color.MAGENTA).width(dialogWidth);
     }
 
+    private Element renderStartupUpdateDialog() {
+        List<Element> content = new ArrayList<>();
+        String notice = startupUpdateNotice == null ? "" : startupUpdateNotice;
+        for (String line : notice.split("\\R", -1)) {
+            content.add(richText(Text.from(Cli.highlightedNoticeLine(line))));
+        }
+        content.add(spacer());
+        content.add(ShortcutHintRenderer.line(List.of(TreeShortcutHints.Shortcut.ESC_CANCEL)));
+        return dialog(STARTUP_UPDATE_DIALOG_TITLE, content.toArray(Element[]::new))
+            .rounded()
+            .borderColor(Color.CYAN)
+            .width(88);
+    }
+
     static int promptDialogWidthForContent(String title, String label, String currentValue, String shortcutsLine, int maxWidth) {
         int safeMaxWidth = Math.max(48, maxWidth);
         int desiredWidth = Math.max(
@@ -1350,6 +1392,7 @@ public final class InteractiveApp extends ToolkitApp {
         content.add(spacer());
         content.add(row(spacer(), text("OpenCode Configuration Profiles").bold().fg(Color.CYAN), spacer()));
         content.add(row(spacer(), text("Interactive Tree Workspace").fg(Color.YELLOW), spacer()));
+        content.add(row(spacer(), text("Current version: v" + currentVersion).fg(Color.CYAN), spacer()));
         content.add(spacer());
         content.add(row(spacer(), text("Loading repositories and profile trees...").dim(), spacer()));
 

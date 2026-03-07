@@ -61,7 +61,9 @@ ocp profile use my-company
 ```json
 {
   "config": {
-    "activeProfile": "my-company"
+    "activeProfile": "my-company",
+    "lastOcpVersionCheckEpochSeconds": 1741262400,
+    "latestOcpVersion": "0.2.0"
   },
   "repositories": [
     {
@@ -76,6 +78,8 @@ ocp profile use my-company
 Rules:
 
 - `config.activeProfile` defaults to `null` (no active profile selected).
+- `config.lastOcpVersionCheckEpochSeconds` defaults to `null` and records the last CLI update check attempt.
+- `config.latestOcpVersion` defaults to `null` and stores the latest successful CLI release lookup.
 - `repositories[*].uri` is optional (`null` for file-based repositories).
 - `repositories[*].name` is required.
 - `repositories[*].localPath` is required after normalization.
@@ -122,6 +126,7 @@ oss/opencode.json
 ### Global behavior
 
 - `ocp` verifies required system dependencies at startup. Current required dependency: `git`.
+- `ocp` checks for a newer CLI release at startup in both interactive and non-interactive flows, but reuses cached update metadata until at least 24 hours have passed since the previous check attempt.
 - Success messages are written to stdout.
 - Errors are written to stderr.
 - Help output is available through Picocli help commands.
