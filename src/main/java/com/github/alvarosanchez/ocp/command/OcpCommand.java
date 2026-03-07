@@ -1,6 +1,7 @@
 package com.github.alvarosanchez.ocp.command;
 
 import com.github.alvarosanchez.ocp.command.interactive.InteractiveApp;
+import com.github.alvarosanchez.ocp.service.OnboardingService;
 import com.github.alvarosanchez.ocp.service.ProfileService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
 import com.github.alvarosanchez.ocp.service.VersionCheckService;
@@ -33,12 +34,19 @@ public class OcpCommand implements Runnable {
 
     private final ProfileService profileService;
     private final RepositoryService repositoryService;
+    private final OnboardingService onboardingService;
     private final ObjectMapper objectMapper;
 
     @Inject
-    OcpCommand(ProfileService profileService, RepositoryService repositoryService, ObjectMapper objectMapper) {
+    OcpCommand(
+        ProfileService profileService,
+        RepositoryService repositoryService,
+        OnboardingService onboardingService,
+        ObjectMapper objectMapper
+    ) {
         this.profileService = profileService;
         this.repositoryService = repositoryService;
+        this.onboardingService = onboardingService;
         this.objectMapper = objectMapper;
     }
 
@@ -144,10 +152,11 @@ public class OcpCommand implements Runnable {
     public void run() {
         if (shouldStartInteractiveMode()) {
             try {
-                new InteractiveApp(profileService, repositoryService, objectMapper).run();
+                createInteractiveApp().run();
             } catch (Exception e) {
                 Cli.error("Interactive mode is unavailable: " + e.getMessage());
                 Cli.error("Falling back to standard usage output");
+                CommandLine.usage(this, System.out);
             }
             return;
         }
@@ -156,5 +165,9 @@ public class OcpCommand implements Runnable {
 
     private boolean shouldStartInteractiveMode() {
         return isInteractiveTerminal();
+    }
+
+    InteractiveApp createInteractiveApp() {
+        return new InteractiveApp(profileService, repositoryService, onboardingService, objectMapper);
     }
 }
