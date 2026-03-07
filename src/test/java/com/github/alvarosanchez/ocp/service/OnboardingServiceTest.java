@@ -11,6 +11,10 @@ import com.github.alvarosanchez.ocp.git.GitRepositoryClient;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.serde.ObjectMapper;
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -263,6 +267,59 @@ class OnboardingServiceTest {
         assertTrue(exception.getMessage().contains("conflicting config file variants"));
         assertTrue(Files.exists(configDirectory.resolve("config.json")));
         assertEquals(existingConfig, repositoryService.loadConfigFile());
+    }
+
+    @Test
+    void onboardRollbackRestoresOpenCodeFilesWhenActiveProfileSaveFails() throws IOException {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
+        Path openCodeDirectory = Path.of(System.getProperty("ocp.opencode.config.dir"));
+        Files.createDirectories(openCodeDirectory);
+        Path openCodeFile = openCodeDirectory.resolve("opencode.json");
+        Files.writeString(openCodeFile, "{\"model\":\"gpt-5\"}");
+
+        RepositoryService failingRepositoryService = new RepositoryService(
+            objectMapperFailingOnActiveProfileWrite(),
+            new GitRepositoryClient(new GitProcessExecutor())
+        );
+        ProfileService failingProfileService = new ProfileService(objectMapper, failingRepositoryService, new GitRepositoryClient(new GitProcessExecutor()));
+        OnboardingService failingOnboardingService = new OnboardingService(failingRepositoryService, failingProfileService);
+
+        UncheckedIOException exception = assertThrows(
+            UncheckedIOException.class,
+            () -> failingOnboardingService.onboard("personal-repo", "personal")
+        );
+
+        assertTrue(exception.getMessage().contains("Failed to write repository registry"));
+        assertTrue(Files.exists(openCodeFile));
+        assertTrue(Files.isRegularFile(openCodeFile));
+        assertTrue(!Files.isSymbolicLink(openCodeFile));
+        assertEquals("{\"model\":\"gpt-5\"}", Files.readString(openCodeFile));
+        assertTrue(Files.notExists(tempDir.resolve("cache").resolve("repositories").resolve("personal-repo")));
+        assertTrue(Files.notExists(Path.of(System.getProperty("ocp.config.dir")).resolve("config.json")));
+    }
+
+    private ObjectMapper objectMapperFailingOnActiveProfileWrite() {
+        InvocationHandler handler = (proxy, method, args) -> {
+            if (
+                method.getName().equals("writeValueAsString")
+                    && args != null
+                    && args.length == 1
+                    && args[0] instanceof OcpConfigFile configFile
+                    && configFile.config().activeProfile() != null
+            ) {
+                throw new IOException("Injected active-profile write failure");
+            }
+            try {
+                return method.invoke(objectMapper, args);
+            } catch (InvocationTargetException e) {
+                throw e.getCause();
+            }
+        };
+        return (ObjectMapper) Proxy.newProxyInstance(
+            ObjectMapper.class.getClassLoader(),
+            new Class<?>[] {ObjectMapper.class},
+            handler
+        );
     }
 
     private static boolean isGitAvailable() {

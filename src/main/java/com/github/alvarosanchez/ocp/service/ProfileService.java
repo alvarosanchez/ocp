@@ -289,9 +289,17 @@ public final class ProfileService {
             }
         }
 
-        ProfileSwitchResult switchResult = switchProfileFiles(resolvedFiles, previousResolvedFiles, openCodeDirectory());
-        writeActiveProfile(normalizedProfileName);
-        return switchResult;
+        ProfileSwitchOperation switchOperation = switchProfileFiles(resolvedFiles, previousResolvedFiles, openCodeDirectory());
+        try {
+            writeActiveProfile(normalizedProfileName);
+            return switchOperation.result();
+        } catch (RuntimeException e) {
+            IOException rollbackFailure = rollbackSwitch(switchOperation.switchStates());
+            if (rollbackFailure != null) {
+                e.addSuppressed(rollbackFailure);
+            }
+            throw e;
+        }
     }
 
     /**
@@ -477,7 +485,7 @@ public final class ProfileService {
         return repositoryService.loadConfigFile().config().activeProfile();
     }
 
-    private ProfileSwitchResult switchProfileFiles(
+    private ProfileSwitchOperation switchProfileFiles(
         List<ResolvedProfileFile> sourceFiles,
         List<ResolvedProfileFile> previousSourceFiles,
         Path targetDirectory
@@ -562,7 +570,10 @@ public final class ProfileService {
                 Files.createSymbolicLink(targetFile, sourceFile.sourcePath().toAbsolutePath());
                 linkedFiles++;
             }
-            return new ProfileSwitchResult(targetDirectory, linkedFiles, removedFiles, backedUpFiles, backupDirectory);
+            return new ProfileSwitchOperation(
+                new ProfileSwitchResult(targetDirectory, linkedFiles, removedFiles, backedUpFiles, backupDirectory),
+                List.copyOf(switchStates)
+            );
         } catch (IOException e) {
             IOException rollbackFailure = rollbackSwitch(switchStates);
             if (rollbackFailure != null) {
@@ -1201,6 +1212,9 @@ public final class ProfileService {
     }
 
     private record FileSwitchState(Path target, Path backupPath, Path previousSymlinkTarget) {
+    }
+
+    private record ProfileSwitchOperation(ProfileSwitchResult result, List<FileSwitchState> switchStates) {
     }
 
     private record DiscoveredProfile(
