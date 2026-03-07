@@ -182,10 +182,7 @@ public final class RepositoryService {
     public Path create(String repositoryName, String profileName, String repositoryLocation) {
         String normalizedRepositoryName = normalizeRepositoryName(repositoryName);
 
-        Path repositoryPath = resolveCreateLocation(repositoryLocation)
-            .resolve(normalizedRepositoryName)
-            .toAbsolutePath()
-            .normalize();
+        Path repositoryPath = plannedRepositoryPath(normalizedRepositoryName, repositoryLocation);
         if (Files.exists(repositoryPath)) {
             throw new IllegalStateException("Directory already exists: " + repositoryPath);
         }
@@ -209,13 +206,25 @@ public final class RepositoryService {
     }
 
     public RepositoryEntry createAndAdd(String repositoryName, String profileName, String repositoryLocation) {
-        Path createdRepository = create(repositoryName, profileName, repositoryLocation);
+        String normalizedRepositoryName = normalizeRepositoryName(repositoryName);
+        Path createdRepository = plannedRepositoryPath(normalizedRepositoryName, repositoryLocation);
+        boolean repositoryPathExistedBefore = Files.exists(createdRepository);
         try {
-            return add(createdRepository.toString(), repositoryName);
+            Path repositoryPath = create(normalizedRepositoryName, profileName, repositoryLocation);
+            return add(repositoryPath.toString(), normalizedRepositoryName);
         } catch (RuntimeException e) {
-            deleteRecursively(createdRepository);
+            if (!repositoryPathExistedBefore && Files.exists(createdRepository)) {
+                deleteRecursively(createdRepository);
+            }
             throw e;
         }
+    }
+
+    private Path plannedRepositoryPath(String normalizedRepositoryName, String repositoryLocation) {
+        return resolveCreateLocation(repositoryLocation)
+            .resolve(normalizedRepositoryName)
+            .toAbsolutePath()
+            .normalize();
     }
 
     OcpConfigFile loadConfigFile() {

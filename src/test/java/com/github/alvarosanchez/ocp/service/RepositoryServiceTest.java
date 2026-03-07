@@ -15,6 +15,9 @@ import io.micronaut.context.ApplicationContext;
 import io.micronaut.serde.ObjectMapper;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -338,6 +341,26 @@ class RepositoryServiceTest {
     }
 
     @Test
+    void createAndAddRollsBackCreatedRepositoryWhenCreateFailsAfterDirectoryCreation() throws IOException {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
+        Path location = tempDir.resolve("location");
+        Files.createDirectories(location);
+
+        RepositoryService failingRepositoryService = new RepositoryService(
+            objectMapperFailingOnRepositoryConfigWrite(),
+            new GitRepositoryClient(new GitProcessExecutor())
+        );
+
+        UncheckedIOException thrown = assertThrows(
+            UncheckedIOException.class,
+            () -> failingRepositoryService.createAndAdd("interactive-repo", "work", location.toString())
+        );
+
+        assertTrue(thrown.getMessage().contains("Failed to create repository at"));
+        assertTrue(Files.notExists(location.resolve("interactive-repo")));
+    }
+
+    @Test
     void addTreatsMissingRelativePathAsLocalPathAndFailsEarly() {
         IllegalStateException thrown = assertThrows(
             IllegalStateException.class,
@@ -587,7 +610,37 @@ class RepositoryServiceTest {
 
     private String relativePathFromProjectRoot(Path target) {
         Path projectRoot = Path.of("").toAbsolutePath().normalize();
-        return projectRoot.relativize(target.toAbsolutePath().normalize()).toString();
+        Path absoluteTarget = target.toAbsolutePath().normalize();
+        Assumptions.assumeTrue(
+            projectRoot.getRoot() == null
+                ? absoluteTarget.getRoot() == null
+                : projectRoot.getRoot().equals(absoluteTarget.getRoot()),
+            "Project root and target are on different filesystem roots; cannot relativize safely"
+        );
+        return projectRoot.relativize(absoluteTarget).toString();
+    }
+
+    private ObjectMapper objectMapperFailingOnRepositoryConfigWrite() {
+        InvocationHandler handler = (proxy, method, args) -> {
+            if (
+                method.getName().equals("writeValueAsString")
+                    && args != null
+                    && args.length == 1
+                    && args[0] instanceof RepositoryConfigFile
+            ) {
+                throw new IOException("Injected repository config write failure");
+            }
+            try {
+                return method.invoke(objectMapper, args);
+            } catch (InvocationTargetException e) {
+                throw e.getCause();
+            }
+        };
+        return (ObjectMapper) Proxy.newProxyInstance(
+            ObjectMapper.class.getClassLoader(),
+            new Class<?>[] {ObjectMapper.class},
+            handler
+        );
     }
 
     private Path createRemoteRepository() throws IOException, InterruptedException {
