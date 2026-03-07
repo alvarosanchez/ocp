@@ -5,6 +5,16 @@
       "source": "github/awesome-copilot",
       "sourceType": "github",
       "computedHash": "cbe644b0c6760ae2a1eaafa39133920d889331327065d92a131675a665273e56"
+    },
+    "git-commit": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "computedHash": "2607fc60629b82b257136dd2a7a373f0a4466c0b49df7746d845d59313c99b21"
+    },
+    "skill-creator": {
+      "source": "micronaut-projects/micronaut-project-template",
+      "sourceType": "github",
+      "computedHash": "1372c6505565e4d8548ab97dccdc0bade7cb192e38203465237f9df14c7efead"
     }
   }
 }
