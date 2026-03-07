@@ -5,6 +5,7 @@ import com.github.alvarosanchez.ocp.config.RepositoryConfigFile;
 import com.github.alvarosanchez.ocp.command.Cli;
 import com.github.alvarosanchez.ocp.model.Profile;
 import com.github.alvarosanchez.ocp.service.OnboardingService;
+import com.github.alvarosanchez.ocp.service.PathSegmentValidator;
 import com.github.alvarosanchez.ocp.service.ProfileService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
 import com.github.alvarosanchez.ocp.service.RepositoryService.ConfiguredRepository;
@@ -537,12 +538,16 @@ public final class InteractiveApp extends ToolkitApp {
                     return;
                 }
                 case ONBOARD_EXISTING_CONFIG_REPOSITORY_NAME -> {
+                    String normalizedRepositoryName = PathSegmentValidator.requireSinglePathSegment(
+                        currentPrompt.values.getFirst(),
+                        "Repository name"
+                    );
                     prompt = PromptState.single(
                         PromptAction.ONBOARD_EXISTING_CONFIG_PROFILE_NAME,
                         "Create onboarding profile",
                         "Profile name"
                     );
-                    prompt.contextRepositoryName = currentPrompt.values.getFirst();
+                    prompt.contextRepositoryName = normalizedRepositoryName;
                     status = "Name the imported profile.";
                     return;
                 }
@@ -645,7 +650,7 @@ public final class InteractiveApp extends ToolkitApp {
             reloadState();
             status = statusMessage;
         } catch (RuntimeException e) {
-            if (currentPrompt.action == PromptAction.ONBOARD_EXISTING_CONFIG_PROFILE_NAME) {
+            if (isOnboardingPromptAction(currentPrompt.action)) {
                 prompt = currentPrompt;
             }
             reloadState();
@@ -1129,13 +1134,16 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     private void loadInitialDataInBackground() {
+        OnboardingService.OnboardingCandidate onboardingCandidate = null;
         try {
             reloadState();
+            onboardingCandidate = onboardingService.detect().orElse(null);
         } finally {
             if (runner() != null) {
+                OnboardingService.OnboardingCandidate finalOnboardingCandidate = onboardingCandidate;
                 runner().runOnRenderThread(() -> {
                     initialDataLoaded = true;
-                    maybePromptForStartupOnboarding();
+                    maybePromptForStartupOnboarding(finalOnboardingCandidate);
                     maybeHideSplash();
                 });
             }
@@ -1143,22 +1151,33 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     private void maybePromptForStartupOnboarding() {
+        maybePromptForStartupOnboarding(onboardingService.detect().orElse(null));
+    }
+
+    private void maybePromptForStartupOnboarding(OnboardingService.OnboardingCandidate candidate) {
         if (prompt != null) {
             return;
         }
-        onboardingService.detect().ifPresent(candidate -> {
-            String fileSummary = candidate.configFiles()
-                .stream()
-                .map(path -> "- `" + path.getFileName() + "`")
-                .reduce((left, right) -> left + "\n" + right)
-                .orElse("");
-            prompt = PromptState.multiWithOptions(
-                PromptAction.ONBOARD_EXISTING_CONFIG_CONFIRM,
-                "Import existing OpenCode config files into OCP?",
-                List.of(fileSummary),
-                List.of(List.of("yes", "no"))
-            );
-        });
+        if (candidate == null) {
+            return;
+        }
+        String fileSummary = candidate.configFiles()
+            .stream()
+            .map(path -> "- `" + path.getFileName() + "`")
+            .reduce((left, right) -> left + "\n" + right)
+            .orElse("");
+        prompt = PromptState.multiWithOptions(
+            PromptAction.ONBOARD_EXISTING_CONFIG_CONFIRM,
+            "Import existing OpenCode config files into OCP?",
+            List.of(fileSummary),
+            List.of(List.of("yes", "no"))
+        );
+    }
+
+    private boolean isOnboardingPromptAction(PromptAction action) {
+        return action == PromptAction.ONBOARD_EXISTING_CONFIG_CONFIRM
+            || action == PromptAction.ONBOARD_EXISTING_CONFIG_REPOSITORY_NAME
+            || action == PromptAction.ONBOARD_EXISTING_CONFIG_PROFILE_NAME;
     }
 
     private void maybeHideSplash() {

@@ -133,6 +133,39 @@ class InteractiveAppOnboardingTest {
     }
 
     @Test
+    void onboardingRepositoryPromptStaysOpenWhenRepositoryNameIsInvalid() throws Exception {
+        InteractiveApp app = new InteractiveApp(
+            applicationContext.getBean(ProfileService.class),
+            applicationContext.getBean(RepositoryService.class),
+            applicationContext.getBean(OnboardingService.class),
+            applicationContext.getBean(ObjectMapper.class)
+        );
+
+        Field promptField = InteractiveApp.class.getDeclaredField("prompt");
+        promptField.setAccessible(true);
+        PromptState prompt = PromptState.single(
+            PromptAction.ONBOARD_EXISTING_CONFIG_REPOSITORY_NAME,
+            "Create onboarding repository",
+            "Repository name"
+        );
+        prompt.values.set(0, "bad/name");
+        promptField.set(app, prompt);
+
+        Method applyPrompt = InteractiveApp.class.getDeclaredMethod("applyPrompt");
+        applyPrompt.setAccessible(true);
+        applyPrompt.invoke(app);
+
+        PromptState retainedPrompt = (PromptState) promptField.get(app);
+        assertNotNull(retainedPrompt);
+        assertEquals(PromptAction.ONBOARD_EXISTING_CONFIG_REPOSITORY_NAME, retainedPrompt.action);
+
+        Field statusField = InteractiveApp.class.getDeclaredField("status");
+        statusField.setAccessible(true);
+        String status = (String) statusField.get(app);
+        assertEquals("Error: Repository name must be a single safe path segment.", status);
+    }
+
+    @Test
     void onboardingPromptTakesPrecedenceOverDeferredStartupNotice() throws Exception {
         Path openCodeDirectory = Path.of(System.getProperty("ocp.opencode.config.dir"));
         Files.createDirectories(openCodeDirectory);
