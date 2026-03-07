@@ -137,6 +137,7 @@ Rule of thumb: keep command classes thin; move business logic to services.
 - Check `SPEC.md` acceptance criteria for user-visible behavior changes
 - Keep changes minimal, cohesive, and scoped to the request
 - Before making any file edits, create and switch to a dedicated working branch (for example `git checkout -b agent/<topic>`); never start work on `master` or `main`.
+- Never create test repositories, fixture directories, or nested git repositories inside the project working tree; use `@TempDir` or system temporary directories outside the checkout instead unless the user explicitly requests an in-repo fixture.
 
 
 ### After coding

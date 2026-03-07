@@ -4,6 +4,8 @@ import com.github.alvarosanchez.ocp.command.OcpVersionProvider;
 import com.github.alvarosanchez.ocp.config.RepositoryConfigFile;
 import com.github.alvarosanchez.ocp.command.Cli;
 import com.github.alvarosanchez.ocp.model.Profile;
+import com.github.alvarosanchez.ocp.service.OnboardingService;
+import com.github.alvarosanchez.ocp.service.PathSegmentValidator;
 import com.github.alvarosanchez.ocp.service.ProfileService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
 import com.github.alvarosanchez.ocp.service.RepositoryService.ConfiguredRepository;
@@ -43,6 +45,13 @@ import static dev.tamboui.toolkit.Toolkit.spacer;
 import static dev.tamboui.toolkit.Toolkit.text;
 
 public final class InteractiveApp extends ToolkitApp {
+
+    private enum ActiveOverlay {
+        NONE,
+        PROMPT,
+        STARTUP_NOTICE,
+        REFRESH_CONFLICT
+    }
 
     private static final String TREE_ID = "hierarchy-tree";
     private static final String DETAIL_ID = "detail-pane";
@@ -90,6 +99,7 @@ public final class InteractiveApp extends ToolkitApp {
 
     private final ProfileService profileService;
     private final RepositoryService repositoryService;
+    private final OnboardingService onboardingService;
     private final ObjectMapper objectMapper;
     private final String currentVersion = OcpVersionProvider.readVersion();
     private final BatPreviewRenderer batPreviewRenderer = new BatPreviewRenderer();
@@ -138,9 +148,15 @@ public final class InteractiveApp extends ToolkitApp {
     private long previewRequestSequence;
     private int previewScrollOffset;
 
-    public InteractiveApp(ProfileService profileService, RepositoryService repositoryService, ObjectMapper objectMapper) {
+    public InteractiveApp(
+        ProfileService profileService,
+        RepositoryService repositoryService,
+        OnboardingService onboardingService,
+        ObjectMapper objectMapper
+    ) {
         this.profileService = profileService;
         this.repositoryService = repositoryService;
+        this.onboardingService = onboardingService;
         this.objectMapper = objectMapper;
         startupUpdateNotice = Cli.consumeStartupNotice();
     }
@@ -151,6 +167,7 @@ public final class InteractiveApp extends ToolkitApp {
 
         if (runner() == null) {
             reloadState();
+            maybePromptForStartupOnboarding();
             splashVisible = false;
             return;
         }
@@ -214,17 +231,25 @@ public final class InteractiveApp extends ToolkitApp {
             ).rounded().borderColor(busy ? Color.GREEN : Color.YELLOW).length(3)
         );
 
-        if (startupUpdateNotice != null) {
-            return column(root, renderStartupUpdateDialog());
-        }
+        return switch (activeOverlay()) {
+            case PROMPT -> column(root, renderPromptDialog());
+            case STARTUP_NOTICE -> column(root, renderStartupUpdateDialog());
+            case REFRESH_CONFLICT -> column(root, renderRefreshConflictDialog());
+            case NONE -> root;
+        };
+    }
 
+    private ActiveOverlay activeOverlay() {
         if (prompt != null) {
-            return column(root, renderPromptDialog());
+            return ActiveOverlay.PROMPT;
+        }
+        if (startupUpdateNotice != null) {
+            return ActiveOverlay.STARTUP_NOTICE;
         }
         if (refreshConflict != null) {
-            return column(root, renderRefreshConflictDialog());
+            return ActiveOverlay.REFRESH_CONFLICT;
         }
-        return root;
+        return ActiveOverlay.NONE;
     }
 
     private EventResult handleKeyEvent(KeyEvent event) {
@@ -237,23 +262,22 @@ public final class InteractiveApp extends ToolkitApp {
             return EventResult.HANDLED;
         }
 
-        if (startupUpdateNotice != null) {
-            if (event.isCancel()) {
-                startupUpdateNotice = null;
+        switch (activeOverlay()) {
+            case PROMPT:
+                return handlePromptKey(event);
+            case STARTUP_NOTICE:
+                if (event.isCancel()) {
+                    startupUpdateNotice = null;
+                    return EventResult.HANDLED;
+                }
+                if (event.isQuit()) {
+                    quit();
+                }
                 return EventResult.HANDLED;
-            }
-            if (event.isQuit()) {
-                quit();
-            }
-            return EventResult.HANDLED;
-        }
-
-        if (prompt != null) {
-            return handlePromptKey(event);
-        }
-
-        if (refreshConflict != null) {
-            return handleRefreshConflictKey(event);
+            case REFRESH_CONFLICT:
+                return handleRefreshConflictKey(event);
+            case NONE:
+                break;
         }
 
         if (busy) {
@@ -500,6 +524,44 @@ public final class InteractiveApp extends ToolkitApp {
         try {
             String statusMessage = status;
             switch (currentPrompt.action) {
+                case ONBOARD_EXISTING_CONFIG_CONFIRM -> {
+                    if (!"yes".equalsIgnoreCase(currentPrompt.values.getFirst())) {
+                        statusMessage = "Skipped importing existing OpenCode configuration.";
+                        break;
+                    }
+                    prompt = PromptState.single(
+                        PromptAction.ONBOARD_EXISTING_CONFIG_REPOSITORY_NAME,
+                        "Create onboarding repository",
+                        "Repository name"
+                    );
+                    status = "Name the imported repository.";
+                    return;
+                }
+                case ONBOARD_EXISTING_CONFIG_REPOSITORY_NAME -> {
+                    String normalizedRepositoryName = PathSegmentValidator.requireSinglePathSegment(
+                        currentPrompt.values.getFirst(),
+                        "Repository name"
+                    );
+                    prompt = PromptState.single(
+                        PromptAction.ONBOARD_EXISTING_CONFIG_PROFILE_NAME,
+                        "Create onboarding profile",
+                        "Profile name"
+                    );
+                    prompt.contextRepositoryName = normalizedRepositoryName;
+                    status = "Name the imported profile.";
+                    return;
+                }
+                case ONBOARD_EXISTING_CONFIG_PROFILE_NAME -> {
+                    String repositoryName = currentPrompt.contextRepositoryName;
+                    if (repositoryName == null || repositoryName.isBlank()) {
+                        throw new IllegalStateException(ERROR_REPOSITORY_SELECTION_REQUIRED);
+                    }
+                    OnboardingService.OnboardingResult onboardingResult = onboardingService.onboard(
+                        repositoryName,
+                        currentPrompt.values.getFirst()
+                    );
+                    statusMessage = onboardingCompletedMessage(onboardingResult);
+                }
                 case CREATE_PROFILE -> {
                     String repositoryName = currentPrompt.contextRepositoryName;
                     if (repositoryName == null || repositoryName.isBlank()) {
@@ -588,6 +650,9 @@ public final class InteractiveApp extends ToolkitApp {
             reloadState();
             status = statusMessage;
         } catch (RuntimeException e) {
+            if (isOnboardingPromptAction(currentPrompt.action)) {
+                prompt = currentPrompt;
+            }
             reloadState();
             status = "Error: " + e.getMessage();
         }
@@ -605,6 +670,14 @@ public final class InteractiveApp extends ToolkitApp {
             "Switched to profile `" + profileName + "`.",
             null
         );
+    }
+
+    private String onboardingCompletedMessage(OnboardingService.OnboardingResult onboardingResult) {
+        String message = "Imported existing OpenCode configuration as profile `" + onboardingResult.profileName() + "`";
+        if (onboardingResult.switchResult().hasBackups()) {
+            return message + " and backed up existing files to `" + onboardingResult.switchResult().backupDirectory() + "`.";
+        }
+        return message + ".";
     }
 
     private void refreshSelectedRepository() {
@@ -1061,16 +1134,72 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     private void loadInitialDataInBackground() {
+        OnboardingLoadResult onboardingLoadResult = new OnboardingLoadResult(null, null);
         try {
             reloadState();
+            onboardingLoadResult = detectOnboardingCandidate();
         } finally {
             if (runner() != null) {
+                OnboardingLoadResult finalOnboardingLoadResult = onboardingLoadResult;
                 runner().runOnRenderThread(() -> {
-                    initialDataLoaded = true;
-                    maybeHideSplash();
+                    applyInitialDataLoad(finalOnboardingLoadResult.candidate(), finalOnboardingLoadResult.errorStatus());
                 });
+            } else {
+                applyInitialDataLoad(onboardingLoadResult.candidate(), onboardingLoadResult.errorStatus());
             }
         }
+    }
+
+    private void applyInitialDataLoad(OnboardingService.OnboardingCandidate onboardingCandidate, String onboardingLoadErrorStatus) {
+        initialDataLoaded = true;
+        if (onboardingLoadErrorStatus != null) {
+            status = onboardingLoadErrorStatus;
+        }
+        maybePromptForStartupOnboarding(onboardingCandidate);
+        maybeHideSplash();
+    }
+
+    private void maybePromptForStartupOnboarding() {
+        OnboardingLoadResult onboardingLoadResult = detectOnboardingCandidate();
+        if (onboardingLoadResult.errorStatus() != null) {
+            status = onboardingLoadResult.errorStatus();
+            return;
+        }
+        maybePromptForStartupOnboarding(onboardingLoadResult.candidate());
+    }
+
+    private OnboardingLoadResult detectOnboardingCandidate() {
+        try {
+            return new OnboardingLoadResult(onboardingService.detect().orElse(null), null);
+        } catch (RuntimeException e) {
+            return new OnboardingLoadResult(null, "Error loading onboarding: " + e.getMessage());
+        }
+    }
+
+    private void maybePromptForStartupOnboarding(OnboardingService.OnboardingCandidate candidate) {
+        if (prompt != null) {
+            return;
+        }
+        if (candidate == null) {
+            return;
+        }
+        String fileSummary = candidate.configFiles()
+            .stream()
+            .map(path -> "- `" + path.getFileName() + "`")
+            .reduce((left, right) -> left + "\n" + right)
+            .orElse("");
+        prompt = PromptState.multiWithOptions(
+            PromptAction.ONBOARD_EXISTING_CONFIG_CONFIRM,
+            "Import existing OpenCode config files into OCP?",
+            List.of(fileSummary),
+            List.of(List.of("yes", "no"))
+        );
+    }
+
+    private boolean isOnboardingPromptAction(PromptAction action) {
+        return action == PromptAction.ONBOARD_EXISTING_CONFIG_CONFIRM
+            || action == PromptAction.ONBOARD_EXISTING_CONFIG_REPOSITORY_NAME
+            || action == PromptAction.ONBOARD_EXISTING_CONFIG_PROFILE_NAME;
     }
 
     private void maybeHideSplash() {
@@ -1275,8 +1404,15 @@ public final class InteractiveApp extends ToolkitApp {
     private Element renderPromptDialog() {
         int dialogWidth = promptDialogWidth(prompt);
         List<Element> promptContent = new ArrayList<>();
-        promptContent.add(text(prompt.label()).bold());
-        promptContent.add(text(promptDisplayValue(prompt)));
+        if (prompt.action == PromptAction.ONBOARD_EXISTING_CONFIG_CONFIRM) {
+            for (String line : prompt.label().split("\\R", -1)) {
+                promptContent.add(text(line));
+            }
+            promptContent.add(spacer());
+        } else {
+            promptContent.add(text(prompt.label()).bold());
+            promptContent.add(text(promptDisplayValue(prompt)));
+        }
         if (prompt.currentFieldHasOptions()) {
             List<String> options = prompt.currentFieldOptions();
             int selectedIndex = prompt.currentFieldSelectedOptionIndex();
@@ -1425,6 +1561,9 @@ public final class InteractiveApp extends ToolkitApp {
         } catch (IOException | RuntimeException e) {
             status = "Error loading splash logo file: " + e.getMessage();
         }
+    }
+
+    private record OnboardingLoadResult(OnboardingService.OnboardingCandidate candidate, String errorStatus) {
     }
 
 }

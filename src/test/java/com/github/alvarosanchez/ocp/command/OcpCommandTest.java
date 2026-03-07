@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.alvarosanchez.ocp.command.interactive.InteractiveApp;
+import com.github.alvarosanchez.ocp.service.OnboardingService;
 import com.github.alvarosanchez.ocp.service.ProfileService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
 import io.micronaut.configuration.picocli.PicocliRunner;
@@ -80,6 +81,40 @@ class OcpCommandTest {
     }
 
     @Test
+    void interactiveStartupFailureFallsBackToUsageOutput() throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        PrintStream originalOut = System.out;
+
+        try (ApplicationContext context = ApplicationContext.run()) {
+            OcpCommand command = new OcpCommand(
+                context.getBean(ProfileService.class),
+                context.getBean(RepositoryService.class),
+                context.getBean(OnboardingService.class),
+                context.getBean(ObjectMapper.class)
+            ) {
+                @Override
+                InteractiveApp createInteractiveApp() {
+                    throw new IllegalStateException("boom");
+                }
+
+                @Override
+                boolean shouldStartInteractiveMode() {
+                    return true;
+                }
+            };
+
+            try {
+                System.setOut(new PrintStream(output));
+                command.run();
+            } finally {
+                System.setOut(originalOut);
+            }
+        }
+
+        assertTrue(output.toString().contains("Usage: ocp"));
+    }
+
+    @Test
     void startupNoticePrintsImmediatelyForNonInteractiveFlow() {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         PrintStream originalOut = System.out;
@@ -115,6 +150,7 @@ class OcpCommandTest {
             InteractiveApp app = new InteractiveApp(
                 context.getBean(ProfileService.class),
                 context.getBean(RepositoryService.class),
+                context.getBean(OnboardingService.class),
                 context.getBean(ObjectMapper.class)
             );
 

@@ -15,6 +15,9 @@ import io.micronaut.context.ApplicationContext;
 import io.micronaut.serde.ObjectMapper;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -173,7 +176,8 @@ class RepositoryServiceTest {
     @Test
     void loadNormalizesGitRepositoryLocalPathToAbsoluteWhenCacheDirIsRelative() throws IOException {
         String previousCacheDir = System.getProperty("ocp.cache.dir");
-        System.setProperty("ocp.cache.dir", "relative-cache-dir");
+        Path relativeCacheDirectory = tempDir.resolve("relative-cache-dir");
+        System.setProperty("ocp.cache.dir", relativePathFromProjectRoot(relativeCacheDirectory));
         try {
             writeConfig(
                 new OcpConfigFile(
@@ -186,7 +190,7 @@ class RepositoryServiceTest {
 
             assertEquals(1, repositories.size());
             assertEquals(
-                Path.of("relative-cache-dir", "repositories", "alpha-repo").toAbsolutePath().normalize().toString(),
+                relativeCacheDirectory.resolve("repositories").resolve("alpha-repo").toAbsolutePath().normalize().toString(),
                 repositories.getFirst().localPath()
             );
         } finally {
@@ -337,6 +341,26 @@ class RepositoryServiceTest {
     }
 
     @Test
+    void createAndAddRollsBackCreatedRepositoryWhenCreateFailsAfterDirectoryCreation() throws IOException {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
+        Path location = tempDir.resolve("location");
+        Files.createDirectories(location);
+
+        RepositoryService failingRepositoryService = new RepositoryService(
+            objectMapperFailingOnRepositoryConfigWrite(),
+            new GitRepositoryClient(new GitProcessExecutor())
+        );
+
+        UncheckedIOException thrown = assertThrows(
+            UncheckedIOException.class,
+            () -> failingRepositoryService.createAndAdd("interactive-repo", "work", location.toString())
+        );
+
+        assertTrue(thrown.getMessage().contains("Failed to create repository at"));
+        assertTrue(Files.notExists(location.resolve("interactive-repo")));
+    }
+
+    @Test
     void addTreatsMissingRelativePathAsLocalPathAndFailsEarly() {
         IllegalStateException thrown = assertThrows(
             IllegalStateException.class,
@@ -390,13 +414,14 @@ class RepositoryServiceTest {
     void addStoresAbsoluteGitRepositoryLocalPathWhenCacheDirIsRelative() throws IOException, InterruptedException {
         Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         String previousCacheDir = System.getProperty("ocp.cache.dir");
-        System.setProperty("ocp.cache.dir", "relative-cache-dir");
+        Path relativeCacheDirectory = tempDir.resolve("relative-cache-dir");
+        System.setProperty("ocp.cache.dir", relativePathFromProjectRoot(relativeCacheDirectory));
         try {
             Path remote = createRemoteRepository();
 
             RepositoryEntry added = repositoryService.add(remote.toUri().toString(), "alpha-repo");
 
-            String expectedLocalPath = Path.of("relative-cache-dir", "repositories", "alpha-repo").toAbsolutePath().normalize().toString();
+            String expectedLocalPath = relativeCacheDirectory.resolve("repositories").resolve("alpha-repo").toAbsolutePath().normalize().toString();
             assertEquals(expectedLocalPath, added.localPath());
 
             List<RepositoryEntry> repositories = repositoryService.load();
@@ -581,6 +606,41 @@ class RepositoryServiceTest {
         Path repositoryPath = repositoriesRootDirectory().resolve(repositoryName);
         Files.createDirectories(repositoryPath);
         Files.writeString(repositoryPath.resolve("repository.json"), objectMapper.writeValueAsString(repositoryConfigFile));
+    }
+
+    private String relativePathFromProjectRoot(Path target) {
+        Path projectRoot = Path.of("").toAbsolutePath().normalize();
+        Path absoluteTarget = target.toAbsolutePath().normalize();
+        Assumptions.assumeTrue(
+            projectRoot.getRoot() == null
+                ? absoluteTarget.getRoot() == null
+                : projectRoot.getRoot().equals(absoluteTarget.getRoot()),
+            "Project root and target are on different filesystem roots; cannot relativize safely"
+        );
+        return projectRoot.relativize(absoluteTarget).toString();
+    }
+
+    private ObjectMapper objectMapperFailingOnRepositoryConfigWrite() {
+        InvocationHandler handler = (proxy, method, args) -> {
+            if (
+                method.getName().equals("writeValueAsString")
+                    && args != null
+                    && args.length == 1
+                    && args[0] instanceof RepositoryConfigFile
+            ) {
+                throw new IOException("Injected repository config write failure");
+            }
+            try {
+                return method.invoke(objectMapper, args);
+            } catch (InvocationTargetException e) {
+                throw e.getCause();
+            }
+        };
+        return (ObjectMapper) Proxy.newProxyInstance(
+            ObjectMapper.class.getClassLoader(),
+            new Class<?>[] {ObjectMapper.class},
+            handler
+        );
     }
 
     private Path createRemoteRepository() throws IOException, InterruptedException {
