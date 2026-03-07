@@ -242,6 +242,29 @@ class OnboardingServiceTest {
         assertEquals("Repository name must be a single safe path segment.", exception.getMessage());
     }
 
+    @Test
+    void onboardRollbackPreservesExistingVersionMetadataConfigFile() throws IOException {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
+        Path configDirectory = Path.of(System.getProperty("ocp.config.dir"));
+        Files.createDirectories(configDirectory);
+        OcpConfigFile existingConfig = new OcpConfigFile(new OcpConfigOptions(null, 123L, "1.2.3"), List.of());
+        Files.writeString(configDirectory.resolve("config.json"), objectMapper.writeValueAsString(existingConfig));
+
+        Path openCodeDirectory = Path.of(System.getProperty("ocp.opencode.config.dir"));
+        Files.createDirectories(openCodeDirectory);
+        Files.writeString(openCodeDirectory.resolve("opencode.json"), "{\"model\":\"gpt-5\"}");
+        Files.writeString(openCodeDirectory.resolve("opencode.jsonc"), "{\"model\":\"gpt-5\"}");
+
+        IllegalStateException exception = assertThrows(
+            IllegalStateException.class,
+            () -> onboardingService.onboard("personal-repo", "personal")
+        );
+
+        assertTrue(exception.getMessage().contains("conflicting config file variants"));
+        assertTrue(Files.exists(configDirectory.resolve("config.json")));
+        assertEquals(existingConfig, repositoryService.loadConfigFile());
+    }
+
     private static boolean isGitAvailable() {
         try {
             runCommand(List.of("git", "--version"));

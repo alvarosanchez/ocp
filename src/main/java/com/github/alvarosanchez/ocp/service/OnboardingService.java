@@ -50,9 +50,12 @@ public final class OnboardingService {
 
     public OnboardingResult onboard(String repositoryName, String profileName) {
         if (hasExistingOcpSetup()) {
-            throw new IllegalStateException("Onboarding is only available before the OCP config file exists.");
+            throw new IllegalStateException(
+                "Onboarding is only available before an OCP setup (repositories and active profile) has been configured."
+            );
         }
 
+        boolean configFileExistedBeforeOnboarding = Files.exists(configFile());
         String normalizedRepositoryName = PathSegmentValidator.requireSinglePathSegment(repositoryName, "Repository name");
         String normalizedProfileName = PathSegmentValidator.requireSinglePathSegment(profileName, "Profile name");
         List<Path> configFiles = existingOpenCodeConfigFiles();
@@ -84,10 +87,10 @@ public final class OnboardingService {
                 switchResult
             );
         } catch (IOException e) {
-            rollbackCreatedRepository(repositoryEntry, e);
+            rollbackCreatedRepository(repositoryEntry, configFileExistedBeforeOnboarding, e);
             throw new UncheckedIOException("Failed to import existing OpenCode config files.", e);
         } catch (RuntimeException e) {
-            rollbackCreatedRepository(repositoryEntry, e);
+            rollbackCreatedRepository(repositoryEntry, configFileExistedBeforeOnboarding, e);
             throw e;
         }
     }
@@ -104,20 +107,23 @@ public final class OnboardingService {
         }
     }
 
-    private void rollbackCreatedRepository(RepositoryEntry repositoryEntry, Exception failure) {
+    private void rollbackCreatedRepository(RepositoryEntry repositoryEntry, boolean configFileExistedBeforeOnboarding, Exception failure) {
         if (repositoryEntry == null) {
             return;
         }
 
         try {
             repositoryService.delete(repositoryEntry.name(), false, true);
-            deleteConfigFileWhenNoRepositoriesRemain();
+            deleteConfigFileWhenNoRepositoriesRemain(configFileExistedBeforeOnboarding);
         } catch (RuntimeException cleanupFailure) {
             failure.addSuppressed(cleanupFailure);
         }
     }
 
-    private void deleteConfigFileWhenNoRepositoriesRemain() {
+    private void deleteConfigFileWhenNoRepositoriesRemain(boolean configFileExistedBeforeOnboarding) {
+        if (configFileExistedBeforeOnboarding) {
+            return;
+        }
         if (!repositoryService.load().isEmpty()) {
             return;
         }
