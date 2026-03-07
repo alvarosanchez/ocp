@@ -85,11 +85,25 @@ public class OcpCommand implements Runnable {
         String baseMessage = "Could not check for newer ocp releases."
             + " Verify your OCP config file: "
             + resolvedConfigFilePath();
-        String detail = exception == null ? null : exception.getMessage();
+        String detail = sanitizedStartupFailureDetail(exception);
         if (detail == null || detail.isBlank()) {
             return baseMessage;
         }
         return baseMessage + " Details: " + detail;
+    }
+
+    private static String sanitizedStartupFailureDetail(RuntimeException exception) {
+        if (exception == null) {
+            return null;
+        }
+        String detail = exception.getMessage();
+        if (detail == null || detail.isBlank()) {
+            return null;
+        }
+        if (detail.contains("repository registry")) {
+            return "Unable to read or write OCP config file at " + resolvedConfigFilePath();
+        }
+        return detail;
     }
 
     private static Path resolvedConfigFilePath() {

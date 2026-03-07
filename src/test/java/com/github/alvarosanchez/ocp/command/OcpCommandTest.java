@@ -170,6 +170,31 @@ class OcpCommandTest {
         assertTrue(message.contains("Details: simulated failure"));
     }
 
+    @Test
+    void startupFailureMessageSanitizesRepositoryRegistryDetail() {
+        String previousConfigDir = System.getProperty("ocp.config.dir");
+        System.setProperty("ocp.config.dir", "/tmp/ocp-config-test");
+        try {
+            String message = OcpCommand.startupVersionCheckFailureMessage(
+                new RuntimeException("Failed to read repository registry")
+            );
+
+            assertFalse(message.contains("repository registry"));
+            assertTrue(
+                message.contains(
+                    "Details: Unable to read or write OCP config file at "
+                        + Path.of("/tmp/ocp-config-test").resolve("config.json")
+                )
+            );
+        } finally {
+            if (previousConfigDir == null) {
+                System.clearProperty("ocp.config.dir");
+            } else {
+                System.setProperty("ocp.config.dir", previousConfigDir);
+            }
+        }
+    }
+
     private static String readExpectedVersion() {
         try (var inputStream = OcpCommandTest.class.getResourceAsStream("/META-INF/ocp/version.txt")) {
             assertNotNull(inputStream);
