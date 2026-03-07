@@ -1135,19 +1135,34 @@ public final class InteractiveApp extends ToolkitApp {
 
     private void loadInitialDataInBackground() {
         OnboardingService.OnboardingCandidate onboardingCandidate = null;
+        String onboardingLoadErrorStatus = null;
         try {
             reloadState();
-            onboardingCandidate = onboardingService.detect().orElse(null);
+            try {
+                onboardingCandidate = onboardingService.detect().orElse(null);
+            } catch (RuntimeException e) {
+                onboardingLoadErrorStatus = "Error loading onboarding: " + e.getMessage();
+            }
         } finally {
             if (runner() != null) {
                 OnboardingService.OnboardingCandidate finalOnboardingCandidate = onboardingCandidate;
+                String finalOnboardingLoadErrorStatus = onboardingLoadErrorStatus;
                 runner().runOnRenderThread(() -> {
-                    initialDataLoaded = true;
-                    maybePromptForStartupOnboarding(finalOnboardingCandidate);
-                    maybeHideSplash();
+                    applyInitialDataLoad(finalOnboardingCandidate, finalOnboardingLoadErrorStatus);
                 });
+            } else {
+                applyInitialDataLoad(onboardingCandidate, onboardingLoadErrorStatus);
             }
         }
+    }
+
+    private void applyInitialDataLoad(OnboardingService.OnboardingCandidate onboardingCandidate, String onboardingLoadErrorStatus) {
+        initialDataLoaded = true;
+        if (onboardingLoadErrorStatus != null) {
+            status = onboardingLoadErrorStatus;
+        }
+        maybePromptForStartupOnboarding(onboardingCandidate);
+        maybeHideSplash();
     }
 
     private void maybePromptForStartupOnboarding() {

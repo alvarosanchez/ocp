@@ -202,6 +202,33 @@ class InteractiveAppOnboardingTest {
     }
 
     @Test
+    void initialDataLoadShowsStatusWhenOnboardingDetectionFails() throws Exception {
+        Path configDirectory = Path.of(System.getProperty("ocp.config.dir"));
+        Files.createDirectories(configDirectory);
+        Files.writeString(configDirectory.resolve("config.json"), "not-json");
+
+        InteractiveApp app = new InteractiveApp(
+            applicationContext.getBean(ProfileService.class),
+            applicationContext.getBean(RepositoryService.class),
+            applicationContext.getBean(OnboardingService.class),
+            applicationContext.getBean(ObjectMapper.class)
+        );
+
+        Method loadInitialDataInBackground = InteractiveApp.class.getDeclaredMethod("loadInitialDataInBackground");
+        loadInitialDataInBackground.setAccessible(true);
+        loadInitialDataInBackground.invoke(app);
+
+        Field statusField = InteractiveApp.class.getDeclaredField("status");
+        statusField.setAccessible(true);
+        String status = (String) statusField.get(app);
+        assertEquals("Error loading onboarding: Failed to read repository registry", status);
+
+        Field promptField = InteractiveApp.class.getDeclaredField("prompt");
+        promptField.setAccessible(true);
+        assertEquals(null, promptField.get(app));
+    }
+
+    @Test
     void onboardingConfirmationTransitionsToRepositoryThenProfilePrompt() throws Exception {
         Path openCodeDirectory = Path.of(System.getProperty("ocp.opencode.config.dir"));
         Files.createDirectories(openCodeDirectory);
