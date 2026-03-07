@@ -173,7 +173,8 @@ class RepositoryServiceTest {
     @Test
     void loadNormalizesGitRepositoryLocalPathToAbsoluteWhenCacheDirIsRelative() throws IOException {
         String previousCacheDir = System.getProperty("ocp.cache.dir");
-        System.setProperty("ocp.cache.dir", "relative-cache-dir");
+        Path relativeCacheDirectory = tempDir.resolve("relative-cache-dir");
+        System.setProperty("ocp.cache.dir", relativePathFromProjectRoot(relativeCacheDirectory));
         try {
             writeConfig(
                 new OcpConfigFile(
@@ -186,7 +187,7 @@ class RepositoryServiceTest {
 
             assertEquals(1, repositories.size());
             assertEquals(
-                Path.of("relative-cache-dir", "repositories", "alpha-repo").toAbsolutePath().normalize().toString(),
+                relativeCacheDirectory.resolve("repositories").resolve("alpha-repo").toAbsolutePath().normalize().toString(),
                 repositories.getFirst().localPath()
             );
         } finally {
@@ -390,13 +391,14 @@ class RepositoryServiceTest {
     void addStoresAbsoluteGitRepositoryLocalPathWhenCacheDirIsRelative() throws IOException, InterruptedException {
         Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         String previousCacheDir = System.getProperty("ocp.cache.dir");
-        System.setProperty("ocp.cache.dir", "relative-cache-dir");
+        Path relativeCacheDirectory = tempDir.resolve("relative-cache-dir");
+        System.setProperty("ocp.cache.dir", relativePathFromProjectRoot(relativeCacheDirectory));
         try {
             Path remote = createRemoteRepository();
 
             RepositoryEntry added = repositoryService.add(remote.toUri().toString(), "alpha-repo");
 
-            String expectedLocalPath = Path.of("relative-cache-dir", "repositories", "alpha-repo").toAbsolutePath().normalize().toString();
+            String expectedLocalPath = relativeCacheDirectory.resolve("repositories").resolve("alpha-repo").toAbsolutePath().normalize().toString();
             assertEquals(expectedLocalPath, added.localPath());
 
             List<RepositoryEntry> repositories = repositoryService.load();
@@ -581,6 +583,11 @@ class RepositoryServiceTest {
         Path repositoryPath = repositoriesRootDirectory().resolve(repositoryName);
         Files.createDirectories(repositoryPath);
         Files.writeString(repositoryPath.resolve("repository.json"), objectMapper.writeValueAsString(repositoryConfigFile));
+    }
+
+    private String relativePathFromProjectRoot(Path target) {
+        Path projectRoot = Path.of("").toAbsolutePath().normalize();
+        return projectRoot.relativize(target.toAbsolutePath().normalize()).toString();
     }
 
     private Path createRemoteRepository() throws IOException, InterruptedException {
