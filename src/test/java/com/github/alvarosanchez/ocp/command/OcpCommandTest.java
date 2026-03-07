@@ -19,6 +19,7 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.nio.file.Path;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -141,6 +142,32 @@ class OcpCommandTest {
         assertTrue(OcpCommand.shouldDeferVersionNoticeToInteractiveUi(new String[0], true));
         assertFalse(OcpCommand.shouldDeferVersionNoticeToInteractiveUi(new String[] {"help"}, true));
         assertFalse(OcpCommand.shouldDeferVersionNoticeToInteractiveUi(new String[0], false));
+    }
+
+    @Test
+    void startupFailureMessageIsStableWhenExceptionMessageIsMissing() {
+        String previousConfigDir = System.getProperty("ocp.config.dir");
+        System.setProperty("ocp.config.dir", "/tmp/ocp-config-test");
+        try {
+            String message = OcpCommand.startupVersionCheckFailureMessage(new RuntimeException());
+
+            assertTrue(message.contains("Could not check for newer ocp releases."));
+            assertTrue(message.contains(Path.of("/tmp/ocp-config-test").resolve("config.json").toString()));
+            assertFalse(message.endsWith("null"));
+        } finally {
+            if (previousConfigDir == null) {
+                System.clearProperty("ocp.config.dir");
+            } else {
+                System.setProperty("ocp.config.dir", previousConfigDir);
+            }
+        }
+    }
+
+    @Test
+    void startupFailureMessageAppendsExceptionDetailWhenPresent() {
+        String message = OcpCommand.startupVersionCheckFailureMessage(new RuntimeException("simulated failure"));
+
+        assertTrue(message.contains("Details: simulated failure"));
     }
 
     private static String readExpectedVersion() {
