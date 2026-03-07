@@ -98,17 +98,8 @@ class OcpCommandTest {
                 }
 
                 @Override
-                public void run() {
-                    if (true) {
-                        try {
-                            createInteractiveApp().run();
-                        } catch (Exception e) {
-                            Cli.error("Interactive mode is unavailable: " + e.getMessage());
-                            Cli.error("Falling back to standard usage output");
-                            picocli.CommandLine.usage(this, System.out);
-                        }
-                        return;
-                    }
+                boolean shouldStartInteractiveMode() {
+                    return true;
                 }
             };
 

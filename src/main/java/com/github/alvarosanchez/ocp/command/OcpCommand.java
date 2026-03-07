@@ -163,7 +163,7 @@ public class OcpCommand implements Runnable {
         CommandLine.usage(this, System.out);
     }
 
-    private boolean shouldStartInteractiveMode() {
+    boolean shouldStartInteractiveMode() {
         return isInteractiveTerminal();
     }
 
