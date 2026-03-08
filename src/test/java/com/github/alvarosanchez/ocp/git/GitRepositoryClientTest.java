@@ -1,6 +1,7 @@
 package com.github.alvarosanchez.ocp.git;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -252,6 +253,188 @@ class GitRepositoryClientTest {
         IllegalStateException thrown = assertThrows(IllegalStateException.class, () -> client.latestCommit(localPath));
 
         assertTrue(thrown.getMessage().contains("Failed to parse git log output"));
+    }
+
+    @Test
+    void hasRemoteReturnsTrueWhenRemoteExists() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(List.of(new StubProcess(0, "origin-url\n")));
+        Path localPath = tempDir.resolve("repositories/repo-eleven");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        boolean hasRemote = client.hasRemote(localPath, "origin");
+
+        assertTrue(hasRemote);
+        assertEquals(
+            List.of(List.of("git", "-C", localPath.toString(), "remote", "get-url", "origin")),
+            processExecutor.commands()
+        );
+    }
+
+    @Test
+    void hasRemoteReturnsFalseWhenRemoteDoesNotExist() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(List.of(new StubProcess(2, "No such remote 'origin'\n")));
+        Path localPath = tempDir.resolve("repositories/repo-twelve");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        boolean hasRemote = client.hasRemote(localPath, "origin");
+
+        assertEquals(false, hasRemote);
+    }
+
+    @Test
+    void remoteUriReturnsTrimmedRemoteValue() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(List.of(new StubProcess(0, "git@github.com:acme/repo.git\n")));
+        Path localPath = tempDir.resolve("repositories/repo-thirteen");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        String remoteUri = client.remoteUri(localPath, "origin");
+
+        assertEquals("git@github.com:acme/repo.git", remoteUri);
+    }
+
+    @Test
+    void createInitialCommitRunsAddAndCommit() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(
+            List.of(new StubProcess(0, ""), new StubProcess(0, " M repository.json\n"), new StubProcess(0, ""))
+        );
+        Path localPath = tempDir.resolve("repositories/repo-fourteen");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        boolean createdInitialCommit = client.createInitialCommit(localPath, "chore: initial commit");
+
+        assertTrue(createdInitialCommit);
+
+        assertEquals(
+            List.of(
+                List.of("git", "-C", localPath.toString(), "add", "-A"),
+                List.of("git", "-C", localPath.toString(), "status", "--porcelain"),
+                List.of(
+                    "git",
+                    "-C",
+                    localPath.toString(),
+                    "-c",
+                    "user.email=ocp@local",
+                    "-c",
+                    "user.name=ocp",
+                    "commit",
+                    "-m",
+                    "chore: initial commit"
+                )
+            ),
+            processExecutor.commands()
+        );
+    }
+
+    @Test
+    void createInitialCommitSkipsCommitWhenStagingLeavesNothingToCommit() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(
+            List.of(new StubProcess(0, ""), new StubProcess(0, ""))
+        );
+        Path localPath = tempDir.resolve("repositories/repo-empty");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        boolean createdInitialCommit = client.createInitialCommit(localPath, "chore: initial commit");
+
+        assertFalse(createdInitialCommit);
+
+        assertEquals(
+            List.of(
+                List.of("git", "-C", localPath.toString(), "add", "-A"),
+                List.of("git", "-C", localPath.toString(), "status", "--porcelain")
+            ),
+            processExecutor.commands()
+        );
+    }
+
+    @Test
+    void commitLocalChangesAndPushRunsAddCommitAndPush() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(
+            List.of(new StubProcess(0, ""), new StubProcess(0, ""), new StubProcess(0, ""))
+        );
+        Path localPath = tempDir.resolve("repositories/repo-fifteen");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        client.commitLocalChangesAndPush(localPath, "chore: save local changes");
+
+        assertEquals(
+            List.of(
+                List.of("git", "-C", localPath.toString(), "add", "-A"),
+                List.of(
+                    "git",
+                    "-C",
+                    localPath.toString(),
+                    "-c",
+                    "user.email=ocp@local",
+                    "-c",
+                    "user.name=ocp",
+                    "commit",
+                    "-m",
+                    "chore: save local changes"
+                ),
+                List.of("git", "-C", localPath.toString(), "push")
+            ),
+            processExecutor.commands()
+        );
+    }
+
+    @Test
+    void commitLocalChangesAndPushRestoresInterruptFlagWhenPushIsInterrupted() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(
+            List.of(new StubProcess(0, ""), new StubProcess(0, ""), new InterruptingProcess())
+        );
+        Path localPath = tempDir.resolve("repositories/repo-interrupted-push");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        try {
+            IllegalStateException thrown = assertThrows(
+                IllegalStateException.class,
+                () -> client.commitLocalChangesAndPush(localPath, "chore: save local changes")
+            );
+
+            assertTrue(thrown.getMessage().contains("Interrupted while running git push"));
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void hasRemoteRestoresInterruptFlagWhenWaitForIsInterrupted() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(List.of(new InterruptingProcess()));
+        Path localPath = tempDir.resolve("repositories/repo-interrupted-remote");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        try {
+            IllegalStateException thrown = assertThrows(
+                IllegalStateException.class,
+                () -> client.hasRemote(localPath, "origin")
+            );
+
+            assertTrue(thrown.getMessage().contains("Interrupted while running git remote get-url"));
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void hasRemoteThrowsWhenGitProcessCannotBeStarted() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(new IOException("boom"));
+        Path localPath = tempDir.resolve("repositories/repo-missing-git");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        IllegalStateException thrown = assertThrows(IllegalStateException.class, () -> client.hasRemote(localPath, "origin"));
+
+        assertTrue(thrown.getMessage().contains("Failed to run git remote get-url in repository"));
     }
 
     private static final class StubProcessExecutor extends GitProcessExecutor {

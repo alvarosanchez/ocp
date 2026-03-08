@@ -64,13 +64,15 @@ tasks.test {
 
 val generateVersionResource by tasks.registering {
     val outputFile = generatedResourcesDir.map { it.file("META-INF/ocp/version.txt") }
+    val resolvedVersion = version.toString()
 
     outputs.file(outputFile)
+    inputs.property("ocpVersion", resolvedVersion)
 
     doLast {
         val versionFile = outputFile.get().asFile
         versionFile.parentFile.mkdirs()
-        versionFile.writeText(project.version.toString())
+        versionFile.writeText(resolvedVersion)
     }
 }
 

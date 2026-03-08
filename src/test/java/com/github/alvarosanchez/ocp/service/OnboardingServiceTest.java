@@ -19,7 +19,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -148,7 +147,6 @@ class OnboardingServiceTest {
 
     @Test
     void onboardCreatesRepositoryCopiesFilesAndActivatesImportedProfile() throws IOException {
-        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path openCodeDirectory = Path.of(System.getProperty("ocp.opencode.config.dir"));
         Files.createDirectories(openCodeDirectory);
         Files.writeString(openCodeDirectory.resolve("opencode.json"), "{\"model\":\"gpt-5\"}");
@@ -158,7 +156,7 @@ class OnboardingServiceTest {
 
         assertEquals("personal-repo", result.repositoryName());
         assertEquals("personal", result.profileName());
-        assertTrue(Files.exists(result.repositoryPath().resolve(".git")));
+        assertTrue(Files.notExists(result.repositoryPath().resolve(".git")));
         assertEquals(
             "{\"model\":\"gpt-5\"}",
             Files.readString(result.repositoryPath().resolve("personal").resolve("opencode.json"))
@@ -199,7 +197,6 @@ class OnboardingServiceTest {
 
     @Test
     void onboardImportsOnlyWhitelistedFiles() throws IOException {
-        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path openCodeDirectory = Path.of(System.getProperty("ocp.opencode.config.dir"));
         Files.createDirectories(openCodeDirectory);
         Files.writeString(openCodeDirectory.resolve("opencode.json"), "{\"model\":\"gpt-5\"}");
@@ -248,7 +245,6 @@ class OnboardingServiceTest {
 
     @Test
     void onboardRollbackPreservesExistingVersionMetadataConfigFile() throws IOException {
-        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path configDirectory = Path.of(System.getProperty("ocp.config.dir"));
         Files.createDirectories(configDirectory);
         OcpConfigFile existingConfig = new OcpConfigFile(new OcpConfigOptions(null, 123L, "1.2.3"), List.of());
@@ -271,7 +267,6 @@ class OnboardingServiceTest {
 
     @Test
     void onboardRollbackRestoresOpenCodeFilesWhenActiveProfileSaveFails() throws IOException {
-        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path openCodeDirectory = Path.of(System.getProperty("ocp.opencode.config.dir"));
         Files.createDirectories(openCodeDirectory);
         Path openCodeFile = openCodeDirectory.resolve("opencode.json");
@@ -322,24 +317,4 @@ class OnboardingServiceTest {
         );
     }
 
-    private static boolean isGitAvailable() {
-        try {
-            runCommand(List.of("git", "--version"));
-            return true;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return false;
-        } catch (IOException | RuntimeException e) {
-            return false;
-        }
-    }
-
-    private static void runCommand(List<String> command) throws IOException, InterruptedException {
-        Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
-        process.getInputStream().readAllBytes();
-        int exitCode = process.waitFor();
-        if (exitCode != 0) {
-            throw new IllegalStateException("Command failed: " + String.join(" ", command));
-        }
-    }
 }

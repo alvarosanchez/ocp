@@ -13,7 +13,10 @@ import com.github.alvarosanchez.ocp.config.RepositoryConfigFile;
 import com.github.alvarosanchez.ocp.config.RepositoryConfigFile.ProfileEntry;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.serde.ObjectMapper;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
@@ -21,6 +24,9 @@ import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
@@ -112,6 +118,38 @@ class RepositoryServiceTest {
     }
 
     @Test
+    void loadPreservesExplicitLocalPathWhenUriIsConfigured() throws IOException {
+        Path explicitPath = tempDir.resolve("explicit-path").toAbsolutePath().normalize();
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("alpha-repo", "git@github.com:acme/alpha.git", explicitPath.toString()))
+            )
+        );
+
+        List<RepositoryEntry> repositories = repositoryService.load();
+
+        assertEquals(1, repositories.size());
+        assertEquals(explicitPath.toString(), repositories.getFirst().localPath());
+    }
+
+    @Test
+    void loadResolvesRelativeExplicitLocalPathAgainstWorkingDirectoryWhenUriIsConfigured() throws IOException {
+        Path workingDirectory = Path.of(System.getProperty("ocp.working.dir")).toAbsolutePath().normalize();
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("alpha-repo", "git@github.com:acme/alpha.git", "relative/repo-path"))
+            )
+        );
+
+        List<RepositoryEntry> repositories = repositoryService.load();
+
+        assertEquals(1, repositories.size());
+        assertEquals(workingDirectory.resolve("relative/repo-path").normalize().toString(), repositories.getFirst().localPath());
+    }
+
+    @Test
     void loadNormalizesEntriesUsingConfigDirectoryWhenCacheOverrideIsNotConfigured() throws IOException {
         String configuredCacheDir = System.getProperty("ocp.cache.dir");
         if (configuredCacheDir != null) {
@@ -157,6 +195,22 @@ class RepositoryServiceTest {
         assertEquals("local", repositories.getFirst().name());
         assertEquals(null, repositories.getFirst().uri());
         assertEquals(localRepository.normalize().toString(), repositories.getFirst().localPath());
+    }
+
+    @Test
+    void loadResolvesRelativeFileBasedLocalPathAgainstWorkingDirectory() throws IOException {
+        Path workingDirectory = Path.of(System.getProperty("ocp.working.dir")).toAbsolutePath().normalize();
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("local", null, "relative/local-repo"))
+            )
+        );
+
+        List<RepositoryEntry> repositories = repositoryService.load();
+
+        assertEquals(1, repositories.size());
+        assertEquals(workingDirectory.resolve("relative/local-repo").normalize().toString(), repositories.getFirst().localPath());
     }
 
     @Test
@@ -281,7 +335,6 @@ class RepositoryServiceTest {
 
     @Test
     void createSupportsCustomLocationRelativeToWorkingDirectory() throws IOException {
-        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path workingDirectory = Path.of(System.getProperty("ocp.working.dir"));
         Files.createDirectories(workingDirectory.resolve("custom-location"));
 
@@ -289,14 +342,13 @@ class RepositoryServiceTest {
 
         Path expected = workingDirectory.resolve("custom-location").resolve("team-repo").toAbsolutePath().normalize();
         assertEquals(expected, created);
-        assertTrue(Files.exists(created.resolve(".git")));
+        assertTrue(Files.notExists(created.resolve(".git")));
         assertTrue(Files.exists(created.resolve("repository.json")));
         assertTrue(Files.isDirectory(created.resolve("team")));
     }
 
     @Test
     void createAndAddCreatesRepositoryAndRegistersItAsFileBased() throws IOException {
-        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path location = tempDir.resolve("location");
         Files.createDirectories(location);
 
@@ -306,7 +358,7 @@ class RepositoryServiceTest {
         assertEquals("interactive-repo", added.name());
         assertEquals(null, added.uri());
         assertEquals(expectedLocalPath.toString(), added.localPath());
-        assertTrue(Files.exists(expectedLocalPath.resolve(".git")));
+        assertTrue(Files.notExists(expectedLocalPath.resolve(".git")));
         assertTrue(Files.exists(expectedLocalPath.resolve("repository.json")));
         assertTrue(Files.isDirectory(expectedLocalPath.resolve("work")));
 
@@ -315,6 +367,64 @@ class RepositoryServiceTest {
         assertEquals("interactive-repo", repositories.getFirst().name());
         assertEquals(null, repositories.getFirst().uri());
         assertEquals(expectedLocalPath.toString(), repositories.getFirst().localPath());
+    }
+
+    @Test
+    void setRepositoryUriUpdatesUriAndPreservesExplicitLocalPath() throws IOException {
+        Path localRepository = tempDir.resolve("local-repository").toAbsolutePath().normalize();
+        Files.createDirectories(localRepository);
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("local", null, localRepository.toString()))
+            )
+        );
+
+        RepositoryEntry updated = repositoryService.setRepositoryUri("local", "git@github.com:acme/local.git");
+
+        assertEquals("local", updated.name());
+        assertEquals("git@github.com:acme/local.git", updated.uri());
+        assertEquals(localRepository.toString(), updated.localPath());
+    }
+
+    @Test
+    void setRepositoryUriPreservesUnrelatedRawEntries() throws IOException {
+        Path localRepository = tempDir.resolve("local-repository").toAbsolutePath().normalize();
+        Files.createDirectories(localRepository);
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(
+                    new RepositoryEntry("local", null, localRepository.toString()),
+                    new RepositoryEntry("  spaced-name  ", null, "relative/path")
+                )
+            )
+        );
+
+        repositoryService.setRepositoryUri("local", "git@github.com:acme/local.git");
+
+        OcpConfigFile stored = objectMapper.readValue(Files.readString(tempDir.resolve("config/config.json")), OcpConfigFile.class);
+        assertEquals(2, stored.repositories().size());
+        assertEquals(new RepositoryEntry("local", "git@github.com:acme/local.git", localRepository.toString()), stored.repositories().get(0));
+        assertEquals(new RepositoryEntry("  spaced-name  ", null, "relative/path"), stored.repositories().get(1));
+    }
+
+    @Test
+    void setRepositoryUriReturnsNormalizedEntryWhenStoredNameContainsWhitespace() throws IOException {
+        Path localRepository = tempDir.resolve("local-repository").toAbsolutePath().normalize();
+        Files.createDirectories(localRepository);
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("  local  ", null, localRepository.toString()))
+            )
+        );
+
+        RepositoryEntry updated = repositoryService.setRepositoryUri("local", "git@github.com:acme/local.git");
+
+        assertEquals("local", updated.name());
+        assertEquals("git@github.com:acme/local.git", updated.uri());
+        assertEquals(localRepository.toString(), updated.localPath());
     }
 
     @Test
@@ -484,6 +594,172 @@ class RepositoryServiceTest {
 
         assertTrue(preview.gitBacked());
         assertTrue(preview.hasLocalChanges());
+    }
+
+    @Test
+    void inspectCommitPushMarksGitRepositoryWithLocalChanges() throws IOException, InterruptedException {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
+        Path localClone = repositoriesRootDirectory().resolve("repo-git-dirty");
+        Files.createDirectories(localClone);
+        runCommand(List.of("git", "init", localClone.toString()));
+        Files.writeString(localClone.resolve("dirty.txt"), "dirty");
+
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-git-dirty", "git@github.com:acme/repo-git-dirty.git", localClone.toString()))
+            )
+        );
+
+        RepositoryService.RepositoryCommitPushPreview preview = repositoryService.inspectCommitPush("repo-git-dirty");
+
+        assertTrue(preview.gitBacked());
+        assertTrue(preview.hasLocalChanges());
+    }
+
+    @Test
+    void getLocalDiffReturnsDiffForGitBackedRepository() throws IOException {
+        Path localClone = repositoriesRootDirectory().resolve("repo-diff");
+        Files.createDirectories(localClone.resolve(".git"));
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-diff", "git@github.com:acme/repo-diff.git", localClone.toString()))
+            )
+        );
+        String fakeDiff = "diff --git a/test.txt b/test.txt\n+hello world";
+        RecordingGitProcessExecutor processExecutor = new RecordingGitProcessExecutor(
+            List.of(new StubProcess(0, fakeDiff))
+        );
+        RepositoryService service = new RepositoryService(objectMapper, new GitRepositoryClient(processExecutor));
+
+        String diff = service.getLocalDiff("repo-diff");
+
+        assertEquals(fakeDiff, diff);
+        assertEquals(
+            List.of(List.of("git", "-c", "color.ui=always", "-C", localClone.toString(), "diff", "--color=always")),
+            processExecutor.commands()
+        );
+    }
+
+    @Test
+    void getLocalDiffRejectsFileBasedRepository() throws IOException {
+        Path localClone = repositoriesRootDirectory().resolve("repo-local");
+        Files.createDirectories(localClone);
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-local", null, localClone.toString()))
+            )
+        );
+
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> repositoryService.getLocalDiff("repo-local")
+        );
+
+        assertTrue(thrown.getMessage().contains("file-based"));
+    }
+
+    @Test
+    void commitAndPushRunsGitStatusAddCommitAndPush() throws IOException {
+        Path localClone = repositoriesRootDirectory().resolve("repo-commit-push");
+        Files.createDirectories(localClone.resolve(".git"));
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-commit-push", "git@github.com:acme/repo-commit-push.git", localClone.toString()))
+            )
+        );
+        RecordingGitProcessExecutor processExecutor = new RecordingGitProcessExecutor(
+            List.of(
+                new StubProcess(0, " M opencode.json\n"),
+                new StubProcess(0, ""),
+                new StubProcess(0, ""),
+                new StubProcess(0, "")
+            )
+        );
+        RepositoryService service = new RepositoryService(objectMapper, new GitRepositoryClient(processExecutor));
+
+        service.commitAndPush("repo-commit-push", "chore: save local changes");
+
+        assertEquals(
+            List.of(
+                List.of("git", "-C", localClone.toString(), "status", "--porcelain"),
+                List.of("git", "-C", localClone.toString(), "add", "-A"),
+                List.of(
+                    "git",
+                    "-C",
+                    localClone.toString(),
+                    "-c",
+                    "user.email=ocp@local",
+                    "-c",
+                    "user.name=ocp",
+                    "commit",
+                    "-m",
+                    "chore: save local changes"
+                ),
+                List.of("git", "-C", localClone.toString(), "push")
+            ),
+            processExecutor.commands()
+        );
+    }
+
+    @Test
+    void inspectCommitPushEntryUsesProvidedEntryWithoutReloadingConfig() throws IOException {
+        Path localClone = repositoriesRootDirectory().resolve("repo-preview");
+        Files.createDirectories(localClone.resolve(".git"));
+        RecordingGitProcessExecutor processExecutor = new RecordingGitProcessExecutor(List.of(new StubProcess(0, " M opencode.json\n")));
+        RepositoryService service = new RepositoryService(objectMapper, new GitRepositoryClient(processExecutor));
+
+        RepositoryService.RepositoryCommitPushPreview preview = service.inspectCommitPush(
+            new RepositoryEntry("repo-preview", "git@github.com:acme/repo-preview.git", localClone.toString())
+        );
+
+        assertEquals("repo-preview", preview.name());
+        assertTrue(preview.gitBacked());
+        assertTrue(preview.hasLocalChanges());
+        assertEquals(
+            List.of(List.of("git", "-C", localClone.toString(), "status", "--porcelain")),
+            processExecutor.commands()
+        );
+    }
+
+    @Test
+    void commitAndPushRejectsBlankCommitMessage() throws IOException {
+        Path localClone = repositoriesRootDirectory().resolve("repo-blank-message");
+        Files.createDirectories(localClone.resolve(".git"));
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-blank-message", "git@github.com:acme/repo-blank-message.git", localClone.toString()))
+            )
+        );
+
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> repositoryService.commitAndPush("repo-blank-message", "   ")
+        );
+
+        assertTrue(thrown.getMessage().contains("Commit message is required"));
+    }
+
+    @Test
+    void commitAndPushRejectsMissingLocalGitCheckout() throws IOException {
+        Path missingClone = repositoriesRootDirectory().resolve("repo-missing-checkout");
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-missing-checkout", "git@github.com:acme/repo-missing-checkout.git", missingClone.toString()))
+            )
+        );
+
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> repositoryService.commitAndPush("repo-missing-checkout", "chore: save local changes")
+        );
+
+        assertTrue(thrown.getMessage().contains("is not available as a local git checkout"));
     }
 
     @Test
@@ -685,6 +961,79 @@ class RepositoryServiceTest {
             Thread.currentThread().interrupt();
             return false;
         } catch (IOException | RuntimeException e) {
+            return false;
+        }
+    }
+
+    private static final class RecordingGitProcessExecutor extends GitProcessExecutor {
+
+        private final Deque<Process> processes;
+        private final List<List<String>> commands = new ArrayList<>();
+
+        RecordingGitProcessExecutor(List<Process> processes) {
+            this.processes = new ArrayDeque<>(processes);
+        }
+
+        @Override
+        public Process start(List<String> command) throws IOException {
+            commands.add(List.copyOf(command));
+            if (processes.isEmpty()) {
+                throw new IOException("No process available");
+            }
+            return processes.removeFirst();
+        }
+
+        List<List<String>> commands() {
+            return List.copyOf(commands);
+        }
+    }
+
+    private static class StubProcess extends Process {
+
+        private final int exitCode;
+        private final String output;
+
+        StubProcess(int exitCode, String output) {
+            this.exitCode = exitCode;
+            this.output = output;
+        }
+
+        @Override
+        public OutputStream getOutputStream() {
+            return OutputStream.nullOutputStream();
+        }
+
+        @Override
+        public InputStream getInputStream() {
+            return new ByteArrayInputStream(output.getBytes(StandardCharsets.UTF_8));
+        }
+
+        @Override
+        public InputStream getErrorStream() {
+            return new ByteArrayInputStream(new byte[0]);
+        }
+
+        @Override
+        public int waitFor() {
+            return exitCode;
+        }
+
+        @Override
+        public int exitValue() {
+            return exitCode;
+        }
+
+        @Override
+        public void destroy() {
+        }
+
+        @Override
+        public Process destroyForcibly() {
+            return this;
+        }
+
+        @Override
+        public boolean isAlive() {
             return false;
         }
     }

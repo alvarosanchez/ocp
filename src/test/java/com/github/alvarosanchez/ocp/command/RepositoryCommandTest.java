@@ -273,14 +273,14 @@ class RepositoryCommandTest {
     }
 
     @Test
-    void createInitializesRepositoryWithOptionalProfile() throws IOException {
+    void createBuildsRepositoryScaffoldWithOptionalProfile() throws IOException {
         Files.createDirectories(Path.of(System.getProperty("ocp.working.dir")));
 
         CommandResult result = execute("repository", "create", "team-repo", "--profile-name", "team");
 
         assertEquals(0, result.exitCode());
         Path createdRepository = Path.of(System.getProperty("ocp.working.dir")).resolve("team-repo");
-        assertTrue(Files.exists(createdRepository.resolve(".git")));
+        assertTrue(Files.notExists(createdRepository.resolve(".git")));
         assertTrue(Files.isDirectory(createdRepository.resolve("team")));
 
         RepositoryConfigFile repositoryConfigFile = readRepositoryConfig(createdRepository.resolve("repository.json"));

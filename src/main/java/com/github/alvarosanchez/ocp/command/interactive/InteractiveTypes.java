@@ -1,5 +1,6 @@
 package com.github.alvarosanchez.ocp.command.interactive;
 
+import com.github.alvarosanchez.ocp.git.GitHubRepositoryClient.RepositoryVisibility;
 import com.github.alvarosanchez.ocp.service.ProfileService;
 
 import java.nio.file.Path;
@@ -25,8 +26,15 @@ enum PromptAction {
     DELETE_REPOSITORY,
     DELETE_REPOSITORY_FORCE,
     DELETE_REPOSITORY_FILE_BASED,
+    COMMIT_AND_PUSH_REPOSITORY,
     DELETE_PROFILE,
-    CREATE_REPOSITORY
+    CREATE_REPOSITORY,
+    POST_CREATION_GIT_INIT,
+    POST_CREATION_PUBLISH_GITHUB,
+    POST_CREATION_GITHUB_VISIBILITY
+}
+
+record CommitConfirmState(String repositoryName, String diff) {
 }
 
 enum RefreshScope {
@@ -94,5 +102,66 @@ record RefreshConflictState(
 
     static RefreshConflictState forMergedFiles(ProfileService.ProfileRefreshUserConfigConflictException conflict) {
         return new RefreshConflictState(RefreshConflictKind.MERGED_FILES, null, conflict);
+    }
+}
+
+enum PostCreationFlowSource {
+    ADD_REPOSITORY,
+    CREATE_REPOSITORY,
+    ONBOARDING,
+    MIGRATE_REPOSITORY
+}
+
+record PostCreationFlowState(
+    PostCreationFlowSource source,
+    String repositoryName,
+    Path repositoryPath,
+    String successMessage,
+    boolean canInitializeGit,
+    boolean initializeGit,
+    boolean canPublishToGitHub,
+    boolean publishToGitHub,
+    RepositoryVisibility visibility
+) {
+    PostCreationFlowState withInitializeGit(boolean value) {
+        return new PostCreationFlowState(
+            source,
+            repositoryName,
+            repositoryPath,
+            successMessage,
+            canInitializeGit,
+            value,
+            canPublishToGitHub,
+            publishToGitHub,
+            visibility
+        );
+    }
+
+    PostCreationFlowState withPublishToGitHub(boolean value) {
+        return new PostCreationFlowState(
+            source,
+            repositoryName,
+            repositoryPath,
+            successMessage,
+            canInitializeGit,
+            initializeGit,
+            canPublishToGitHub,
+            value,
+            visibility
+        );
+    }
+
+    PostCreationFlowState withVisibility(RepositoryVisibility value) {
+        return new PostCreationFlowState(
+            source,
+            repositoryName,
+            repositoryPath,
+            successMessage,
+            canInitializeGit,
+            initializeGit,
+            canPublishToGitHub,
+            publishToGitHub,
+            value
+        );
     }
 }

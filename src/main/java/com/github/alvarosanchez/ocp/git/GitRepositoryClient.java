@@ -13,6 +13,9 @@ import java.nio.file.Path;
 @Singleton
 public final class GitRepositoryClient {
 
+    private static final String AUTOMATED_GIT_USER_EMAIL = "ocp@local";
+    private static final String AUTOMATED_GIT_USER_NAME = "ocp";
+
     private final GitProcessExecutor processExecutor;
 
     /**
@@ -76,10 +79,11 @@ public final class GitRepositoryClient {
      * @return ANSI-colored diff output
      */
     public String localDiff(Path localPath) {
-        return runAndCapture(
+        return runAndCaptureBounded(
             localPath,
             "diff",
-            List.of("git", "-c", "color.ui=always", "-C", localPath.toString(), "diff", "--color=always")
+            List.of("git", "-c", "color.ui=always", "-C", localPath.toString(), "diff", "--color=always"),
+            64 * 1024
         );
     }
 
@@ -93,29 +97,20 @@ public final class GitRepositoryClient {
         runInRepository(localPath, "clean", List.of("git", "-C", localPath.toString(), "clean", "-fd"));
     }
 
+    public void commitLocalChangesAndPush(Path localPath, String message) {
+        stageAllChanges(localPath);
+        commitChanges(localPath, message);
+        runInRepository(localPath, "push", List.of("git", "-C", localPath.toString(), "push"));
+    }
+
     /**
      * Commits all local changes and force-pushes them to the tracked branch.
      *
      * @param localPath local repository path
      */
     public void commitLocalChangesAndForcePush(Path localPath) {
-        runInRepository(localPath, "add", List.of("git", "-C", localPath.toString(), "add", "-A"));
-        runInRepository(
-            localPath,
-            "commit",
-            List.of(
-                "git",
-                "-C",
-                localPath.toString(),
-                "-c",
-                "user.email=ocp@local",
-                "-c",
-                "user.name=ocp",
-                "commit",
-                "-m",
-                "chore: persist local opencode configuration changes"
-            )
-        );
+        stageAllChanges(localPath);
+        commitChanges(localPath, "chore: persist local opencode configuration changes");
         runInRepository(localPath, "push", List.of("git", "-C", localPath.toString(), "push", "--force-with-lease"));
     }
 
@@ -169,6 +164,73 @@ public final class GitRepositoryClient {
         runInRepository(localPath, "init", List.of("git", "-C", localPath.toString(), "init", "--quiet"));
     }
 
+    public boolean hasRemote(Path localPath, String remoteName) {
+        GitCommandResult result = runGitAndCaptureExitCode(
+            localPath,
+            "remote get-url",
+            List.of("git", "-C", localPath.toString(), "remote", "get-url", remoteName)
+        );
+        return switch (result.exitCode()) {
+            case 0 -> true;
+            case 2 -> false;
+            default -> {
+                String trimmedOutput = result.output().trim();
+                String detail = trimmedOutput.isEmpty() ? "" : ": " + trimmedOutput;
+                throw new IllegalStateException(
+                    "git remote get-url failed for " + localPath + " (exit code " + result.exitCode() + ")" + detail
+                );
+            }
+        };
+    }
+
+    public String remoteUri(Path localPath, String remoteName) {
+        return runAndCapture(
+            localPath,
+            "remote get-url",
+            List.of("git", "-C", localPath.toString(), "remote", "get-url", remoteName)
+        ).trim();
+    }
+
+    public boolean createInitialCommit(Path localPath, String message) {
+        stageAllChanges(localPath);
+        if (hasStagedChanges(localPath)) {
+            commitChanges(localPath, message);
+            return true;
+        }
+        return false;
+    }
+
+    private void stageAllChanges(Path localPath) {
+        runInRepository(localPath, "add", List.of("git", "-C", localPath.toString(), "add", "-A"));
+    }
+
+    private boolean hasStagedChanges(Path localPath) {
+        return !runAndCapture(
+            localPath,
+            "status",
+            List.of("git", "-C", localPath.toString(), "status", "--porcelain")
+        ).trim().isEmpty();
+    }
+
+    private void commitChanges(Path localPath, String message) {
+        runInRepository(
+            localPath,
+            "commit",
+            List.of(
+                "git",
+                "-C",
+                localPath.toString(),
+                "-c",
+                "user.email=" + AUTOMATED_GIT_USER_EMAIL,
+                "-c",
+                "user.name=" + AUTOMATED_GIT_USER_NAME,
+                "commit",
+                "-m",
+                message
+            )
+        );
+    }
+
     private void runInRepository(Path localPath, String operation, List<String> command) {
         runAndCapture(localPath, operation, command);
     }
@@ -194,19 +256,80 @@ public final class GitRepositoryClient {
     }
 
     private String runAndCapture(Path localPath, String operation, List<String> command) {
+        return runAndCaptureAllowingExitCode(localPath, operation, command, 0);
+    }
+
+    private String runAndCaptureBounded(Path localPath, String operation, List<String> command, int maxBytes) {
         try {
             Process process = processExecutor.start(command);
-            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            byte[] outputBytes = process.getInputStream().readNBytes(maxBytes);
             int exitCode = process.waitFor();
             if (exitCode != 0) {
                 throw new IllegalStateException("git " + operation + " failed for " + localPath + " (exit code " + exitCode + ")");
             }
-            return output;
+            return new String(outputBytes, StandardCharsets.UTF_8);
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to " + operation + " git repository " + localPath, e);
+            throw new IllegalStateException("Failed to run git " + operation + " in repository " + localPath, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while running git " + operation + " for " + localPath, e);
+            throw new IllegalStateException("Interrupted while running git " + operation + " in repository " + localPath, e);
+        }
+    }
+
+    private String runAndCaptureAllowingExitCode(Path localPath, String operation, List<String> command, int... allowedExitCodes) {
+        try {
+            Process process = processExecutor.start(command);
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            int exitCode = process.waitFor();
+            if (!contains(allowedExitCodes, exitCode)) {
+                String trimmedOutput = output.trim();
+                String detail = trimmedOutput.isEmpty() ? "" : ": " + trimmedOutput;
+                throw new IllegalStateException(
+                    "git " + operation + " failed for " + localPath + " (exit code " + exitCode + ")" + detail
+                );
+            }
+            return output;
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to run git " + operation + " in repository " + localPath, e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while running git " + operation + " in repository " + localPath, e);
+        }
+    }
+
+    private boolean contains(int[] values, int value) {
+        for (int candidate : values) {
+            if (candidate == value) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private GitCommandResult runGitAndCaptureExitCode(Path localPath, String operation, List<String> command) {
+        try {
+            Process process = processExecutor.start(command);
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            int exitCode = process.waitFor();
+            return new GitCommandResult(exitCode, output);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to run git " + operation + " in repository " + localPath, e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while running git " + operation + " in repository " + localPath, e);
+        }
+    }
+
+    private int runExitCodeOnly(Path localPath, String operation, List<String> command) {
+        try {
+            Process process = processExecutor.start(command);
+            process.getInputStream().readAllBytes();
+            return process.waitFor();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to run git " + operation + " in repository " + localPath, e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while running git " + operation + " in repository " + localPath, e);
         }
     }
 
@@ -218,5 +341,8 @@ public final class GitRepositoryClient {
      * @param message commit message subject
      */
     public record CommitMetadata(String shortSha, long epochSeconds, String message) {
+    }
+
+    private record GitCommandResult(int exitCode, String output) {
     }
 }
