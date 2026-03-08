@@ -870,14 +870,14 @@ public final class InteractiveApp extends ToolkitApp {
             status = "Repository `" + repositoryName + "` has no local git changes to commit and push.";
             return;
         }
+        final String[] diffHolder = new String[1];
         runBusyOperation(
             "Inspecting local changes for `" + repositoryName + "`...",
             () -> {
-                String diff = repositoryService.getLocalDiff(repositoryName);
-                commitConfirm = new CommitConfirmState(repositoryName, diff);
+                diffHolder[0] = repositoryService.getLocalDiff(repositoryName);
                 return "Review local changes for `" + repositoryName + "`.";
             },
-            null
+            () -> commitConfirm = new CommitConfirmState(repositoryName, diffHolder[0])
         );
     }
 
