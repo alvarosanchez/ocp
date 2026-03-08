@@ -71,7 +71,10 @@ public final class RepositoryPostCreationService {
         boolean hasOriginRemote = request.publishToGitHub()
             && gitInitialized
             && gitRepositoryClient.hasRemote(repositoryPath, ORIGIN_REMOTE_NAME);
-        if (request.publishToGitHub() && gitInitialized && !hasOriginRemote) {
+        if (request.publishToGitHub() && gitInitialized && hasOriginRemote) {
+            String originUri = persistExistingOrigin(repositoryName, repositoryPath);
+            persistedRepositoryUri = originUri;
+        } else if (request.publishToGitHub() && gitInitialized && !hasOriginRemote) {
             gitHubRepositoryClient.createRepositoryFromSource(repositoryName, repositoryPath, visibility);
             String originUri = gitRepositoryClient.remoteUri(repositoryPath, ORIGIN_REMOTE_NAME);
             persistRepositoryUri(

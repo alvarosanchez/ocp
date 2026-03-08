@@ -861,9 +861,7 @@ public final class InteractiveApp extends ToolkitApp {
         }
         RepositoryDirtyState dirtyState = repositoryDirtyStateByName.get(repositoryName);
         if (dirtyState != null && dirtyState.inspectionFailed()) {
-            if (status == null || status.isBlank() || "Ready. Select a node in the hierarchy.".equals(status)) {
-                status = "Unable to inspect repository `" + repositoryName + "` for local git changes.";
-            }
+            status = "Unable to inspect repository `" + repositoryName + "` for local git changes.";
             return;
         }
         if (!isSelectedRepositoryCommitPushAvailable()) {
