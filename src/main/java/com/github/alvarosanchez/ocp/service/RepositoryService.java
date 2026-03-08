@@ -196,7 +196,11 @@ public final class RepositoryService {
         if (!repository.isGitBacked()) {
             throw new IllegalStateException("Repository `" + normalizedRepositoryName + "` is file-based.");
         }
-        return gitRepositoryClient.localDiff(Path.of(repository.localPath()));
+        Path localPath = Path.of(repository.localPath());
+        if (!Files.isDirectory(localPath) || !Files.exists(localPath.resolve(".git"))) {
+            throw new IllegalStateException("Repository `" + normalizedRepositoryName + "` is not available as a local git checkout at " + localPath + ".");
+        }
+        return gitRepositoryClient.localDiff(localPath);
     }
 
     public void commitAndPush(String repositoryName, String commitMessage) {

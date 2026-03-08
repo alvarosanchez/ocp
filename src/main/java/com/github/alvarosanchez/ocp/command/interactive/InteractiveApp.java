@@ -784,36 +784,40 @@ public final class InteractiveApp extends ToolkitApp {
         String successMessage,
         boolean defaultInitializeGit
     ) {
-        Path repositoryPath = Path.of(repositoryEntry.localPath());
-        PostCreationCapabilities capabilities = repositoryPostCreationService.capabilities(repositoryPath);
-        if (capabilities.hasOriginRemote()) {
-            String originUri = repositoryPostCreationService.persistExistingOrigin(repositoryEntry.name(), repositoryPath);
-            status = successMessage + " Saved origin URI `" + originUri + "`.";
-            return;
-        }
-        PostCreationFlowState postCreationFlowState = new PostCreationFlowState(
-            source,
-            repositoryEntry.name(),
-            repositoryPath,
-            successMessage,
-            !capabilities.gitInitialized(),
-            defaultInitializeGit,
-            capabilities.canPublishWithGh(),
-            false,
-            RepositoryVisibility.PRIVATE
-        );
+        try {
+            Path repositoryPath = Path.of(repositoryEntry.localPath());
+            PostCreationCapabilities capabilities = repositoryPostCreationService.capabilities(repositoryPath);
+            if (capabilities.hasOriginRemote()) {
+                String originUri = repositoryPostCreationService.persistExistingOrigin(repositoryEntry.name(), repositoryPath);
+                status = successMessage + " Saved origin URI `" + originUri + "`.";
+                return;
+            }
+            PostCreationFlowState postCreationFlowState = new PostCreationFlowState(
+                source,
+                repositoryEntry.name(),
+                repositoryPath,
+                successMessage,
+                !capabilities.gitInitialized(),
+                defaultInitializeGit,
+                capabilities.canPublishWithGh(),
+                false,
+                RepositoryVisibility.PRIVATE
+            );
 
-        if (postCreationFlowState.canInitializeGit()) {
-            prompt = postCreationGitInitPrompt(postCreationFlowState);
-            status = "Configure git setup for `" + postCreationFlowState.repositoryName() + "`.";
-            return;
+            if (postCreationFlowState.canInitializeGit()) {
+                prompt = postCreationGitInitPrompt(postCreationFlowState);
+                status = "Configure git setup for `" + postCreationFlowState.repositoryName() + "`.";
+                return;
+            }
+            if (shouldPromptForGitHubPublish(postCreationFlowState)) {
+                prompt = postCreationPublishPrompt(postCreationFlowState);
+                status = "Publish `" + postCreationFlowState.repositoryName() + "` to GitHub?";
+                return;
+            }
+            status = successMessage;
+        } catch (RuntimeException e) {
+            status = successMessage + " (note: post-creation setup failed and was skipped).";
         }
-        if (shouldPromptForGitHubPublish(postCreationFlowState)) {
-            prompt = postCreationPublishPrompt(postCreationFlowState);
-            status = "Publish `" + postCreationFlowState.repositoryName() + "` to GitHub?";
-            return;
-        }
-        status = successMessage;
     }
 
     private void migrateSelectedRepository() {
