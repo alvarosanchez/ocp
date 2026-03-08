@@ -842,7 +842,7 @@ public final class InteractiveApp extends ToolkitApp {
         maybeStartPostCreationFlow(
             PostCreationFlowSource.MIGRATE_REPOSITORY,
             new RepositoryEntry(repository.name(), repository.uri(), repository.localPath()),
-            "Updated repository `" + repositoryName + "`.",
+            "Migration ready for repository `" + repositoryName + "`.",
             false
         );
         reloadState();

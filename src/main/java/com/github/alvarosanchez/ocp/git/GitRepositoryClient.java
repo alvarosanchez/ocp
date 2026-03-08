@@ -79,10 +79,11 @@ public final class GitRepositoryClient {
      * @return ANSI-colored diff output
      */
     public String localDiff(Path localPath) {
-        return runAndCapture(
+        return runAndCaptureBounded(
             localPath,
             "diff",
-            List.of("git", "-c", "color.ui=always", "-C", localPath.toString(), "diff", "--color=always")
+            List.of("git", "-c", "color.ui=always", "-C", localPath.toString(), "diff", "--color=always"),
+            64 * 1024
         );
     }
 
@@ -256,6 +257,23 @@ public final class GitRepositoryClient {
 
     private String runAndCapture(Path localPath, String operation, List<String> command) {
         return runAndCaptureAllowingExitCode(localPath, operation, command, 0);
+    }
+
+    private String runAndCaptureBounded(Path localPath, String operation, List<String> command, int maxBytes) {
+        try {
+            Process process = processExecutor.start(command);
+            byte[] outputBytes = process.getInputStream().readNBytes(maxBytes);
+            int exitCode = process.waitFor();
+            if (exitCode != 0) {
+                throw new IllegalStateException("git " + operation + " failed for " + localPath + " (exit code " + exitCode + ")");
+            }
+            return new String(outputBytes, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to run git " + operation + " in repository " + localPath, e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while running git " + operation + " in repository " + localPath, e);
+        }
     }
 
     private String runAndCaptureAllowingExitCode(Path localPath, String operation, List<String> command, int... allowedExitCodes) {
