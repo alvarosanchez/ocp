@@ -1154,9 +1154,7 @@ public final class InteractiveApp extends ToolkitApp {
         TreeNode<NodeRef> selectedTreeNode = hierarchyTree.selectedNode();
         NodeRef nextSelectedNode = selectedTreeNode == null ? null : selectedTreeNode.data();
         if (Objects.equals(nextSelectedNode, selectedNode)) {
-            if (selectedNode != null && selectedNode.kind() == NodeKind.REPOSITORY) {
-                refreshSelectedRepositoryCommitPushPreview();
-            } else if (selectedNode != null && selectedNode.kind() == NodeKind.FILE && selectedNode.path() != null && !editMode) {
+            if (selectedNode != null && selectedNode.kind() == NodeKind.FILE && selectedNode.path() != null && !editMode) {
                 refreshSelectedFilePreview();
             }
             return;

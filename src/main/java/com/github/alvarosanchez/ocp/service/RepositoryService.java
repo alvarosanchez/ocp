@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 import jakarta.inject.Singleton;
 
 /**
@@ -22,6 +23,9 @@ import jakarta.inject.Singleton;
  */
 @Singleton
 public final class RepositoryService {
+
+    private static final int MAX_LOCAL_DIFF_LINES = 400;
+    private static final int MAX_LOCAL_DIFF_CHARS = 32_000;
 
     private final ObjectMapper objectMapper;
     private final GitRepositoryClient gitRepositoryClient;
@@ -204,7 +208,12 @@ public final class RepositoryService {
         if (!Files.isDirectory(localPath) || !Files.exists(localPath.resolve(".git"))) {
             throw new IllegalStateException("Repository `" + normalizedRepositoryName + "` is not available as a local git checkout at " + localPath + ".");
         }
-        return gitRepositoryClient.localDiff(localPath);
+        String diff = gitRepositoryClient.localDiff(localPath);
+        if (diff.length() <= MAX_LOCAL_DIFF_CHARS && diff.lines().count() <= MAX_LOCAL_DIFF_LINES) {
+            return diff;
+        }
+        return diff.lines().limit(MAX_LOCAL_DIFF_LINES).collect(Collectors.joining("\n"))
+            + "\n... diff truncated for preview ...";
     }
 
     public void commitAndPush(String repositoryName, String commitMessage) {
