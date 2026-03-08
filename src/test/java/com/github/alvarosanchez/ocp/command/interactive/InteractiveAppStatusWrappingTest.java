@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 class InteractiveAppStatusWrappingTest {
 
     @Test
-    void wrapStatusLinesReturnsEmptyListForBlankString() {
+    void wrapStatusLinesReturnsSingleEmptyLineForBlankString() {
         assertEquals(List.of(""), InteractiveApp.wrapStatusLines(null, 20));
         assertEquals(List.of(""), InteractiveApp.wrapStatusLines("", 20));
         assertEquals(List.of(""), InteractiveApp.wrapStatusLines("   ", 20));

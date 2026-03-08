@@ -745,6 +745,24 @@ class RepositoryServiceTest {
     }
 
     @Test
+    void commitAndPushRejectsMissingLocalGitCheckout() throws IOException {
+        Path missingClone = repositoriesRootDirectory().resolve("repo-missing-checkout");
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-missing-checkout", "git@github.com:acme/repo-missing-checkout.git", missingClone.toString()))
+            )
+        );
+
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> repositoryService.commitAndPush("repo-missing-checkout", "chore: save local changes")
+        );
+
+        assertTrue(thrown.getMessage().contains("is not available as a local git checkout"));
+    }
+
+    @Test
     void deleteGitRepositoryWithLocalChangesRequiresForce() throws IOException, InterruptedException {
         Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path localClone = repositoriesRootDirectory().resolve("repo-git");
