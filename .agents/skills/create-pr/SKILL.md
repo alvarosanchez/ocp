@@ -239,6 +239,8 @@ Copilot review completion rule:
 
 - Do not treat `zero unresolved threads` alone as proof that Copilot is finished for the latest green head.
 - After a re-request, wait until Copilot has produced observable review activity for that head (review, thread, or comment) or until the bounded wait policy expires and you report the timeout/limitation explicitly.
+- Treat Copilot review completion for terminal-state purposes as valid only when the newest relevant Copilot review is tied to the current PR head SHA, not an older push.
+- Always re-fetch the current PR head SHA after every push and compare it to the commit OID of the latest Copilot review before concluding that the latest head has been reviewed.
 - Only after that completion check may you decide that there are no actionable Copilot comments remaining.
 
 Default caps:
@@ -256,6 +258,7 @@ Stop only when all of these are true:
 - no unresolved required CI failures remain
 - required checks are green or otherwise successful
 - Copilot review for the latest green CI head has completed or timed out with an explicit reported limitation
+- the latest Copilot review used for completion corresponds to the current PR head SHA
 - no new actionable Copilot comments remain after the latest green CI head has been reviewed
 - zero unresolved Copilot-owned review threads remain in the latest fetched review-thread set
 - the branch reflects all fixes already pushed to the PR

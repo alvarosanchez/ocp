@@ -273,7 +273,7 @@ class GitRepositoryClientTest {
 
     @Test
     void hasRemoteReturnsFalseWhenRemoteDoesNotExist() {
-        StubProcessExecutor processExecutor = new StubProcessExecutor(List.of(new StubProcess(2, "")));
+        StubProcessExecutor processExecutor = new StubProcessExecutor(List.of(new StubProcess(2, "No such remote 'origin'\n")));
         Path localPath = tempDir.resolve("repositories/repo-twelve");
 
         GitRepositoryClient client = new GitRepositoryClient(processExecutor);
@@ -434,7 +434,7 @@ class GitRepositoryClientTest {
 
         IllegalStateException thrown = assertThrows(IllegalStateException.class, () -> client.hasRemote(localPath, "origin"));
 
-        assertTrue(thrown.getMessage().contains("Failed to remote get-url git repository"));
+        assertTrue(thrown.getMessage().contains("Failed to run git remote get-url in repository"));
     }
 
     private static final class StubProcessExecutor extends GitProcessExecutor {
