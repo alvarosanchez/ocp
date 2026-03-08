@@ -67,7 +67,8 @@ public record OcpConfigFile(OcpConfigOptions config, List<RepositoryEntry> repos
      *
      * @param name repository display name
      * @param uri remote repository URI, or {@code null} for file-based repositories
-     * @param localPath local filesystem path where the repository is stored
+     * @param localPath local filesystem path where the repository is stored; when both {@code uri} and
+     * {@code localPath} are present, the explicit local path remains authoritative
      */
     @Serdeable
     public record RepositoryEntry(String name, String uri, String localPath) {

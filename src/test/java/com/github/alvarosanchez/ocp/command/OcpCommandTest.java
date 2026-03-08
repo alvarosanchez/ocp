@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.github.alvarosanchez.ocp.command.interactive.InteractiveApp;
 import com.github.alvarosanchez.ocp.service.OnboardingService;
 import com.github.alvarosanchez.ocp.service.ProfileService;
+import com.github.alvarosanchez.ocp.service.RepositoryPostCreationService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
 import io.micronaut.configuration.picocli.PicocliRunner;
 import io.micronaut.context.ApplicationContext;
@@ -90,6 +91,7 @@ class OcpCommandTest {
                 context.getBean(ProfileService.class),
                 context.getBean(RepositoryService.class),
                 context.getBean(OnboardingService.class),
+                context.getBean(RepositoryPostCreationService.class),
                 context.getBean(ObjectMapper.class)
             ) {
                 @Override
@@ -151,6 +153,7 @@ class OcpCommandTest {
                 context.getBean(ProfileService.class),
                 context.getBean(RepositoryService.class),
                 context.getBean(OnboardingService.class),
+                context.getBean(RepositoryPostCreationService.class),
                 context.getBean(ObjectMapper.class)
             );
 

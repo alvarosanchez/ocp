@@ -1,355 +1,287 @@
 ---
 name: create-pr
-description: Create a GitHub pull request with gh and drive the Copilot review loop until no additional Copilot comments remain. Use when users ask to create a PR, open a pull request, submit a branch for review, or address Copilot review comments after follow-up pushes.
+description: Create or update a GitHub pull request with gh, including an initial commit when the worktree is dirty, then drive both Copilot review and CI remediation loops until Copilot stops leaving actionable comments and required CI checks are green. Use when users ask to create a PR, open a pull request, submit a branch for review, create a PR from current work, or continue a PR after follow-up fixes.
 license: MIT
 compatibility: Compatible with git and GitHub CLI based workflows in Agent Skills compatible runtimes.
 metadata:
   author: local
-  version: "1.0.0"
+  version: "2.1.0"
 ---
 
 # Create PR
 
 ## Goal
 
-Open a pull request from the current feature branch with `gh`, then keep the branch moving through Copilot review cycles until Copilot stops leaving additional review comments.
-
-Success means all of the following are true:
-
-- The current work is on a non-default branch.
-- Uncommitted changes are either committed safely or explicitly reported as a blocker.
-- A pull request exists for the branch.
-- Each Copilot review thread receives a reply describing the action taken.
-- Each addressed thread is resolved when permissions allow it.
-- Follow-up pushes re-request Copilot review without pinging `@copilot` in comments.
-- The loop stops only when Copilot produces no additional actionable comments, or a documented blocker prevents further automation.
-
-## Inputs
-
-- Current repository with `git` and `gh` available.
-- A checked-out feature branch with changes ready for review.
-- Optional user guidance for PR title, body, base branch, target remote, or draft status.
-- Authentication that allows `gh pr create`, `gh api`, and push access.
-- A runtime that can inspect and edit code when a review comment requires a fix, or a higher-level workflow that will apply the fix after the skill reports it.
-
-## Outputs
-
-- A created PR URL or PR number.
-- A short record of each Copilot review cycle, including fixes, replies, and re-request attempts.
-- A clear stop condition: no new Copilot comments, timeout, or permission blocker.
+Create or update a GitHub PR for the current feature branch, including an initial commit when local changes are present and commits are allowed, then keep the PR moving through a CI-green-first loop followed by a Copilot review loop until there are no remaining actionable Copilot comments and required checks are green.
 
 ## When To Use
 
 Use this skill when the user asks to:
 
-- create a pull request
-- open a PR with GitHub CLI
+- create a PR
+- open a PR
+- open a pull request
+- create a PR from current work
 - submit a branch for review
-- handle Copilot review comments
-- push follow-up fixes and re-request Copilot review
+- continue a PR after fixes
+- handle Copilot review comments on a PR
+- wait for CI and keep fixing until green
+- do the full PR workflow with `gh`
+
+Strong trigger phrases include:
+
+- "create a PR"
+- "open a PR"
+- "open a pull request"
+- "submit this branch for review"
+- "create PR with gh"
+- "look into this and create a PR"
+- "fix the review comments on that PR"
+- "keep working until Copilot and CI are green"
 
 Do not use this skill when the user asks only to:
 
-- commit changes without creating a PR
-- merge a PR
-- review code locally without GitHub
+- commit changes without creating or updating a PR
+- explain GitHub PR workflows
 - inspect CI status without opening or updating a PR
+- merge a PR
 
-## Procedure
+## Skill Layout
 
-### 1. Confirm prerequisites
+This skill uses deterministic shell scripts in `scripts/` for repeated operations:
 
-Run these checks first:
+- `scripts/preflight.sh`
+- `scripts/inspect-worktree.sh`
+- `scripts/commit-if-dirty.sh`
+- `scripts/push-branch.sh`
+- `scripts/pr-view.sh`
+- `scripts/pr-create.sh`
+- `scripts/copilot-review-state.sh`
+- `scripts/reply-to-review-comment.sh`
+- `scripts/resolve-review-thread.sh`
+- `scripts/ci-status.sh`
+- `scripts/ci-run-log.sh`
+- `scripts/request-copilot-review.sh`
 
-```bash
-git branch --show-current
-git status --short --branch
-gh auth status
-gh repo view --json nameWithOwner,defaultBranchRef
-```
+## Operating Procedure
 
-If `gh auth status` fails, stop and report the authentication blocker.
+### 1. Preflight
 
-### 2. Ensure the branch is safe for PR creation
-
-Read the current branch name and compare it with the repository default branch.
-
-- Stop if the current branch is `main`, `master`, or the repository's default branch.
-- Stop if you are in a detached HEAD state.
-- If the branch has no upstream yet, determine which remote should host the branch before PR creation.
-
-Use this pattern to capture the repository owner, repo, and default branch:
-
-```bash
-gh repo view --json nameWithOwner,defaultBranchRef --jq '{repo: .nameWithOwner, base: .defaultBranchRef.name}'
-```
-
-### 3. Inspect local changes and commit only when allowed
-
-Check whether the worktree is clean:
+Run:
 
 ```bash
-git status --short
+./scripts/preflight.sh
 ```
 
-If there are uncommitted changes:
+Stop and report a blocker if authentication fails, the branch is detached, or the current branch matches the repository default branch.
 
-1. Review them with `git diff` and `git diff --staged`.
-2. Commit them only if the user explicitly asked for a PR flow that includes committing, or if higher-priority runtime instructions already authorize commits.
-3. If commits require explicit user approval in the current runtime, stop and report that approval is required before the PR can be created.
+### 2. Inspect and commit dirty worktree changes
 
-When committing is allowed, prefer one focused commit command over interactive flows:
+Run:
 
 ```bash
-git add <relevant-files>
-git commit -m "<message>"
+./scripts/inspect-worktree.sh
 ```
 
-Never commit obvious secrets, generated credentials, or unrelated dirty files.
-
-### 4. Push the branch
-
-Push before creating the PR so the remote branch exists.
-
-First identify the upstream or the remote you should use:
+If the worktree is dirty and commits are allowed by higher-priority runtime rules, create the initial commit before any push or PR creation:
 
 ```bash
-git rev-parse --abbrev-ref --symbolic-full-name @{upstream}
-git remote -v
+./scripts/commit-if-dirty.sh "<commit-message>" <relevant-files...>
 ```
 
-Treat `git rev-parse ... @{upstream}` failing as a normal case when the branch has no upstream yet. It means you should choose the intended remote and continue with `git push -u`, not treat the run as fatally broken.
+If commits are not allowed in the surrounding runtime, stop and report that PR creation is blocked on user-authorized commit/push.
 
-If the branch already has an upstream, push normally:
+### 3. Push the branch and ensure upstream exists
+
+Run:
 
 ```bash
-git push
+./scripts/push-branch.sh [remote]
 ```
 
-If the branch does not yet have an upstream, push to the intended remote and set upstream explicitly:
+Default remote is `origin`.
+
+### 4. Reuse or create the PR
+
+First inspect current PR state:
 
 ```bash
-git push -u <remote> "$(git branch --show-current)"
+./scripts/pr-view.sh
 ```
 
-Stop and report the error if push fails.
+If a PR already exists for the branch, reuse it.
 
-### 5. Create the pull request with `gh`
-
-Before creating a new PR, check whether one already exists for the current branch:
+If no PR exists, create one with a prepared title/body:
 
 ```bash
-gh pr view --json number,url,headRefName,baseRefName
+./scripts/pr-create.sh <base-branch> <title> <body-file> [--draft]
 ```
 
-Treat `gh pr view` failing before PR creation as a normal case: it usually means no PR exists yet for the current branch.
+Then run `./scripts/pr-view.sh` again and record the PR number and URL.
 
-If a PR already exists, switch to updating and reviewing that PR instead of creating a duplicate.
+### 5. Wait for CI first, then Copilot review
 
-Gather a concise title and body from the actual branch diff. Then create the PR with explicit flags instead of relying on an interactive editor. Prefer `--body-file -` so multi-line text is shell-safe.
+CI and Copilot review are both required, but the default loop order is CI first, then Copilot review. Do not treat Copilot review as terminal while required checks are still failing or incomplete.
+
+Run:
 
 ```bash
-gh pr create --title "<title>" --body-file - <<'EOF'
-<body>
-EOF
+./scripts/ci-status.sh <pr-number>
+./scripts/copilot-review-state.sh <owner> <repo> <pr-number>
 ```
 
-If the user provided a base branch, honor it even when it is not the repository default branch:
+Default bounded waiting policy:
 
-```bash
-gh pr create --base "<base-branch>" --title "<title>" --body-file - <<'EOF'
-<body>
-EOF
-```
+- poll every 30 seconds for the first 5 minutes
+- then poll every 60 seconds up to 20 minutes total per cycle
+- if neither CI nor Copilot has produced usable state by then, report the timeout clearly
 
-Use `--draft` only when the user asked for a draft PR:
+### 6. Process Copilot review comments after CI is green
 
-```bash
-gh pr create --draft --title "<title>" --body-file - <<'EOF'
-<body>
-EOF
-```
+Only enter the Copilot remediation loop after required CI checks are green or otherwise successful for the current PR head. If CI is still failing or pending, continue the CI loop first.
 
-After creation, record the PR number and URL for all later API calls:
-
-```bash
-gh pr view --json number,url,headRefName,baseRefName
-```
-
-### 6. Wait for the initial Copilot review
-
-GitHub may trigger the first Copilot review automatically after PR creation. Poll for review activity before taking any follow-up action.
-
-Use a bounded wait loop with backoff. A deterministic default is:
-
-- Poll every 30 seconds for the first 5 minutes.
-- Then poll every 60 seconds up to 15 minutes total.
-- If no Copilot review appears after 15 minutes, report the timeout and, if appropriate for the repository, request Copilot review explicitly with the same re-request command used later.
-
-Use these calls to inspect review state:
-
-```bash
-gh pr view <pr-number> --comments
-gh api -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" repos/<owner>/<repo>/pulls/<pr-number>/comments
-gh api graphql -f query='query($owner: String!, $repo: String!, $number: Int!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { reviewThreads(first: 100) { nodes { id isResolved comments(first: 20) { nodes { id databaseId body url author { login } createdAt } } } } } } }' -F owner=<owner> -F repo=<repo> -F number=<pr-number>
-```
-
-See `references/graphql-queries.md` for reusable GraphQL templates.
-
-### 7. Identify Copilot review threads
-
-Treat a thread as a Copilot thread when the comment author login matches a known Copilot review identity. Start with this ordered list for observed comment authors:
+Treat a thread as Copilot-owned when the author login matches one of these values:
 
 1. `copilot-pull-request-reviewer[bot]`
 2. `github-copilot[bot]`
 3. `github-copilot`
 
-Track handled feedback by review comment ID, not only by thread ID. A later Copilot cycle can add a new comment to an existing thread.
+Track handled feedback by review comment ID, not only thread ID.
 
-Unless the caller persists that state, assume the handled-comment list lasts only for the current continuous skill run.
+For each new unresolved Copilot comment:
 
-If the repository uses a different Copilot identity, record the actual login from the API response and continue with that value.
+1. inspect the requested change
+2. apply the smallest correct fix when necessary
+3. reply on the thread even if no code change is needed
+4. resolve the thread when permissions allow and no human discussion remains open
 
-### 8. Process each Copilot thread
-
-For every unresolved Copilot thread that has not yet been handled in the current cycle:
-
-1. Read the thread carefully.
-2. Decide whether code changes are necessary.
-3. If changes are necessary, make the smallest correct fix.
-4. If changes are not necessary, prepare a reply that explains why no code change was needed.
-5. Reply on the thread in all cases. Do not leave a Copilot comment without an explanation.
-6. If the runtime cannot inspect or edit code directly, stop after describing the required fix and report the blocker instead of pretending the comment was fully addressed.
-
-Reply to the specific Copilot review comment you are addressing, usually the latest unhandled Copilot comment in the thread. Use the review comment reply endpoint for thread comments:
+Use:
 
 ```bash
-gh api --method POST -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" repos/<owner>/<repo>/pulls/comments/<comment-id>/replies -f body='<reply>'
+./scripts/reply-to-review-comment.sh <owner> <repo> <comment-id> <reply-body>
+./scripts/resolve-review-thread.sh <thread-id>
 ```
 
-If reply creation fails because of permissions, API support, or repository policy:
+If reply or resolve fails, report the concrete limitation instead of claiming success.
 
-- record the failure clearly
-- leave the thread unresolved
-- stop the loop if replying is required by the current workflow and no fallback is available
+Operational rule for completion checks:
 
-Reply content should always state one of these outcomes:
+- Never infer Copilot completion from previously handled comment IDs alone.
+- After every push, re-fetch the full current review-thread set and treat any unresolved Copilot-owned thread as actionable, even if earlier Copilot threads were already resolved.
+- A top-level Copilot review summary in `COMMENTED` state is not actionable by itself, but it must trigger a fresh full sweep of review threads because it may accompany newly opened inline comments.
 
-- what you changed and why it addresses the comment
-- why the existing code is already correct
-- why the comment cannot be fully addressed yet and what remains blocked
+### 7. Wait for CI and remediate failures
 
-### 9. Resolve the thread when possible
+CI is part of the loop, not an optional side check.
 
-After replying, resolve the review thread only when the repository permissions allow it and there is no remaining unresolved human discussion in that same thread.
+After PR creation and after every push:
 
-Use the GraphQL mutation from `references/graphql-queries.md`:
+1. run `./scripts/ci-status.sh <pr-number>`
+2. if required checks are pending, keep waiting
+3. if a required check fails, inspect the failing run with:
 
 ```bash
-gh api graphql -f query='mutation($threadId: ID!) { resolveReviewThread(input: {threadId: $threadId}) { thread { id isResolved } } }' -F threadId=<thread-id>
+./scripts/ci-run-log.sh <run-id>
 ```
 
-If thread resolution fails because of permissions or API support:
+Then fix only the root cause, run the closest local verification, and continue the loop.
 
-- keep the reply
-- leave the thread unresolved
-- record the limitation in your status output
+### 8. Commit and push follow-up fixes
 
-Do not pretend the thread is resolved when the API call failed.
-
-### 10. Commit and push follow-up fixes
-
-If you changed code while addressing comments, validate the changes with the normal project checks, then commit and push them under the same commit-safety rules used earlier.
+If either Copilot or CI remediation changes code, validate locally and then commit/push under the same rules used earlier:
 
 ```bash
-git status --short
-git add <relevant-files>
-git commit -m "<message>"
-git push
+./scripts/commit-if-dirty.sh "<commit-message>" <relevant-files...>
+./scripts/push-branch.sh [remote]
 ```
 
-If the current runtime forbids autonomous commits, stop after making the fix and report that a user-authorized commit and push are now required before the loop can continue.
+If autonomous commits are not allowed by the runtime, stop and report that the loop is blocked on user-authorized commit/push.
 
-### 11. Re-request Copilot review after each follow-up push
+### 9. Re-request Copilot review after each follow-up push
 
-New pushes are not guaranteed to trigger another Copilot review automatically. Re-request the review without writing a comment and without mentioning `@copilot` anywhere.
-
-Try these reviewer identities in order until one succeeds. The requestable reviewer slug may differ from the comment-author login you saw in review threads:
+After a follow-up push, re-request Copilot review without mentioning `@copilot` in any comment:
 
 ```bash
-gh api --method POST -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" repos/<owner>/<repo>/pulls/<pr-number>/requested_reviewers -F 'reviewers[]=github-copilot[bot]'
-gh api --method POST -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" repos/<owner>/<repo>/pulls/<pr-number>/requested_reviewers -F 'reviewers[]=copilot-pull-request-reviewer[bot]'
-gh api --method POST -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" repos/<owner>/<repo>/pulls/<pr-number>/requested_reviewers -F 'reviewers[]=github-copilot'
+./scripts/request-copilot-review.sh <owner> <repo> <pr-number>
 ```
 
-Request only one reviewer identity per attempt. If the first call succeeds, do not send the fallback.
+This is a required step after every remediation push, not an optional best-effort extra. Do not continue to the next wait cycle until you have attempted the re-request and recorded the concrete result.
 
-If the reviewer is already requested or already pending, treat that as a no-op and continue waiting. If all attempts fail with validation or unsupported-reviewer errors, stop and report that Copilot review could not be re-requested through the API in this repository.
+Validation rule for execution:
 
-### 12. Repeat the review loop with a hard cap
+- A follow-up push is incomplete until `request-copilot-review.sh` has been run for that PR.
+- Treat a successful re-request as grounded only when command output confirms which reviewer slug was accepted.
+- If all reviewer-request attempts fail because the repository does not support it, report that limitation explicitly and only continue if automatic Copilot review still appears on subsequent pushes.
 
-Run the cycle below until Copilot stops leaving additional comments:
+If all reviewer-request attempts fail because the repository does not support it, report that limitation and continue waiting only if automatic review still appears on new pushes.
 
-1. Wait for a new Copilot review using the same bounded polling strategy.
-2. Fetch unresolved review threads again.
-3. Process only new Copilot comments whose comment IDs were not handled in prior cycles.
-4. Reply and resolve each thread.
-5. Commit and push any resulting fixes.
-6. Re-request Copilot review if anything was pushed.
+### 10. Repeat the PR loop with CI first, then Copilot
 
-Use a maximum of 5 Copilot review cycles by default. If the fifth cycle still produces new comments, stop and report that manual intervention is required to prevent an unbounded automation loop.
+Run this combined cycle until terminal success or a documented blocker:
 
-### 13. Stop only on a clear terminal state
+1. wait for CI state
+2. investigate failing CI checks
+3. fix code when needed
+4. verify locally
+5. commit and push when allowed
+6. re-request Copilot review after pushes
+7. wait for Copilot review state once CI is green for the current head
+8. process new Copilot comments
+9. fix code when needed
+10. verify locally
+11. commit and push when allowed
+12. re-request Copilot review after pushes
+13. wait again for CI first, then Copilot
 
-Finish the skill run only when one of these conditions is true:
+Default caps:
 
-- Copilot produced a review cycle with no additional comments.
-- No unresolved Copilot threads remain, and no new Copilot comments appeared after the latest push.
-- Authentication, permissions, or review-request support blocked further automation and you reported the blocker clearly.
-- The review loop hit the maximum cycle limit.
+- maximum 5 Copilot remediation cycles
+- maximum 5 CI remediation cycles
+- maximum 8 combined push/fix cycles total
 
-Do not merge the PR as part of this skill unless a higher-priority instruction explicitly expands the scope.
+If a cap is reached, stop and report why the loop did not converge.
+
+### 11. Terminal success condition
+
+Stop only when all of these are true:
+
+- no unresolved required CI failures remain
+- required checks are green or otherwise successful
+- no new actionable Copilot comments remain after the latest green CI head has been reviewed
+- zero unresolved Copilot-owned review threads remain in the latest fetched review-thread set
+- the branch reflects all fixes already pushed to the PR
+
+Do not merge the PR as part of this skill unless a higher-priority instruction explicitly expands scope.
 
 ## Error Handling And Edge Cases
 
 - If the worktree includes unrelated dirty files, do not commit them just to create the PR.
-- If no Copilot review arrives and explicit re-request also fails, stop and report the repository limitation.
-- If GraphQL thread listing returns partial data, fall back to `gh pr view --comments` and report reduced automation.
-- If GraphQL results hit page-size limits on large PRs, continue with pagination-aware queries or report that only a partial thread set was inspected.
-- If reply creation succeeds but thread resolution fails, keep the reply and continue.
-- If a thread contains both Copilot feedback and unresolved human discussion, do not auto-resolve the entire thread unless your reply fully closes the remaining human context too.
-- If a comment requests a change you intentionally reject, reply with a concise explanation before resolving or reporting the limitation.
-- If the same logical issue keeps returning in new Copilot cycles, stop after the cycle cap and summarize the repeated feedback.
+- If the branch has no commits relative to base, stop and report that there is nothing to open a PR from.
+- If the branch has not been pushed, push it before attempting PR creation.
+- If `gh pr create` returns `Head sha can't be blank` or `Head ref must be a branch`, treat that as a pushed-branch/pre-PR-state problem, not a mysterious gh failure.
+- If no Copilot review arrives and explicit re-request fails, report the limitation clearly.
+- If CI is pending for too long, report the exact run IDs and statuses instead of saying only that it is "still running."
+- If CI fails repeatedly for the same reason after fixes, stop at the cycle cap and summarize the repeated failure.
+- If reply creation succeeds but thread resolution fails, keep the reply and record the limitation.
+- If a thread contains unresolved human discussion, do not auto-resolve it unless your reply closes the remaining context too.
 
 ## Safety Rules
 
-- Treat commits, pushes, and PR creation as externally visible actions. Follow any higher-priority runtime rules that require explicit user authorization.
+- Treat commits, pushes, PR creation, and PR comments as externally visible actions.
+- Follow higher-priority runtime rules that require explicit user authorization for commits or pushes.
 - Never force-push unless the user explicitly requested a history rewrite.
-- Never re-request Copilot review by writing a comment that mentions `@copilot`.
-- Never resolve a thread silently; always leave a reply first.
-- Never claim a fix was applied, a thread was resolved, or a review was re-requested unless the command output confirms it.
-- Never merge as part of this skill's default flow.
-
-## Examples
-
-These prompts should trigger this skill:
-
-- "Create a PR for my current branch and handle the Copilot review comments."
-- "Open a pull request with gh, fix Copilot feedback, and keep looping until Copilot is done."
-- "Submit this feature branch for review and re-request Copilot after each follow-up push."
-
-These prompts should not trigger this skill:
-
-- "Commit my local changes."
-- "Merge the current pull request once CI passes."
-- "Explain how GitHub Copilot code review works."
+- Never mention `@copilot` in a comment to trigger review.
+- Never claim a fix, push, reply, check status, or green CI result unless command output confirms it.
+- Never merge as part of this skill’s default flow.
 
 ## Validation Checklist
 
 - [ ] Frontmatter is valid YAML.
 - [ ] `name` is `create-pr` and matches the folder name.
-- [ ] `description` states both capability and trigger context.
-- [ ] The skill stays focused on PR creation and Copilot review loops, not merge automation.
-- [ ] All references to extra files resolve relative to the skill root.
-- [ ] No instruction tells the agent to mention `@copilot` in a comment.
-- [ ] The review loop has a bounded wait strategy and a maximum cycle cap.
+- [ ] `description` includes PR creation, dirty-worktree commit handling, Copilot review, and CI loop triggers.
+- [ ] The workflow includes an initial commit step for dirty worktrees when commits are allowed.
+- [ ] The workflow treats CI as a required wait-and-remediate loop, not just Copilot review.
+- [ ] Repeated shell operations live under `scripts/`.
+- [ ] Trigger phrases are broad enough to catch plain "create a PR" requests.
+- [ ] The skill does not instruct the agent to mention `@copilot`.
+- [ ] The loop has bounded wait policies and bounded remediation caps.

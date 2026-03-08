@@ -12,7 +12,9 @@ final class TreeShortcutHints {
     static ShortcutHints forSelection(
         NodeRef selectedNode,
         boolean repositoryRefreshable,
-        boolean selectedProfileHasParent
+        boolean selectedProfileHasParent,
+        boolean repositoryMigratable,
+        boolean repositoryCommitPushAvailable
     ) {
         if (selectedNode == null) {
             return new ShortcutHints(NAVIGATION_SHORTCUTS, List.of());
@@ -20,38 +22,62 @@ final class TreeShortcutHints {
 
         return new ShortcutHints(
             NAVIGATION_SHORTCUTS,
-            actionsForNode(selectedNode, repositoryRefreshable, selectedProfileHasParent)
+            actionsForNode(
+                selectedNode,
+                repositoryRefreshable,
+                selectedProfileHasParent,
+                repositoryMigratable,
+                repositoryCommitPushAvailable
+            )
         );
     }
 
     private static List<Shortcut> actionsForNode(
         NodeRef selectedNode,
         boolean repositoryRefreshable,
-        boolean selectedProfileHasParent
+        boolean selectedProfileHasParent,
+        boolean repositoryMigratable,
+        boolean repositoryCommitPushAvailable
     ) {
         return switch (selectedNode.kind()) {
-            case REPOSITORY -> appendRefreshActionIfAvailable(
-                List.of(
-                    Shortcut.CREATE_PROFILE,
-                    Shortcut.DELETE_REPOSITORY
-                ),
-                repositoryRefreshable
-            );
-            case PROFILE, DIRECTORY -> withParentAndRefresh(
+            case REPOSITORY -> repositoryActions(repositoryRefreshable, repositoryMigratable, repositoryCommitPushAvailable);
+            case PROFILE, DIRECTORY -> withParentRefreshAndCommitPush(
                 List.of(
                     Shortcut.USE_PROFILE,
                     Shortcut.CREATE_PROFILE,
                     Shortcut.DELETE_PROFILE
                 ),
                 selectedProfileHasParent,
-                repositoryRefreshable
+                repositoryRefreshable,
+                repositoryCommitPushAvailable
             );
-            case FILE -> withParentAndRefresh(
+            case FILE -> withParentRefreshAndCommitPush(
                 fileActions(selectedNode),
                 selectedProfileHasParent,
-                repositoryRefreshable
+                repositoryRefreshable,
+                repositoryCommitPushAvailable
             );
         };
+    }
+
+    private static List<Shortcut> repositoryActions(
+        boolean repositoryRefreshable,
+        boolean repositoryMigratable,
+        boolean repositoryCommitPushAvailable
+    ) {
+        List<Shortcut> actions = new java.util.ArrayList<>();
+        actions.add(Shortcut.CREATE_PROFILE);
+        if (repositoryCommitPushAvailable) {
+            actions.add(Shortcut.COMMIT_AND_PUSH_REPOSITORY);
+        }
+        if (repositoryMigratable) {
+            actions.add(Shortcut.MIGRATE_REPOSITORY);
+        }
+        actions.add(Shortcut.DELETE_REPOSITORY);
+        if (repositoryRefreshable) {
+            actions.add(Shortcut.REFRESH_REPOSITORY);
+        }
+        return List.copyOf(actions);
     }
 
     private static List<Shortcut> fileActions(NodeRef selectedNode) {
@@ -64,27 +90,22 @@ final class TreeShortcutHints {
         return List.copyOf(actions);
     }
 
-    private static List<Shortcut> withParentAndRefresh(
+    private static List<Shortcut> withParentRefreshAndCommitPush(
         List<Shortcut> baseActions,
         boolean selectedProfileHasParent,
-        boolean repositoryRefreshable
+        boolean repositoryRefreshable,
+        boolean repositoryCommitPushAvailable
     ) {
         List<Shortcut> actions = new java.util.ArrayList<>(baseActions);
         if (selectedProfileHasParent) {
             actions.add(Shortcut.GO_PARENT);
         }
+        if (repositoryCommitPushAvailable) {
+            actions.add(Shortcut.COMMIT_AND_PUSH_REPOSITORY);
+        }
         if (repositoryRefreshable) {
             actions.add(Shortcut.REFRESH_REPOSITORY);
         }
-        return List.copyOf(actions);
-    }
-
-    private static List<Shortcut> appendRefreshActionIfAvailable(List<Shortcut> baseActions, boolean repositoryRefreshable) {
-        if (!repositoryRefreshable) {
-            return baseActions;
-        }
-        List<Shortcut> actions = new java.util.ArrayList<>(baseActions);
-        actions.add(Shortcut.REFRESH_REPOSITORY);
         return List.copyOf(actions);
     }
 
@@ -107,6 +128,8 @@ final class TreeShortcutHints {
         static final Shortcut LEFT_RIGHT_COLLAPSE_EXPAND = new Shortcut("Left/Right", "collapse/expand");
         static final Shortcut REFRESH_REPOSITORY = new Shortcut("r", "refresh repository");
         static final Shortcut CREATE_PROFILE = new Shortcut("c", "create profile");
+        static final Shortcut COMMIT_AND_PUSH_REPOSITORY = new Shortcut("g", "commit and push");
+        static final Shortcut MIGRATE_REPOSITORY = new Shortcut("m", "migrate to git/github");
         static final Shortcut DELETE_REPOSITORY = new Shortcut("d", "delete repo");
         static final Shortcut USE_PROFILE = new Shortcut("u", "use profile");
         static final Shortcut DELETE_PROFILE = new Shortcut("d", "delete profile");

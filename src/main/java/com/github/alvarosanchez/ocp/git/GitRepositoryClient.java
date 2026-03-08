@@ -13,6 +13,9 @@ import java.nio.file.Path;
 @Singleton
 public final class GitRepositoryClient {
 
+    private static final String AUTOMATED_GIT_USER_EMAIL = "ocp@local";
+    private static final String AUTOMATED_GIT_USER_NAME = "ocp";
+
     private final GitProcessExecutor processExecutor;
 
     /**
@@ -93,29 +96,20 @@ public final class GitRepositoryClient {
         runInRepository(localPath, "clean", List.of("git", "-C", localPath.toString(), "clean", "-fd"));
     }
 
+    public void commitLocalChangesAndPush(Path localPath, String message) {
+        stageAllChanges(localPath);
+        commitChanges(localPath, message);
+        runInRepository(localPath, "push", List.of("git", "-C", localPath.toString(), "push"));
+    }
+
     /**
      * Commits all local changes and force-pushes them to the tracked branch.
      *
      * @param localPath local repository path
      */
     public void commitLocalChangesAndForcePush(Path localPath) {
-        runInRepository(localPath, "add", List.of("git", "-C", localPath.toString(), "add", "-A"));
-        runInRepository(
-            localPath,
-            "commit",
-            List.of(
-                "git",
-                "-C",
-                localPath.toString(),
-                "-c",
-                "user.email=ocp@local",
-                "-c",
-                "user.name=ocp",
-                "commit",
-                "-m",
-                "chore: persist local opencode configuration changes"
-            )
-        );
+        stageAllChanges(localPath);
+        commitChanges(localPath, "chore: persist local opencode configuration changes");
         runInRepository(localPath, "push", List.of("git", "-C", localPath.toString(), "push", "--force-with-lease"));
     }
 
@@ -169,6 +163,56 @@ public final class GitRepositoryClient {
         runInRepository(localPath, "init", List.of("git", "-C", localPath.toString(), "init", "--quiet"));
     }
 
+    public boolean hasRemote(Path localPath, String remoteName) {
+        return runExitCodeOnly(List.of("git", "-C", localPath.toString(), "remote", "get-url", remoteName)) == 0;
+    }
+
+    public String remoteUri(Path localPath, String remoteName) {
+        return runAndCapture(
+            localPath,
+            "remote get-url",
+            List.of("git", "-C", localPath.toString(), "remote", "get-url", remoteName)
+        ).trim();
+    }
+
+    public void createInitialCommit(Path localPath, String message) {
+        stageAllChanges(localPath);
+        if (hasStagedChanges(localPath)) {
+            commitChanges(localPath, message);
+        }
+    }
+
+    private void stageAllChanges(Path localPath) {
+        runInRepository(localPath, "add", List.of("git", "-C", localPath.toString(), "add", "-A"));
+    }
+
+    private boolean hasStagedChanges(Path localPath) {
+        return !runAndCapture(
+            localPath,
+            "status",
+            List.of("git", "-C", localPath.toString(), "status", "--porcelain")
+        ).trim().isEmpty();
+    }
+
+    private void commitChanges(Path localPath, String message) {
+        runInRepository(
+            localPath,
+            "commit",
+            List.of(
+                "git",
+                "-C",
+                localPath.toString(),
+                "-c",
+                "user.email=" + AUTOMATED_GIT_USER_EMAIL,
+                "-c",
+                "user.name=" + AUTOMATED_GIT_USER_NAME,
+                "commit",
+                "-m",
+                message
+            )
+        );
+    }
+
     private void runInRepository(Path localPath, String operation, List<String> command) {
         runAndCapture(localPath, operation, command);
     }
@@ -207,6 +251,19 @@ public final class GitRepositoryClient {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while running git " + operation + " for " + localPath, e);
+        }
+    }
+
+    private int runExitCodeOnly(List<String> command) {
+        try {
+            Process process = processExecutor.start(command);
+            process.getInputStream().readAllBytes();
+            return process.waitFor();
+        } catch (IOException e) {
+            return -1;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while running git command.", e);
         }
     }
 

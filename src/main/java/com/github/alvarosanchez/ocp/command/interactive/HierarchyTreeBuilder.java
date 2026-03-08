@@ -97,7 +97,8 @@ final class HierarchyTreeBuilder {
     static StyledElement<?> renderTreeNode(
         TreeNode<NodeRef> node,
         Map<String, Profile> profilesByName,
-        Map<String, String> profileParentByName
+        Map<String, String> profileParentByName,
+        Map<String, RepositoryDirtyState> repositoryDirtyStateByName
     ) {
         NodeRef data = node.data();
         if (data == null) {
@@ -121,6 +122,11 @@ final class HierarchyTreeBuilder {
         Style labelStyle = Style.EMPTY;
         boolean isCurrentProfile = false;
         boolean hasUpdates = false;
+        RepositoryDirtyState repositoryDirtyState = data.kind() == NodeKind.REPOSITORY
+            ? repositoryDirtyStateByName.getOrDefault(data.repositoryName(), RepositoryDirtyState.clean())
+            : RepositoryDirtyState.clean();
+        boolean hasLocalChanges = data.kind() == NodeKind.REPOSITORY && repositoryDirtyState.hasLocalChanges();
+        boolean inspectionFailed = data.kind() == NodeKind.REPOSITORY && repositoryDirtyState.inspectionFailed();
         if (data.kind() == NodeKind.PROFILE) {
             Profile profile = profilesByName.get(profileKey(data.repositoryName(), data.profileName()));
             if (profile != null && profile.active()) {
@@ -156,6 +162,12 @@ final class HierarchyTreeBuilder {
         }
         if (hasUpdates) {
             spans.add(Span.styled(" ❄", Style.EMPTY.bold().fg(Color.YELLOW)));
+        }
+        if (hasLocalChanges) {
+            spans.add(Span.styled(" ✏", Style.EMPTY.bold().fg(Color.YELLOW)));
+        }
+        if (inspectionFailed) {
+            spans.add(Span.styled(" !", Style.EMPTY.bold().fg(Color.RED)));
         }
 
         return richText(

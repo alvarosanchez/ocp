@@ -28,6 +28,8 @@ final class DetailPaneRenderer {
     static Element renderDetailPane(
         NodeRef selectedNode,
         boolean repositoryRefreshable,
+        boolean repositoryMigratable,
+        boolean repositoryCommitPushAvailable,
         boolean selectedProfileHasParent,
         boolean editMode,
         Map<String, Profile> profilesByName,
@@ -55,8 +57,18 @@ final class DetailPaneRenderer {
             repositoryElements.add(text("Repository").bold().fg(Color.CYAN));
             repositoryElements.add(detailField("Name", selectedNode.repositoryName()));
             repositoryElements.add(detailField("Path", String.valueOf(selectedNode.path())));
+            List<TreeShortcutHints.Shortcut> repositoryShortcuts = new ArrayList<>();
+            if (repositoryCommitPushAvailable) {
+                repositoryShortcuts.add(TreeShortcutHints.Shortcut.COMMIT_AND_PUSH_REPOSITORY);
+            }
+            if (repositoryMigratable) {
+                repositoryShortcuts.add(TreeShortcutHints.Shortcut.MIGRATE_REPOSITORY);
+            }
             if (repositoryRefreshable) {
-                repositoryElements.add(ShortcutHintRenderer.line(List.of(TreeShortcutHints.Shortcut.REFRESH_REPOSITORY)));
+                repositoryShortcuts.add(TreeShortcutHints.Shortcut.REFRESH_REPOSITORY);
+            }
+            if (!repositoryShortcuts.isEmpty()) {
+                repositoryElements.add(ShortcutHintRenderer.line(repositoryShortcuts));
             }
             return column(
                 repositoryElements.toArray(Element[]::new)

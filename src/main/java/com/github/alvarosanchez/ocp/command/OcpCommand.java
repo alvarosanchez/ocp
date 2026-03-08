@@ -3,6 +3,7 @@ package com.github.alvarosanchez.ocp.command;
 import com.github.alvarosanchez.ocp.command.interactive.InteractiveApp;
 import com.github.alvarosanchez.ocp.service.OnboardingService;
 import com.github.alvarosanchez.ocp.service.ProfileService;
+import com.github.alvarosanchez.ocp.service.RepositoryPostCreationService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
 import com.github.alvarosanchez.ocp.service.VersionCheckService;
 import io.micronaut.configuration.picocli.MicronautFactory;
@@ -35,6 +36,7 @@ public class OcpCommand implements Runnable {
     private final ProfileService profileService;
     private final RepositoryService repositoryService;
     private final OnboardingService onboardingService;
+    private final RepositoryPostCreationService repositoryPostCreationService;
     private final ObjectMapper objectMapper;
 
     @Inject
@@ -42,11 +44,13 @@ public class OcpCommand implements Runnable {
         ProfileService profileService,
         RepositoryService repositoryService,
         OnboardingService onboardingService,
+        RepositoryPostCreationService repositoryPostCreationService,
         ObjectMapper objectMapper
     ) {
         this.profileService = profileService;
         this.repositoryService = repositoryService;
         this.onboardingService = onboardingService;
+        this.repositoryPostCreationService = repositoryPostCreationService;
         this.objectMapper = objectMapper;
     }
 
@@ -168,6 +172,6 @@ public class OcpCommand implements Runnable {
     }
 
     InteractiveApp createInteractiveApp() {
-        return new InteractiveApp(profileService, repositoryService, onboardingService, objectMapper);
+        return new InteractiveApp(profileService, repositoryService, onboardingService, repositoryPostCreationService, objectMapper);
     }
 }

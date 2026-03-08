@@ -83,8 +83,9 @@ Rules:
 - `repositories[*].uri` is optional (`null` for file-based repositories).
 - `repositories[*].name` is required.
 - `repositories[*].localPath` is required after normalization.
-  - Git-backed repository: derived from repository storage directory and repository name.
+  - Git-backed repository: derived from repository storage directory and repository name when no explicit local path is stored.
   - File-based repository: normalized absolute path provided by the user.
+  - A repository entry may store both `uri` and `localPath` when a local repository later gains a remote Git URI; in that case `localPath` remains authoritative.
 
 ### `repository.json` schema
 
@@ -162,7 +163,7 @@ oss/opencode.json
 - Source detection:
   - Git URI-like values are treated as remote repositories and cloned.
   - Local path-like values (including `.`) are resolved to absolute paths and registered as file-based repositories.
-- For Git-backed repositories, compute `localPath` from repository storage directory and repository name.
+- For Git-backed repositories, compute `localPath` from repository storage directory and repository name when `localPath` is absent; preserve explicit configured `localPath` when present.
 - For file-based repositories, persist `uri = null` and `localPath = <normalized absolute path>`.
 
 ### Repository deletion semantics
@@ -200,12 +201,22 @@ oss/opencode.json
   - File-based repos ask whether to also delete the local folder.
 - In interactive mode, `c` (create profile) creates the profile inside the currently selected repository context (repository, profile, or file node), and prompts for optional inheritance using a selectable list of all resolvable profile names across configured repositories.
 - In interactive mode, action keys are explicit: `r` refresh selected repository, `R` refresh all repositories, `u` use selected profile, `e` edit selected file, and `p` jump to the selected profile's parent; `Enter` does not trigger these actions.
+- In interactive mode, selecting a file-based repository node also exposes `m` to migrate that repository into the shared Git/GitHub post-creation flow.
+- In interactive mode, selecting a git-backed repository node with local uncommitted changes also exposes `g` to prompt for a commit message, commit all local changes, and push them to the tracked remote branch.
+- In interactive mode, git-backed repository nodes with local uncommitted changes are visually marked in the tree.
 - In interactive mode, refresh (`r`) is shown only when the selected repository context is git-backed; file-based repositories do not offer refresh actions.
 - Interactive tree profile nodes visually show inheritance using a relationship marker (`👤 child ⇢ 👤 parent`).
 - Interactive tree includes inherited parent-only files under child profiles as read-only file nodes with subdued styling; inherited files cannot be edited.
-- In interactive mode, repository scaffold creation prompts for directory name, location path, and optional initial profile name; after scaffolding, the repository is automatically added to the registry.
+- In interactive mode, repository scaffold creation prompts for directory name, location path, and optional initial profile name; after scaffolding, the repository is automatically added to the registry as a file-based repository.
+- In interactive mode, after local repository add/create and onboarding import, OCP runs a shared optional post-creation flow:
+  - Offers git initialization with an initial commit (default: `yes` for interactive create and onboarding, `no` for adding existing local repositories).
+  - Skips git initialization prompt when the repository already contains `.git`.
+  - Offers optional GitHub publish via `gh repo create <name> --source <path> --remote origin --push --private|--public` (default: `no`, visibility default: `private`) only when `gh auth status` succeeds and `origin` does not already exist.
+  - On successful publish, persists the discovered `origin` URI into the configured repository entry while preserving the explicit `localPath`.
+  - If a file-based repository already has a configured `origin` remote when that flow starts, OCP persists that existing `origin` URI immediately instead of prompting for GitHub publish again.
+  - Failure in the optional post-creation flow does not roll back a successful add/create/onboarding operation.
 - File preview syntax highlighting in interactive mode uses external `bat` when available; if `bat` is unavailable or fails, preview falls back to plain text.
-- On first interactive launch, when either `config.json` does not exist or it exists but contains no repositories and no active profile (only version-check metadata), and `~/.config/opencode/` contains whitelisted top-level config files (`opencode.json`, `opencode.jsonc`, `tui.json`, `tui.jsonc`, `oh-my-opencode.json`, `oh-my-opencode.jsonc`), the UI offers to import those files into a newly created local repository under `~/.config/ocp/repositories/`, asks for a repository name and profile name, and activates that profile.
+- On first interactive launch, when either `config.json` does not exist or it exists but contains no repositories and no active profile (only version-check metadata), and `~/.config/opencode/` contains whitelisted top-level config files (`opencode.json`, `opencode.jsonc`, `tui.json`, `tui.jsonc`, `oh-my-opencode.json`, `oh-my-opencode.jsonc`), the UI offers to import those files into a newly created local repository under `~/.config/ocp/repositories/`, asks for a repository name and profile name, activates that profile, and then offers the same optional post-creation Git/GitHub flow.
 - If interactive UI initialization fails, behavior falls back to standard Picocli root usage output.
 
 ### Profile switching and backups (target behavior)
@@ -252,7 +263,7 @@ oss/opencode.json
   - exits `0`
   - output contains `Usage: ocp`
 - `ocp`
-  - in interactive first-run mode when there are no configured repositories and no active profile (even if `config.json` exists only with cached version-check metadata) and importable whitelisted OpenCode config files, offers onboarding to import them into a local repository, create a named profile, and activate it
+  - in interactive first-run mode when there are no configured repositories and no active profile (even if `config.json` exists only with cached version-check metadata) and importable whitelisted OpenCode config files, offers onboarding to import them into a local repository, create a named profile, activate it, and then offer the optional post-creation Git/GitHub flow
 - `ocp profile list`
   - with no repositories/profiles: exits `0`, prints helpful empty-state message
   - with multiple repositories: outputs a table sorted by profile name with columns `NAME`, `DESCRIPTION`, `ACTIVE`, `VERSION`, `LAST UPDATED`, `MESSAGE`, and includes `REPOSITORY` when it fits within the width budget (repository name)

@@ -12,6 +12,7 @@ final class PromptState {
     int currentField;
     String expectedConfirmation;
     String contextRepositoryName;
+    PostCreationFlowState postCreationFlowState;
 
     private PromptState(PromptAction action, String title, List<String> labels, List<List<String>> options) {
         this.action = action;
