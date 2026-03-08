@@ -164,15 +164,21 @@ public final class GitRepositoryClient {
     }
 
     public boolean hasRemote(Path localPath, String remoteName) {
-        int exitCode = runExitCodeOnly(
+        GitCommandResult result = runGitAndCaptureExitCode(
             localPath,
             "remote get-url",
             List.of("git", "-C", localPath.toString(), "remote", "get-url", remoteName)
         );
-        return switch (exitCode) {
+        return switch (result.exitCode()) {
             case 0 -> true;
             case 2 -> false;
-            default -> throw new IllegalStateException("git remote get-url failed for " + localPath + " (exit code " + exitCode + ")");
+            default -> {
+                String trimmedOutput = result.output().trim();
+                String detail = trimmedOutput.isEmpty() ? "" : ": " + trimmedOutput;
+                throw new IllegalStateException(
+                    "git remote get-url failed for " + localPath + " (exit code " + result.exitCode() + ")" + detail
+                );
+            }
         };
     }
 
@@ -282,6 +288,20 @@ public final class GitRepositoryClient {
         return false;
     }
 
+    private GitCommandResult runGitAndCaptureExitCode(Path localPath, String operation, List<String> command) {
+        try {
+            Process process = processExecutor.start(command);
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            int exitCode = process.waitFor();
+            return new GitCommandResult(exitCode, output);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to run git " + operation + " in repository " + localPath, e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while running git " + operation + " in repository " + localPath, e);
+        }
+    }
+
     private int runExitCodeOnly(Path localPath, String operation, List<String> command) {
         try {
             Process process = processExecutor.start(command);
@@ -303,5 +323,8 @@ public final class GitRepositoryClient {
      * @param message commit message subject
      */
     public record CommitMetadata(String shortSha, long epochSeconds, String message) {
+    }
+
+    private record GitCommandResult(int exitCode, String output) {
     }
 }

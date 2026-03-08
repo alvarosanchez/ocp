@@ -180,7 +180,11 @@ public final class RepositoryService {
             throw new IllegalStateException("Repository `" + repository.name() + "` does not define a local path.");
         }
         boolean gitBacked = repository.isGitBacked();
-        boolean hasLocalChanges = gitBacked && hasGitLocalChanges(Path.of(localPath));
+        Path path = Path.of(localPath);
+        if (gitBacked && (!Files.isDirectory(path) || !Files.exists(path.resolve(".git")))) {
+            throw new IllegalStateException("Repository `" + repository.name() + "` is not available as a local git checkout at " + path + ".");
+        }
+        boolean hasLocalChanges = gitBacked && hasGitLocalChanges(path);
         return new RepositoryCommitPushPreview(
             repository.name(),
             repository.uri(),
