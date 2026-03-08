@@ -164,7 +164,17 @@ public final class GitRepositoryClient {
     }
 
     public boolean hasRemote(Path localPath, String remoteName) {
-        return runExitCodeOnly(localPath, "remote get-url", List.of("git", "-C", localPath.toString(), "remote", "get-url", remoteName)) == 0;
+        String output = runAndCaptureAllowingExitCode(
+            localPath,
+            "remote get-url",
+            List.of("git", "-C", localPath.toString(), "remote", "get-url", remoteName),
+            0,
+            2
+        );
+        if (output.contains("No such remote")) {
+            return false;
+        }
+        return true;
     }
 
     public String remoteUri(Path localPath, String remoteName) {
@@ -240,11 +250,15 @@ public final class GitRepositoryClient {
     }
 
     private String runAndCapture(Path localPath, String operation, List<String> command) {
+        return runAndCaptureAllowingExitCode(localPath, operation, command, 0);
+    }
+
+    private String runAndCaptureAllowingExitCode(Path localPath, String operation, List<String> command, int... allowedExitCodes) {
         try {
             Process process = processExecutor.start(command);
             String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             int exitCode = process.waitFor();
-            if (exitCode != 0) {
+            if (!contains(allowedExitCodes, exitCode)) {
                 throw new IllegalStateException("git " + operation + " failed for " + localPath + " (exit code " + exitCode + ")");
             }
             return output;
@@ -254,6 +268,15 @@ public final class GitRepositoryClient {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while running git " + operation + " in repository " + localPath, e);
         }
+    }
+
+    private boolean contains(int[] values, int value) {
+        for (int candidate : values) {
+            if (candidate == value) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private int runExitCodeOnly(Path localPath, String operation, List<String> command) {
