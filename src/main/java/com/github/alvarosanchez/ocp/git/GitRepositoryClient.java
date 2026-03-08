@@ -262,10 +262,10 @@ public final class GitRepositoryClient {
             process.getInputStream().readAllBytes();
             return process.waitFor();
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to " + operation + " git repository " + localPath, e);
+            throw new IllegalStateException("Failed to run git " + operation + " in repository " + localPath, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while running git " + operation + " for " + localPath, e);
+            throw new IllegalStateException("Interrupted while running git " + operation + " in repository " + localPath, e);
         }
     }
 
