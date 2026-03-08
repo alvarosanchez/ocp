@@ -1771,7 +1771,7 @@ public final class InteractiveApp extends ToolkitApp {
             }
             return;
         }
-        
+
         busy = true;
         busyMessage = message;
         spinnerIndex = 0;
