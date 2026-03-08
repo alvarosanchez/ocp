@@ -216,7 +216,11 @@ public final class RepositoryService {
         if (truncated.length() > MAX_LOCAL_DIFF_CHARS) {
             truncated = truncated.substring(0, MAX_LOCAL_DIFF_CHARS);
         }
-        return truncated + "\n... diff truncated for preview ...";
+        String suffix = "\n... diff truncated for preview ...";
+        if (truncated.length() + suffix.length() > MAX_LOCAL_DIFF_CHARS) {
+            truncated = truncated.substring(0, Math.max(0, MAX_LOCAL_DIFF_CHARS - suffix.length()));
+        }
+        return truncated + suffix;
     }
 
     public void commitAndPush(String repositoryName, String commitMessage) {
