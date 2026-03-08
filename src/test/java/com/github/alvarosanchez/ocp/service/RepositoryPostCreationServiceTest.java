@@ -104,7 +104,7 @@ class RepositoryPostCreationServiceTest {
     @Test
     void runInitializesGitAndCreatesInitialCommitWhenRequested() throws IOException {
         StubGitProcessExecutor gitProcessExecutor = new StubGitProcessExecutor(
-            List.of(new StubProcess(0, ""), new StubProcess(0, " M repository.json\n"), new StubProcess(0, ""), new StubProcess(0, ""))
+            List.of(new StubProcess(0, ""), new StubProcess(0, " M repository.json\n"), new StubProcess(0, ""))
         );
         StubGhProcessExecutor ghProcessExecutor = new StubGhProcessExecutor(List.of());
         RepositoryPostCreationService service = postCreationService(gitProcessExecutor, ghProcessExecutor);

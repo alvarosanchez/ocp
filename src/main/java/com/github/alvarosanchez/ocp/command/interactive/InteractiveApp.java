@@ -159,6 +159,7 @@ public final class InteractiveApp extends ToolkitApp {
     private boolean editMode;
     private boolean batAvailable;
     private long previewRequestSequence;
+    private long repositoryDirtyStateRefreshSequence;
     private int previewScrollOffset;
 
     public InteractiveApp(
@@ -1079,7 +1080,7 @@ public final class InteractiveApp extends ToolkitApp {
             repositories = List.of();
             status = "Error loading repositories: " + e.getMessage();
         }
-        repositoryDirtyStateByName = loadRepositoryDirtyStateByName(repositories);
+        repositoryDirtyStateByName = loadImmediateRepositoryDirtyStateByName(repositories);
 
         Map<String, Profile> byName = new HashMap<>();
         for (Profile profile : profiles) {
@@ -1100,6 +1101,7 @@ public final class InteractiveApp extends ToolkitApp {
         hierarchyTree.selected(Math.max(0, previousSelection));
         syncSelectionAndPreview();
         refreshSelectedRepositoryCommitPushPreview();
+        refreshRepositoryDirtyStateByNameInBackground(repositories);
     }
 
     private List<TreeNode<NodeRef>> buildHierarchyTree() {
@@ -1424,6 +1426,14 @@ public final class InteractiveApp extends ToolkitApp {
         return null;
     }
 
+    private Map<String, RepositoryDirtyState> loadImmediateRepositoryDirtyStateByName(List<ConfiguredRepository> configuredRepositories) {
+        Map<String, RepositoryDirtyState> dirtyStateByName = new HashMap<>();
+        for (ConfiguredRepository repository : configuredRepositories) {
+            dirtyStateByName.put(repository.name(), RepositoryDirtyState.clean());
+        }
+        return Map.copyOf(dirtyStateByName);
+    }
+
     private Map<String, RepositoryDirtyState> loadRepositoryDirtyStateByName(List<ConfiguredRepository> configuredRepositories) {
         Map<String, RepositoryDirtyState> dirtyStateByName = new HashMap<>();
         for (ConfiguredRepository repository : configuredRepositories) {
@@ -1446,6 +1456,25 @@ public final class InteractiveApp extends ToolkitApp {
             }
         }
         return Map.copyOf(dirtyStateByName);
+    }
+
+    private void refreshRepositoryDirtyStateByNameInBackground(List<ConfiguredRepository> configuredRepositories) {
+        if (runner() == null) {
+            repositoryDirtyStateByName = loadRepositoryDirtyStateByName(configuredRepositories);
+            return;
+        }
+        long refreshSequence = ++repositoryDirtyStateRefreshSequence;
+        List<ConfiguredRepository> repositoriesSnapshot = List.copyOf(configuredRepositories);
+        Thread.ofVirtual().start(() -> {
+            Map<String, RepositoryDirtyState> refreshedDirtyStateByName = loadRepositoryDirtyStateByName(repositoriesSnapshot);
+            runner().runOnRenderThread(() -> {
+                if (refreshSequence != repositoryDirtyStateRefreshSequence) {
+                    return;
+                }
+                repositoryDirtyStateByName = refreshedDirtyStateByName;
+                refreshSelectedRepositoryCommitPushPreview();
+            });
+        });
     }
 
     private void refreshSelectedRepositoryCommitPushPreview() {
