@@ -212,8 +212,11 @@ public final class RepositoryService {
         if (diff.length() <= MAX_LOCAL_DIFF_CHARS && diff.lines().count() <= MAX_LOCAL_DIFF_LINES) {
             return diff;
         }
-        return diff.lines().limit(MAX_LOCAL_DIFF_LINES).collect(Collectors.joining("\n"))
-            + "\n... diff truncated for preview ...";
+        String truncated = diff.lines().limit(MAX_LOCAL_DIFF_LINES).collect(Collectors.joining("\n"));
+        if (truncated.length() > MAX_LOCAL_DIFF_CHARS) {
+            truncated = truncated.substring(0, MAX_LOCAL_DIFF_CHARS);
+        }
+        return truncated + "\n... diff truncated for preview ...";
     }
 
     public void commitAndPush(String repositoryName, String commitMessage) {
