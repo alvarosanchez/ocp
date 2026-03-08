@@ -27,7 +27,7 @@ public final class RepositoryService {
 
     private static final int MAX_LOCAL_DIFF_LINES = 400;
     private static final int MAX_LOCAL_DIFF_CHARS = 32_000;
-    private static final Pattern ANSI_ESCAPE_PATTERN = Pattern.compile("\\u001B\\[[;\\d]*m");
+    private static final Pattern ANSI_ESCAPE_PATTERN = Pattern.compile("\\u001B\\[[;?0-9]*[ -/]*[@-~]");
 
     private final ObjectMapper objectMapper;
     private final GitRepositoryClient gitRepositoryClient;
