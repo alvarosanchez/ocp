@@ -410,6 +410,24 @@ class RepositoryServiceTest {
     }
 
     @Test
+    void setRepositoryUriReturnsNormalizedEntryWhenStoredNameContainsWhitespace() throws IOException {
+        Path localRepository = tempDir.resolve("local-repository").toAbsolutePath().normalize();
+        Files.createDirectories(localRepository);
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("  local  ", null, localRepository.toString()))
+            )
+        );
+
+        RepositoryEntry updated = repositoryService.setRepositoryUri("local", "git@github.com:acme/local.git");
+
+        assertEquals("local", updated.name());
+        assertEquals("git@github.com:acme/local.git", updated.uri());
+        assertEquals(localRepository.toString(), updated.localPath());
+    }
+
+    @Test
     void createAndAddRollsBackCreatedRepositoryWhenAddFails() throws IOException {
         Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path existingRepository = tempDir.resolve("existing-repository");

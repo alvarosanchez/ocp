@@ -298,7 +298,7 @@ public final class RepositoryService {
             updated.add(new RepositoryEntry(repository.name(), normalizedRepositoryUri, repository.localPath()));
         }
         saveConfig(new OcpConfigFile(configFile.config(), updated));
-        return findConfiguredRepository(normalizedRepositoryName, updated);
+        return findConfiguredRepository(normalizedRepositoryName, load());
     }
 
     private Path plannedRepositoryPath(String normalizedRepositoryName, String repositoryLocation) {
