@@ -168,6 +168,49 @@ public final class RepositoryService {
         );
     }
 
+    public RepositoryCommitPushPreview inspectCommitPush(String repositoryName) {
+        String normalizedRepositoryName = normalizeRepositoryName(repositoryName);
+        RepositoryEntry repository = findConfiguredRepository(normalizedRepositoryName, load());
+        boolean gitBacked = repository.isGitBacked();
+        boolean hasLocalChanges = gitBacked && hasGitLocalChanges(Path.of(repository.localPath()));
+        return new RepositoryCommitPushPreview(
+            repository.name(),
+            repository.uri(),
+            repository.localPath(),
+            gitBacked,
+            hasLocalChanges
+        );
+    }
+
+    public String getLocalDiff(String repositoryName) {
+        String normalizedRepositoryName = normalizeRepositoryName(repositoryName);
+        RepositoryEntry repository = findConfiguredRepository(normalizedRepositoryName, load());
+        if (!repository.isGitBacked()) {
+            throw new IllegalStateException("Repository `" + normalizedRepositoryName + "` is file-based.");
+        }
+        return gitRepositoryClient.localDiff(Path.of(repository.localPath()));
+    }
+
+    public void commitAndPush(String repositoryName, String commitMessage) {
+        String normalizedRepositoryName = normalizeRepositoryName(repositoryName);
+        String normalizedCommitMessage = normalizeBlankToNull(commitMessage);
+        if (normalizedCommitMessage == null) {
+            throw new IllegalStateException("Commit message is required.");
+        }
+
+        RepositoryEntry repository = findConfiguredRepository(normalizedRepositoryName, load());
+        if (!repository.isGitBacked()) {
+            throw new IllegalStateException("Repository `" + normalizedRepositoryName + "` is file-based; nothing to push.");
+        }
+
+        Path localPath = Path.of(repository.localPath());
+        if (!hasGitLocalChanges(localPath)) {
+            throw new IllegalStateException("Repository `" + normalizedRepositoryName + "` has no local changes to commit.");
+        }
+
+        gitRepositoryClient.commitLocalChangesAndPush(localPath, normalizedCommitMessage);
+    }
+
     /**
      * Creates a new repository scaffold in the working directory.
      *
@@ -180,6 +223,12 @@ public final class RepositoryService {
     }
 
     public Path create(String repositoryName, String profileName, String repositoryLocation) {
+        Path repositoryPath = createScaffold(repositoryName, profileName, repositoryLocation);
+        gitRepositoryClient.init(repositoryPath);
+        return repositoryPath;
+    }
+
+    public Path createScaffold(String repositoryName, String profileName, String repositoryLocation) {
         String normalizedRepositoryName = normalizeRepositoryName(repositoryName);
 
         Path repositoryPath = plannedRepositoryPath(normalizedRepositoryName, repositoryLocation);
@@ -198,7 +247,6 @@ public final class RepositoryService {
 
             String content = objectMapper.writeValueAsString(new RepositoryConfigFile(profiles));
             Files.writeString(repositoryPath.resolve("repository.json"), content);
-            gitRepositoryClient.init(repositoryPath);
             return repositoryPath;
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to create repository at " + repositoryPath, e);
@@ -210,7 +258,7 @@ public final class RepositoryService {
         Path createdRepository = plannedRepositoryPath(normalizedRepositoryName, repositoryLocation);
         boolean repositoryPathExistedBefore = Files.exists(createdRepository);
         try {
-            Path repositoryPath = create(normalizedRepositoryName, profileName, repositoryLocation);
+            Path repositoryPath = createScaffold(normalizedRepositoryName, profileName, repositoryLocation);
             return add(repositoryPath.toString(), normalizedRepositoryName);
         } catch (RuntimeException e) {
             if (!repositoryPathExistedBefore && Files.exists(createdRepository)) {
@@ -218,6 +266,37 @@ public final class RepositoryService {
             }
             throw e;
         }
+    }
+
+    public RepositoryEntry setRepositoryUri(String repositoryName, String repositoryUri) {
+        String normalizedRepositoryName = normalizeRepositoryName(repositoryName);
+        String normalizedRepositoryUri = normalizeBlankToNull(repositoryUri);
+        if (normalizedRepositoryUri == null) {
+            throw new IllegalStateException("Repository URI is required.");
+        }
+
+        OcpConfigFile configFile = loadConfigFile();
+        List<RepositoryEntry> repositories = new ArrayList<>(load());
+        RepositoryEntry target = findConfiguredRepository(normalizedRepositoryName, repositories);
+        for (RepositoryEntry repository : repositories) {
+            if (repository.name().equals(normalizedRepositoryName)) {
+                continue;
+            }
+            if (normalizedRepositoryUri.equals(repository.uri())) {
+                throw new IllegalStateException("Repository URI `" + normalizedRepositoryUri + "` is already configured.");
+            }
+        }
+
+        List<RepositoryEntry> updated = new ArrayList<>();
+        for (RepositoryEntry repository : repositories) {
+            if (!repository.name().equals(normalizedRepositoryName)) {
+                updated.add(repository);
+                continue;
+            }
+            updated.add(new RepositoryEntry(repository.name(), normalizedRepositoryUri, target.localPath()));
+        }
+        saveConfig(new OcpConfigFile(configFile.config(), updated));
+        return findConfiguredRepository(normalizedRepositoryName, updated);
     }
 
     private Path plannedRepositoryPath(String normalizedRepositoryName, String repositoryLocation) {
@@ -261,7 +340,11 @@ public final class RepositoryService {
             String uri = normalizeBlankToNull(entry.uri());
             String localPath = normalizeBlankToNull(entry.localPath());
             if (uri != null) {
-                localPath = normalizeAbsolutePath(repositoriesDirectory().resolve(name)).toString();
+                if (localPath == null) {
+                    localPath = normalizeAbsolutePath(repositoriesDirectory().resolve(name)).toString();
+                } else {
+                    localPath = normalizeAbsolutePath(Path.of(localPath)).toString();
+                }
             } else {
                 if (localPath == null) {
                     continue;
@@ -408,6 +491,15 @@ public final class RepositoryService {
     }
 
     public record RepositoryDeletePreview(
+        String name,
+        String uri,
+        String localPath,
+        boolean gitBacked,
+        boolean hasLocalChanges
+    ) {
+    }
+
+    public record RepositoryCommitPushPreview(
         String name,
         String uri,
         String localPath,

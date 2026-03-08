@@ -93,13 +93,19 @@ public final class GitRepositoryClient {
         runInRepository(localPath, "clean", List.of("git", "-C", localPath.toString(), "clean", "-fd"));
     }
 
+    public void commitLocalChangesAndPush(Path localPath, String message) {
+        stageAllChanges(localPath);
+        commitChanges(localPath, message);
+        runInRepository(localPath, "push", List.of("git", "-C", localPath.toString(), "push"));
+    }
+
     /**
      * Commits all local changes and force-pushes them to the tracked branch.
      *
      * @param localPath local repository path
      */
     public void commitLocalChangesAndForcePush(Path localPath) {
-        runInRepository(localPath, "add", List.of("git", "-C", localPath.toString(), "add", "-A"));
+        stageAllChanges(localPath);
         runInRepository(
             localPath,
             "commit",
@@ -169,6 +175,31 @@ public final class GitRepositoryClient {
         runInRepository(localPath, "init", List.of("git", "-C", localPath.toString(), "init", "--quiet"));
     }
 
+    public boolean hasRemote(Path localPath, String remoteName) {
+        return runExitCodeOnly(List.of("git", "-C", localPath.toString(), "remote", "get-url", remoteName)) == 0;
+    }
+
+    public String remoteUri(Path localPath, String remoteName) {
+        return runAndCapture(
+            localPath,
+            "remote get-url",
+            List.of("git", "-C", localPath.toString(), "remote", "get-url", remoteName)
+        ).trim();
+    }
+
+    public void createInitialCommit(Path localPath, String message) {
+        stageAllChanges(localPath);
+        commitChanges(localPath, message);
+    }
+
+    private void stageAllChanges(Path localPath) {
+        runInRepository(localPath, "add", List.of("git", "-C", localPath.toString(), "add", "-A"));
+    }
+
+    private void commitChanges(Path localPath, String message) {
+        runInRepository(localPath, "commit", List.of("git", "-C", localPath.toString(), "commit", "-m", message));
+    }
+
     private void runInRepository(Path localPath, String operation, List<String> command) {
         runAndCapture(localPath, operation, command);
     }
@@ -207,6 +238,19 @@ public final class GitRepositoryClient {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while running git " + operation + " for " + localPath, e);
+        }
+    }
+
+    private int runExitCodeOnly(List<String> command) {
+        try {
+            Process process = processExecutor.start(command);
+            process.getInputStream().readAllBytes();
+            return process.waitFor();
+        } catch (IOException e) {
+            return -1;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while running git command.", e);
         }
     }
 
