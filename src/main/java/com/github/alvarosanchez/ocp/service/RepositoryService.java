@@ -208,7 +208,7 @@ public final class RepositoryService {
         }
 
         Path localPath = Path.of(repository.localPath());
-        if (!Files.isDirectory(localPath) || !Files.isDirectory(localPath.resolve(".git"))) {
+        if (!Files.isDirectory(localPath) || !Files.exists(localPath.resolve(".git"))) {
             throw new IllegalStateException(
                 "Repository `" + normalizedRepositoryName + "` is not available as a local git checkout at " + localPath + "."
             );
