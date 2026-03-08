@@ -169,13 +169,11 @@ public final class GitRepositoryClient {
             "remote get-url",
             List.of("git", "-C", localPath.toString(), "remote", "get-url", remoteName)
         );
-        if (exitCode == 0) {
-            return true;
-        }
-        if (exitCode == 2) {
-            return false;
-        }
-        throw new IllegalStateException("git remote get-url failed for " + localPath + " (exit code " + exitCode + ")");
+        return switch (exitCode) {
+            case 0 -> true;
+            case 2 -> false;
+            default -> throw new IllegalStateException("git remote get-url failed for " + localPath + " (exit code " + exitCode + ")");
+        };
     }
 
     public String remoteUri(Path localPath, String remoteName) {
