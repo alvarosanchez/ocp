@@ -211,6 +211,7 @@ Validation rule for execution:
 
 - A follow-up push is incomplete until `request-copilot-review.sh` has been run for that PR.
 - Treat a successful re-request as grounded only when command output confirms which reviewer slug was accepted.
+- Record the PR head SHA at re-request time and use it as the review-completion target for the next Copilot wait cycle.
 - If all reviewer-request attempts fail because the repository does not support it, report that limitation explicitly and only continue if automatic Copilot review still appears on subsequent pushes.
 
 If all reviewer-request attempts fail because the repository does not support it, report that limitation and continue waiting only if automatic review still appears on new pushes.
@@ -225,13 +226,20 @@ Run this combined cycle until terminal success or a documented blocker:
 4. verify locally
 5. commit and push when allowed
 6. re-request Copilot review after pushes
-7. wait for Copilot review state once CI is green for the current head
-8. process new Copilot comments
-9. fix code when needed
-10. verify locally
-11. commit and push when allowed
-12. re-request Copilot review after pushes
-13. wait again for CI first, then Copilot
+7. wait for Copilot review completion for the re-requested latest green head
+8. confirm Copilot has either posted review activity for that head or hit a clearly reported timeout/limitation
+9. process new Copilot comments
+10. fix code when needed
+11. verify locally
+12. commit and push when allowed
+13. re-request Copilot review after pushes
+14. wait again for CI first, then Copilot
+
+Copilot review completion rule:
+
+- Do not treat `zero unresolved threads` alone as proof that Copilot is finished for the latest green head.
+- After a re-request, wait until Copilot has produced observable review activity for that head (review, thread, or comment) or until the bounded wait policy expires and you report the timeout/limitation explicitly.
+- Only after that completion check may you decide that there are no actionable Copilot comments remaining.
 
 Default caps:
 
@@ -247,6 +255,7 @@ Stop only when all of these are true:
 
 - no unresolved required CI failures remain
 - required checks are green or otherwise successful
+- Copilot review for the latest green CI head has completed or timed out with an explicit reported limitation
 - no new actionable Copilot comments remain after the latest green CI head has been reviewed
 - zero unresolved Copilot-owned review threads remain in the latest fetched review-thread set
 - the branch reflects all fixes already pushed to the PR
