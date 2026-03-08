@@ -17,3 +17,5 @@ if [[ -z "$upstream" ]]; then
 else
   git push
 fi
+
+printf 'head_sha=%s\n' "$(git rev-parse HEAD)"

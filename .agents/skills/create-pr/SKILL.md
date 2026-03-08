@@ -12,7 +12,7 @@ metadata:
 
 ## Goal
 
-Create or update a GitHub PR for the current feature branch, including an initial commit when local changes are present and commits are allowed, then keep the PR moving through both Copilot review and CI until there are no remaining actionable Copilot comments and required checks are green.
+Create or update a GitHub PR for the current feature branch, including an initial commit when local changes are present and commits are allowed, then keep the PR moving through a CI-green-first loop followed by a Copilot review loop until there are no remaining actionable Copilot comments and required checks are green.
 
 ## When To Use
 
@@ -119,24 +119,26 @@ If no PR exists, create one with a prepared title/body:
 
 Then run `./scripts/pr-view.sh` again and record the PR number and URL.
 
-### 5. Wait for both Copilot review and CI
+### 5. Wait for CI first, then Copilot review
 
-Treat Copilot review and CI as separate required wait states. Do not stop after one succeeds while the other is still pending.
+CI and Copilot review are both required, but the default loop order is CI first, then Copilot review. Do not treat Copilot review as terminal while required checks are still failing or incomplete.
 
 Run:
 
 ```bash
-./scripts/copilot-review-state.sh <owner> <repo> <pr-number>
 ./scripts/ci-status.sh <pr-number>
+./scripts/copilot-review-state.sh <owner> <repo> <pr-number>
 ```
 
 Default bounded waiting policy:
 
 - poll every 30 seconds for the first 5 minutes
 - then poll every 60 seconds up to 20 minutes total per cycle
-- if neither Copilot nor CI has produced usable state by then, report the timeout clearly
+- if neither CI nor Copilot has produced usable state by then, report the timeout clearly
 
-### 6. Process Copilot review comments
+### 6. Process Copilot review comments after CI is green
+
+Only enter the Copilot remediation loop after required CI checks are green or otherwise successful for the current PR head. If CI is still failing or pending, continue the CI loop first.
 
 Treat a thread as Copilot-owned when the author login matches one of these values:
 
@@ -203,20 +205,33 @@ After a follow-up push, re-request Copilot review without mentioning `@copilot` 
 ./scripts/request-copilot-review.sh <owner> <repo> <pr-number>
 ```
 
+This is a required step after every remediation push, not an optional best-effort extra. Do not continue to the next wait cycle until you have attempted the re-request and recorded the concrete result.
+
+Validation rule for execution:
+
+- A follow-up push is incomplete until `request-copilot-review.sh` has been run for that PR.
+- Treat a successful re-request as grounded only when command output confirms which reviewer slug was accepted.
+- If all reviewer-request attempts fail because the repository does not support it, report that limitation explicitly and only continue if automatic Copilot review still appears on subsequent pushes.
+
 If all reviewer-request attempts fail because the repository does not support it, report that limitation and continue waiting only if automatic review still appears on new pushes.
 
-### 10. Repeat the combined PR loop with hard caps
+### 10. Repeat the PR loop with CI first, then Copilot
 
 Run this combined cycle until terminal success or a documented blocker:
 
-1. wait for Copilot and CI state
-2. process new Copilot comments
-3. investigate failing CI checks
-4. fix code when needed
-5. verify locally
-6. commit and push when allowed
-7. re-request Copilot review after pushes
-8. wait again for both Copilot and CI
+1. wait for CI state
+2. investigate failing CI checks
+3. fix code when needed
+4. verify locally
+5. commit and push when allowed
+6. re-request Copilot review after pushes
+7. wait for Copilot review state once CI is green for the current head
+8. process new Copilot comments
+9. fix code when needed
+10. verify locally
+11. commit and push when allowed
+12. re-request Copilot review after pushes
+13. wait again for CI first, then Copilot
 
 Default caps:
 
@@ -230,10 +245,10 @@ If a cap is reached, stop and report why the loop did not converge.
 
 Stop only when all of these are true:
 
-- no new actionable Copilot comments remain
-- zero unresolved Copilot-owned review threads remain in the latest fetched review-thread set
 - no unresolved required CI failures remain
 - required checks are green or otherwise successful
+- no new actionable Copilot comments remain after the latest green CI head has been reviewed
+- zero unresolved Copilot-owned review threads remain in the latest fetched review-thread set
 - the branch reflects all fixes already pushed to the PR
 
 Do not merge the PR as part of this skill unless a higher-priority instruction explicitly expands scope.
