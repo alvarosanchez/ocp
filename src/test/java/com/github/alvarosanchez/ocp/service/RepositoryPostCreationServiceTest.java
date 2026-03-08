@@ -133,7 +133,7 @@ class RepositoryPostCreationServiceTest {
     @Test
     void runPublishesToGitHubAndPersistsOriginUri() throws IOException {
         StubGitProcessExecutor gitProcessExecutor = new StubGitProcessExecutor(
-            List.of(new StubProcess(1, ""), new StubProcess(0, "git@github.com:acme/repo-publish.git\n"))
+            List.of(new StubProcess(2, "No such remote 'origin'\n"), new StubProcess(0, "git@github.com:acme/repo-publish.git\n"))
         );
         StubGhProcessExecutor ghProcessExecutor = new StubGhProcessExecutor(List.of(new StubProcess(0, "created")));
         RepositoryService repositoryService = repositoryService(gitProcessExecutor);
@@ -165,7 +165,7 @@ class RepositoryPostCreationServiceTest {
     @Test
     void runReportsPublishedRemoteWhenRegistryUpdateFails() throws IOException {
         StubGitProcessExecutor gitProcessExecutor = new StubGitProcessExecutor(
-            List.of(new StubProcess(1, ""), new StubProcess(0, "git@github.com:acme/repo-publish.git\n"))
+            List.of(new StubProcess(2, "No such remote 'origin'\n"), new StubProcess(0, "git@github.com:acme/repo-publish.git\n"))
         );
         StubGhProcessExecutor ghProcessExecutor = new StubGhProcessExecutor(List.of(new StubProcess(0, "created")));
         RepositoryService repositoryService = failingRepositoryService(gitProcessExecutor);
@@ -219,7 +219,7 @@ class RepositoryPostCreationServiceTest {
 
     @Test
     void persistExistingOriginFailsWhenOriginRemoteIsMissing() throws IOException {
-        StubGitProcessExecutor gitProcessExecutor = new StubGitProcessExecutor(List.of(new StubProcess(1, "")));
+        StubGitProcessExecutor gitProcessExecutor = new StubGitProcessExecutor(List.of(new StubProcess(2, "No such remote 'origin'\n")));
         RepositoryPostCreationService service = postCreationService(gitProcessExecutor, new StubGhProcessExecutor(List.of()));
         Path repositoryPath = tempDir.resolve("repo-no-origin");
         Files.createDirectories(repositoryPath.resolve(".git"));

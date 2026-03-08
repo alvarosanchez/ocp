@@ -258,7 +258,11 @@ public final class GitRepositoryClient {
             String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             int exitCode = process.waitFor();
             if (!contains(allowedExitCodes, exitCode)) {
-                throw new IllegalStateException("git " + operation + " failed for " + localPath + " (exit code " + exitCode + ")");
+                String trimmedOutput = output.trim();
+                String detail = trimmedOutput.isEmpty() ? "" : ": " + trimmedOutput;
+                throw new IllegalStateException(
+                    "git " + operation + " failed for " + localPath + " (exit code " + exitCode + ")" + detail
+                );
             }
             return output;
         } catch (IOException e) {
