@@ -39,6 +39,13 @@ is_review_active() {
 }
 
 for reviewer in "${reviewers[@]}"; do
+  if is_review_active "$reviewer"; then
+    printf 'requested_reviewer=%s\n' "$reviewer"
+    printf 'pr_number=%s\n' "$pr_number"
+    printf 'head_sha=%s\n' "$(gh pr view "$pr_number" --json headRefOid --jq '.headRefOid')"
+    exit 0
+  fi
+
   if gh api --method POST -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "repos/$owner/$repo/pulls/$pr_number/requested_reviewers" -F "reviewers[]=$reviewer" >/dev/null 2>&1 && is_review_active "$reviewer"; then
     printf 'requested_reviewer=%s\n' "$reviewer"
     printf 'pr_number=%s\n' "$pr_number"

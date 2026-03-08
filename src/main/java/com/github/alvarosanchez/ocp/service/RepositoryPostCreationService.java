@@ -53,6 +53,7 @@ public final class RepositoryPostCreationService {
         boolean createdInitialCommit = false;
         boolean publishedToGitHub = false;
         String persistedRepositoryUri = null;
+        RepositoryVisibility visibility = request.visibility() == null ? RepositoryVisibility.PRIVATE : request.visibility();
 
         boolean gitInitialized = Files.exists(repositoryPath.resolve(".git"));
         if (request.publishToGitHub() && !request.initializeGit() && !gitInitialized) {
@@ -71,7 +72,7 @@ public final class RepositoryPostCreationService {
             && gitInitialized
             && gitRepositoryClient.hasRemote(repositoryPath, ORIGIN_REMOTE_NAME);
         if (request.publishToGitHub() && gitInitialized && !hasOriginRemote) {
-            gitHubRepositoryClient.createRepositoryFromSource(repositoryName, repositoryPath, request.visibility());
+            gitHubRepositoryClient.createRepositoryFromSource(repositoryName, repositoryPath, visibility);
             String originUri = gitRepositoryClient.remoteUri(repositoryPath, ORIGIN_REMOTE_NAME);
             persistRepositoryUri(
                 repositoryName,

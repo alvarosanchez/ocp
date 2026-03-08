@@ -5,8 +5,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 branch="$(git branch --show-current)"
-repo_json="$(gh repo view --json nameWithOwner,defaultBranchRef)"
-default_branch="$(printf '%s' "$repo_json" | jq -r '.defaultBranchRef.name')"
+default_branch="$(gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name')"
 
 printf 'branch=%s\n' "$branch"
 printf 'default_branch=%s\n' "$default_branch"

@@ -1103,7 +1103,6 @@ public final class InteractiveApp extends ToolkitApp {
         hierarchyTree.roots(roots.toArray(TreeNode[]::new));
         hierarchyTree.selected(Math.max(0, previousSelection));
         syncSelectionAndPreview();
-        refreshSelectedRepositoryCommitPushPreview();
         refreshRepositoryDirtyStateByNameInBackground(repositories);
     }
 

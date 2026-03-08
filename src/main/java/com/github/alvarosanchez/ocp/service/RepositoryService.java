@@ -175,12 +175,16 @@ public final class RepositoryService {
     }
 
     public RepositoryCommitPushPreview inspectCommitPush(RepositoryEntry repository) {
+        String localPath = normalizeBlankToNull(repository.localPath());
+        if (localPath == null) {
+            throw new IllegalStateException("Repository `" + repository.name() + "` does not define a local path.");
+        }
         boolean gitBacked = repository.isGitBacked();
-        boolean hasLocalChanges = gitBacked && hasGitLocalChanges(Path.of(repository.localPath()));
+        boolean hasLocalChanges = gitBacked && hasGitLocalChanges(Path.of(localPath));
         return new RepositoryCommitPushPreview(
             repository.name(),
             repository.uri(),
-            repository.localPath(),
+            localPath,
             gitBacked,
             hasLocalChanges
         );
