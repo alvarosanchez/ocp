@@ -13,6 +13,9 @@ import java.nio.file.Path;
 @Singleton
 public final class GitRepositoryClient {
 
+    private static final String AUTOMATED_GIT_USER_EMAIL = "ocp@local";
+    private static final String AUTOMATED_GIT_USER_NAME = "ocp";
+
     private final GitProcessExecutor processExecutor;
 
     /**
@@ -106,22 +109,7 @@ public final class GitRepositoryClient {
      */
     public void commitLocalChangesAndForcePush(Path localPath) {
         stageAllChanges(localPath);
-        runInRepository(
-            localPath,
-            "commit",
-            List.of(
-                "git",
-                "-C",
-                localPath.toString(),
-                "-c",
-                "user.email=ocp@local",
-                "-c",
-                "user.name=ocp",
-                "commit",
-                "-m",
-                "chore: persist local opencode configuration changes"
-            )
-        );
+        commitChanges(localPath, "chore: persist local opencode configuration changes");
         runInRepository(localPath, "push", List.of("git", "-C", localPath.toString(), "push", "--force-with-lease"));
     }
 
@@ -197,7 +185,22 @@ public final class GitRepositoryClient {
     }
 
     private void commitChanges(Path localPath, String message) {
-        runInRepository(localPath, "commit", List.of("git", "-C", localPath.toString(), "commit", "-m", message));
+        runInRepository(
+            localPath,
+            "commit",
+            List.of(
+                "git",
+                "-C",
+                localPath.toString(),
+                "-c",
+                "user.email=" + AUTOMATED_GIT_USER_EMAIL,
+                "-c",
+                "user.name=" + AUTOMATED_GIT_USER_NAME,
+                "commit",
+                "-m",
+                message
+            )
+        );
     }
 
     private void runInRepository(Path localPath, String operation, List<String> command) {

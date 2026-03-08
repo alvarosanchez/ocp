@@ -166,7 +166,18 @@ class InteractiveAppRepositoryCommitPushTest {
                 List.of("git", "-c", "color.ui=always", "-C", localRepository.toString(), "diff", "--color=always"),
                 List.of("git", "-C", localRepository.toString(), "status", "--porcelain"),
                 List.of("git", "-C", localRepository.toString(), "add", "-A"),
-                List.of("git", "-C", localRepository.toString(), "commit", "-m", "chore: save local changes"),
+                List.of(
+                    "git",
+                    "-C",
+                    localRepository.toString(),
+                    "-c",
+                    "user.email=ocp@local",
+                    "-c",
+                    "user.name=ocp",
+                    "commit",
+                    "-m",
+                    "chore: save local changes"
+                ),
                 List.of("git", "-C", localRepository.toString(), "push"),
                 List.of("git", "-C", localRepository.toString(), "status", "--porcelain")
             ),

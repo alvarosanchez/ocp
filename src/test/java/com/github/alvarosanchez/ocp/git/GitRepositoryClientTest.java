@@ -308,7 +308,18 @@ class GitRepositoryClientTest {
         assertEquals(
             List.of(
                 List.of("git", "-C", localPath.toString(), "add", "-A"),
-                List.of("git", "-C", localPath.toString(), "commit", "-m", "chore: initial commit")
+                List.of(
+                    "git",
+                    "-C",
+                    localPath.toString(),
+                    "-c",
+                    "user.email=ocp@local",
+                    "-c",
+                    "user.name=ocp",
+                    "commit",
+                    "-m",
+                    "chore: initial commit"
+                )
             ),
             processExecutor.commands()
         );
@@ -328,7 +339,18 @@ class GitRepositoryClientTest {
         assertEquals(
             List.of(
                 List.of("git", "-C", localPath.toString(), "add", "-A"),
-                List.of("git", "-C", localPath.toString(), "commit", "-m", "chore: save local changes"),
+                List.of(
+                    "git",
+                    "-C",
+                    localPath.toString(),
+                    "-c",
+                    "user.email=ocp@local",
+                    "-c",
+                    "user.name=ocp",
+                    "commit",
+                    "-m",
+                    "chore: save local changes"
+                ),
                 List.of("git", "-C", localPath.toString(), "push")
             ),
             processExecutor.commands()

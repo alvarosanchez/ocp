@@ -123,7 +123,18 @@ class RepositoryPostCreationServiceTest {
             List.of(
                 List.of("git", "-C", repositoryPath.toString(), "init", "--quiet"),
                 List.of("git", "-C", repositoryPath.toString(), "add", "-A"),
-                List.of("git", "-C", repositoryPath.toString(), "commit", "-m", "chore: initial commit")
+                List.of(
+                    "git",
+                    "-C",
+                    repositoryPath.toString(),
+                    "-c",
+                    "user.email=ocp@local",
+                    "-c",
+                    "user.name=ocp",
+                    "commit",
+                    "-m",
+                    "chore: initial commit"
+                )
             ),
             gitProcessExecutor.commands()
         );

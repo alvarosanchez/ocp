@@ -134,6 +134,22 @@ class RepositoryServiceTest {
     }
 
     @Test
+    void loadResolvesRelativeExplicitLocalPathAgainstWorkingDirectoryWhenUriIsConfigured() throws IOException {
+        Path workingDirectory = Path.of(System.getProperty("ocp.working.dir")).toAbsolutePath().normalize();
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("alpha-repo", "git@github.com:acme/alpha.git", "relative/repo-path"))
+            )
+        );
+
+        List<RepositoryEntry> repositories = repositoryService.load();
+
+        assertEquals(1, repositories.size());
+        assertEquals(workingDirectory.resolve("relative/repo-path").normalize().toString(), repositories.getFirst().localPath());
+    }
+
+    @Test
     void loadNormalizesEntriesUsingConfigDirectoryWhenCacheOverrideIsNotConfigured() throws IOException {
         String configuredCacheDir = System.getProperty("ocp.cache.dir");
         if (configuredCacheDir != null) {
@@ -179,6 +195,22 @@ class RepositoryServiceTest {
         assertEquals("local", repositories.getFirst().name());
         assertEquals(null, repositories.getFirst().uri());
         assertEquals(localRepository.normalize().toString(), repositories.getFirst().localPath());
+    }
+
+    @Test
+    void loadResolvesRelativeFileBasedLocalPathAgainstWorkingDirectory() throws IOException {
+        Path workingDirectory = Path.of(System.getProperty("ocp.working.dir")).toAbsolutePath().normalize();
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("local", null, "relative/local-repo"))
+            )
+        );
+
+        List<RepositoryEntry> repositories = repositoryService.load();
+
+        assertEquals(1, repositories.size());
+        assertEquals(workingDirectory.resolve("relative/local-repo").normalize().toString(), repositories.getFirst().localPath());
     }
 
     @Test
@@ -616,7 +648,18 @@ class RepositoryServiceTest {
             List.of(
                 List.of("git", "-C", localClone.toString(), "status", "--porcelain"),
                 List.of("git", "-C", localClone.toString(), "add", "-A"),
-                List.of("git", "-C", localClone.toString(), "commit", "-m", "chore: save local changes"),
+                List.of(
+                    "git",
+                    "-C",
+                    localClone.toString(),
+                    "-c",
+                    "user.email=ocp@local",
+                    "-c",
+                    "user.name=ocp",
+                    "commit",
+                    "-m",
+                    "chore: save local changes"
+                ),
                 List.of("git", "-C", localClone.toString(), "push")
             ),
             processExecutor.commands()

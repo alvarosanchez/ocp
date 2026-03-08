@@ -343,13 +343,13 @@ public final class RepositoryService {
                 if (localPath == null) {
                     localPath = normalizeAbsolutePath(repositoriesDirectory().resolve(name)).toString();
                 } else {
-                    localPath = normalizeAbsolutePath(Path.of(localPath)).toString();
+                    localPath = resolveLocalPath(localPath).toString();
                 }
             } else {
                 if (localPath == null) {
                     continue;
                 }
-                localPath = normalizeAbsolutePath(Path.of(localPath)).toString();
+                localPath = resolveLocalPath(localPath).toString();
             }
 
             normalized.add(
