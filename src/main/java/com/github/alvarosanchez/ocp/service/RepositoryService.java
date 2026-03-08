@@ -171,6 +171,10 @@ public final class RepositoryService {
     public RepositoryCommitPushPreview inspectCommitPush(String repositoryName) {
         String normalizedRepositoryName = normalizeRepositoryName(repositoryName);
         RepositoryEntry repository = findConfiguredRepository(normalizedRepositoryName, load());
+        return inspectCommitPush(repository);
+    }
+
+    public RepositoryCommitPushPreview inspectCommitPush(RepositoryEntry repository) {
         boolean gitBacked = repository.isGitBacked();
         boolean hasLocalChanges = gitBacked && hasGitLocalChanges(Path.of(repository.localPath()));
         return new RepositoryCommitPushPreview(

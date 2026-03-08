@@ -297,7 +297,7 @@ class GitRepositoryClientTest {
     @Test
     void createInitialCommitRunsAddAndCommit() {
         StubProcessExecutor processExecutor = new StubProcessExecutor(
-            List.of(new StubProcess(0, ""), new StubProcess(0, ""))
+            List.of(new StubProcess(0, ""), new StubProcess(0, " M repository.json\n"), new StubProcess(0, ""))
         );
         Path localPath = tempDir.resolve("repositories/repo-fourteen");
 
@@ -308,6 +308,7 @@ class GitRepositoryClientTest {
         assertEquals(
             List.of(
                 List.of("git", "-C", localPath.toString(), "add", "-A"),
+                List.of("git", "-C", localPath.toString(), "status", "--porcelain"),
                 List.of(
                     "git",
                     "-C",
@@ -320,6 +321,26 @@ class GitRepositoryClientTest {
                     "-m",
                     "chore: initial commit"
                 )
+            ),
+            processExecutor.commands()
+        );
+    }
+
+    @Test
+    void createInitialCommitSkipsCommitWhenStagingLeavesNothingToCommit() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(
+            List.of(new StubProcess(0, ""), new StubProcess(0, ""))
+        );
+        Path localPath = tempDir.resolve("repositories/repo-empty");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        client.createInitialCommit(localPath, "chore: initial commit");
+
+        assertEquals(
+            List.of(
+                List.of("git", "-C", localPath.toString(), "add", "-A"),
+                List.of("git", "-C", localPath.toString(), "status", "--porcelain")
             ),
             processExecutor.commands()
         );

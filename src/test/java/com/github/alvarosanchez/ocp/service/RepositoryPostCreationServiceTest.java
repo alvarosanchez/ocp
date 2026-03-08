@@ -104,12 +104,13 @@ class RepositoryPostCreationServiceTest {
     @Test
     void runInitializesGitAndCreatesInitialCommitWhenRequested() throws IOException {
         StubGitProcessExecutor gitProcessExecutor = new StubGitProcessExecutor(
-            List.of(new StubProcess(0, ""), new StubProcess(0, ""), new StubProcess(0, ""))
+            List.of(new StubProcess(0, ""), new StubProcess(0, " M repository.json\n"), new StubProcess(0, ""), new StubProcess(0, ""))
         );
         StubGhProcessExecutor ghProcessExecutor = new StubGhProcessExecutor(List.of());
         RepositoryPostCreationService service = postCreationService(gitProcessExecutor, ghProcessExecutor);
         Path repositoryPath = tempDir.resolve("repo-init");
         Files.createDirectories(repositoryPath);
+        Files.writeString(repositoryPath.resolve("repository.json"), "{}\n");
 
         RepositoryPostCreationService.PostCreationResult result = service.run(
             "repo-init",
@@ -123,18 +124,7 @@ class RepositoryPostCreationServiceTest {
             List.of(
                 List.of("git", "-C", repositoryPath.toString(), "init", "--quiet"),
                 List.of("git", "-C", repositoryPath.toString(), "add", "-A"),
-                List.of(
-                    "git",
-                    "-C",
-                    repositoryPath.toString(),
-                    "-c",
-                    "user.email=ocp@local",
-                    "-c",
-                    "user.name=ocp",
-                    "commit",
-                    "-m",
-                    "chore: initial commit"
-                )
+                List.of("git", "-C", repositoryPath.toString(), "status", "--porcelain")
             ),
             gitProcessExecutor.commands()
         );

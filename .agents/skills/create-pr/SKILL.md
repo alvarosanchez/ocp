@@ -162,6 +162,12 @@ Use:
 
 If reply or resolve fails, report the concrete limitation instead of claiming success.
 
+Operational rule for completion checks:
+
+- Never infer Copilot completion from previously handled comment IDs alone.
+- After every push, re-fetch the full current review-thread set and treat any unresolved Copilot-owned thread as actionable, even if earlier Copilot threads were already resolved.
+- A top-level Copilot review summary in `COMMENTED` state is not actionable by itself, but it must trigger a fresh full sweep of review threads because it may accompany newly opened inline comments.
+
 ### 7. Wait for CI and remediate failures
 
 CI is part of the loop, not an optional side check.
@@ -225,6 +231,7 @@ If a cap is reached, stop and report why the loop did not converge.
 Stop only when all of these are true:
 
 - no new actionable Copilot comments remain
+- zero unresolved Copilot-owned review threads remain in the latest fetched review-thread set
 - no unresolved required CI failures remain
 - required checks are green or otherwise successful
 - the branch reflects all fixes already pushed to the PR

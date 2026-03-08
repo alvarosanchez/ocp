@@ -667,6 +667,26 @@ class RepositoryServiceTest {
     }
 
     @Test
+    void inspectCommitPushEntryUsesProvidedEntryWithoutReloadingConfig() throws IOException {
+        Path localClone = repositoriesRootDirectory().resolve("repo-preview");
+        Files.createDirectories(localClone.resolve(".git"));
+        RecordingGitProcessExecutor processExecutor = new RecordingGitProcessExecutor(List.of(new StubProcess(0, " M opencode.json\n")));
+        RepositoryService service = new RepositoryService(objectMapper, new GitRepositoryClient(processExecutor));
+
+        RepositoryService.RepositoryCommitPushPreview preview = service.inspectCommitPush(
+            new RepositoryEntry("repo-preview", "git@github.com:acme/repo-preview.git", localClone.toString())
+        );
+
+        assertEquals("repo-preview", preview.name());
+        assertTrue(preview.gitBacked());
+        assertTrue(preview.hasLocalChanges());
+        assertEquals(
+            List.of(List.of("git", "-C", localClone.toString(), "status", "--porcelain")),
+            processExecutor.commands()
+        );
+    }
+
+    @Test
     void commitAndPushRejectsBlankCommitMessage() throws IOException {
         Path localClone = repositoriesRootDirectory().resolve("repo-blank-message");
         Files.createDirectories(localClone.resolve(".git"));

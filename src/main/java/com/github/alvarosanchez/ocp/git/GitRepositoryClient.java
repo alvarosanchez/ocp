@@ -177,11 +177,21 @@ public final class GitRepositoryClient {
 
     public void createInitialCommit(Path localPath, String message) {
         stageAllChanges(localPath);
-        commitChanges(localPath, message);
+        if (hasStagedChanges(localPath)) {
+            commitChanges(localPath, message);
+        }
     }
 
     private void stageAllChanges(Path localPath) {
         runInRepository(localPath, "add", List.of("git", "-C", localPath.toString(), "add", "-A"));
+    }
+
+    private boolean hasStagedChanges(Path localPath) {
+        return !runAndCapture(
+            localPath,
+            "status",
+            List.of("git", "-C", localPath.toString(), "status", "--porcelain")
+        ).trim().isEmpty();
     }
 
     private void commitChanges(Path localPath, String message) {

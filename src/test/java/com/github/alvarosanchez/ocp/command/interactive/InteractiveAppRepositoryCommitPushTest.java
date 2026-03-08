@@ -358,6 +358,29 @@ class InteractiveAppRepositoryCommitPushTest {
         assertTrue(readStatus(app).contains("Failed to status git repository"));
     }
 
+    @Test
+    void commitAndPushConvertsDiffFailuresIntoInspectionStatusInsteadOfThrowing() throws Exception {
+        Path localRepository = tempDir.resolve("broken-diff-repository");
+        Files.createDirectories(localRepository.resolve(".git"));
+        writeConfig(new RepositoryEntry("broken-diff-repository", "git@github.com:acme/broken-diff-repository.git", localRepository.toString()));
+        RecordingGitProcessExecutor processExecutor = new RecordingGitProcessExecutor(
+            List.of(new StubProcess(0, " M opencode.json\n"), new StubProcess(0, " M opencode.json\n"), new StubProcess(1, ""))
+        );
+        RepositoryService repositoryService = repositoryService(processExecutor);
+
+        InteractiveApp app = createApp(repositoryService);
+        invokeReloadState(app);
+        setSelectedNode(app, NodeRef.repository("broken-diff-repository", localRepository));
+        invokeRefreshSelectedRepositoryCommitPushPreview(app);
+
+        invokeCommitAndPushSelectedRepository(app);
+
+        assertNull(readPrompt(app));
+        assertNull(readCommitConfirm(app));
+        assertTrue(readRepositoryDirtyStateByName(app).get("broken-diff-repository").inspectionFailed());
+        assertTrue(readStatus(app).contains("Unable to inspect repository `broken-diff-repository` for local git changes"));
+    }
+
     private InteractiveApp createApp(RepositoryService repositoryService) {
         return new InteractiveApp(
             applicationContext.getBean(ProfileService.class),

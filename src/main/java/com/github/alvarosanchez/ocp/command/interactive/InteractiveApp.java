@@ -867,7 +867,19 @@ public final class InteractiveApp extends ToolkitApp {
             status = "Repository `" + repositoryName + "` has no local git changes to commit and push.";
             return;
         }
-        String diff = repositoryService.getLocalDiff(repositoryName);
+        String diff;
+        try {
+            diff = repositoryService.getLocalDiff(repositoryName);
+        } catch (RuntimeException e) {
+            repositoryDirtyStateByName = withRepositoryDirtyState(repositoryName, RepositoryDirtyState.inspectionError());
+            String message = e.getMessage();
+            if (message == null || message.isBlank()) {
+                status = "Unable to inspect repository `" + repositoryName + "` for local git changes.";
+            } else {
+                status = "Unable to inspect repository `" + repositoryName + "` for local git changes: " + message;
+            }
+            return;
+        }
         commitConfirm = new CommitConfirmState(repositoryName, diff);
         status = "Review local changes for `" + repositoryName + "`.";
     }
@@ -1422,7 +1434,11 @@ public final class InteractiveApp extends ToolkitApp {
             try {
                 dirtyStateByName.put(
                     repository.name(),
-                    RepositoryDirtyState.fromPreview(repositoryService.inspectCommitPush(repository.name()))
+                    RepositoryDirtyState.fromPreview(
+                        repositoryService.inspectCommitPush(
+                            new RepositoryEntry(repository.name(), repository.uri(), repository.localPath())
+                        )
+                    )
                 );
             } catch (RuntimeException e) {
                 dirtyStateByName.put(repository.name(), RepositoryDirtyState.inspectionError());
