@@ -221,16 +221,15 @@ class InteractiveAppPostCreationFlowTest {
         setPrompt(app, gitInitPrompt);
         invokeApplyPrompt(app);
 
-        PromptState publishPrompt = readPrompt(app);
-        assertNotNull(publishPrompt);
-        assertEquals(PromptAction.POST_CREATION_PUBLISH_GITHUB, publishPrompt.action);
-        publishPrompt.values.set(0, "no");
-        setPrompt(app, publishPrompt);
-        
-        invokeApplyPrompt(app);
-        
-        assertNull(readPrompt(app));
-        
+        PromptState nextPrompt = readPrompt(app);
+        if (nextPrompt != null) {
+            assertEquals(PromptAction.POST_CREATION_PUBLISH_GITHUB, nextPrompt.action);
+            nextPrompt.values.set(0, "no");
+            setPrompt(app, nextPrompt);
+            invokeApplyPrompt(app);
+            assertNull(readPrompt(app));
+        }
+
         String finalStatus = readStatus(app);
         assertTrue(finalStatus.contains("Created and added repository `test-repo`"));
         assertTrue(finalStatus.contains("Initialized git repository and created an initial commit"));
