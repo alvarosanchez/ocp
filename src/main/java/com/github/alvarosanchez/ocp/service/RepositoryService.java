@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import jakarta.inject.Singleton;
 
@@ -26,6 +27,7 @@ public final class RepositoryService {
 
     private static final int MAX_LOCAL_DIFF_LINES = 400;
     private static final int MAX_LOCAL_DIFF_CHARS = 32_000;
+    private static final Pattern ANSI_ESCAPE_PATTERN = Pattern.compile("\\u001B\\[[;\\d]*m");
 
     private final ObjectMapper objectMapper;
     private final GitRepositoryClient gitRepositoryClient;
@@ -208,7 +210,7 @@ public final class RepositoryService {
         if (!Files.isDirectory(localPath) || !Files.exists(localPath.resolve(".git"))) {
             throw new IllegalStateException("Repository `" + normalizedRepositoryName + "` is not available as a local git checkout at " + localPath + ".");
         }
-        String diff = gitRepositoryClient.localDiff(localPath);
+        String diff = stripAnsi(gitRepositoryClient.localDiff(localPath));
         if (diff.length() <= MAX_LOCAL_DIFF_CHARS && diff.lines().count() <= MAX_LOCAL_DIFF_LINES) {
             return diff;
         }
@@ -221,6 +223,10 @@ public final class RepositoryService {
             truncated = truncated.substring(0, Math.max(0, MAX_LOCAL_DIFF_CHARS - suffix.length()));
         }
         return truncated + suffix;
+    }
+
+    private String stripAnsi(String diff) {
+        return ANSI_ESCAPE_PATTERN.matcher(diff).replaceAll("");
     }
 
     public void commitAndPush(String repositoryName, String commitMessage) {
