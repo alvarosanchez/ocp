@@ -60,6 +60,7 @@ class GitHubRepositoryClientTest {
                     "--remote",
                     "origin",
                     "--push",
+                    "--confirm",
                     "--private"
                 )
             ),

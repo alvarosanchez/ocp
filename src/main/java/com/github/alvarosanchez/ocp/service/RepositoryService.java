@@ -279,7 +279,7 @@ public final class RepositoryService {
 
         OcpConfigFile configFile = loadConfigFile();
         List<RepositoryEntry> normalizedRepositories = new ArrayList<>(load());
-        RepositoryEntry target = findConfiguredRepository(normalizedRepositoryName, normalizedRepositories);
+        findConfiguredRepository(normalizedRepositoryName, normalizedRepositories);
         for (RepositoryEntry repository : normalizedRepositories) {
             if (repository.name().equals(normalizedRepositoryName)) {
                 continue;

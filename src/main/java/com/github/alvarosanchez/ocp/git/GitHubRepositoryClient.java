@@ -40,6 +40,7 @@ public final class GitHubRepositoryClient {
             "--remote",
             "origin",
             "--push",
+            "--confirm",
             visibilityFlag
         );
         try {
