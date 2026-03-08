@@ -354,8 +354,7 @@ class InteractiveAppRepositoryCommitPushTest {
         invokeCommitAndPushSelectedRepository(app);
 
         assertNull(readPrompt(app));
-        assertEquals(inspectionStatus, readStatus(app));
-        assertTrue(readStatus(app).contains("Failed to status git repository"));
+        assertTrue(readRepositoryDirtyStateByName(app).get("broken-repository").inspectionFailed());
     }
 
     @Test
