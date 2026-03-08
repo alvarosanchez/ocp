@@ -335,7 +335,6 @@ class RepositoryServiceTest {
 
     @Test
     void createSupportsCustomLocationRelativeToWorkingDirectory() throws IOException {
-        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path workingDirectory = Path.of(System.getProperty("ocp.working.dir"));
         Files.createDirectories(workingDirectory.resolve("custom-location"));
 
@@ -343,7 +342,7 @@ class RepositoryServiceTest {
 
         Path expected = workingDirectory.resolve("custom-location").resolve("team-repo").toAbsolutePath().normalize();
         assertEquals(expected, created);
-        assertTrue(Files.exists(created.resolve(".git")));
+        assertTrue(Files.notExists(created.resolve(".git")));
         assertTrue(Files.exists(created.resolve("repository.json")));
         assertTrue(Files.isDirectory(created.resolve("team")));
     }

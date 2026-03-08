@@ -227,9 +227,7 @@ public final class RepositoryService {
     }
 
     public Path create(String repositoryName, String profileName, String repositoryLocation) {
-        Path repositoryPath = createScaffold(repositoryName, profileName, repositoryLocation);
-        gitRepositoryClient.init(repositoryPath);
-        return repositoryPath;
+        return createScaffold(repositoryName, profileName, repositoryLocation);
     }
 
     public Path createScaffold(String repositoryName, String profileName, String repositoryLocation) {

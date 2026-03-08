@@ -232,6 +232,24 @@ class RepositoryPostCreationServiceTest {
         assertTrue(thrown.getMessage().contains("does not have an `origin` remote"));
     }
 
+    @Test
+    void runRejectsPublishingWhenRepositoryIsNotGitInitializedAndInitializeGitIsFalse() throws IOException {
+        RepositoryPostCreationService service = postCreationService(new StubGitProcessExecutor(List.of()), new StubGhProcessExecutor(List.of()));
+        Path repositoryPath = tempDir.resolve("repo-no-git-publish");
+        Files.createDirectories(repositoryPath);
+
+        IllegalStateException thrown = assertThrows(
+            IllegalStateException.class,
+            () -> service.run(
+                "repo-no-git-publish",
+                repositoryPath,
+                new RepositoryPostCreationService.PostCreationRequest(false, true, RepositoryVisibility.PRIVATE)
+            )
+        );
+
+        assertTrue(thrown.getMessage().contains("must be initialized as a git repository before it can be published to GitHub"));
+    }
+
     private RepositoryPostCreationService postCreationService(StubGitProcessExecutor gitProcessExecutor, StubGhProcessExecutor ghProcessExecutor) {
         RepositoryService repositoryService = repositoryService(gitProcessExecutor);
         GitRepositoryClient gitRepositoryClient = new GitRepositoryClient(gitProcessExecutor);

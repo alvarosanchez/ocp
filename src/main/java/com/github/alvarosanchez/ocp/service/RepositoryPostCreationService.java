@@ -54,6 +54,11 @@ public final class RepositoryPostCreationService {
         String persistedRepositoryUri = null;
 
         boolean gitInitialized = Files.exists(repositoryPath.resolve(".git"));
+        if (request.publishToGitHub() && !request.initializeGit() && !gitInitialized) {
+            throw new IllegalStateException(
+                "Repository `" + repositoryName + "` must be initialized as a git repository before it can be published to GitHub."
+            );
+        }
         if (request.initializeGit() && !gitInitialized) {
             gitRepositoryClient.init(repositoryPath);
             gitRepositoryClient.createInitialCommit(repositoryPath, INITIAL_COMMIT_MESSAGE);
