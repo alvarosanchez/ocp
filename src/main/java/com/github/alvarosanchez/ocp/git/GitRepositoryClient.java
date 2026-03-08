@@ -175,11 +175,13 @@ public final class GitRepositoryClient {
         ).trim();
     }
 
-    public void createInitialCommit(Path localPath, String message) {
+    public boolean createInitialCommit(Path localPath, String message) {
         stageAllChanges(localPath);
         if (hasStagedChanges(localPath)) {
             commitChanges(localPath, message);
+            return true;
         }
+        return false;
     }
 
     private void stageAllChanges(Path localPath) {

@@ -1,6 +1,7 @@
 package com.github.alvarosanchez.ocp.git;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -303,7 +304,9 @@ class GitRepositoryClientTest {
 
         GitRepositoryClient client = new GitRepositoryClient(processExecutor);
 
-        client.createInitialCommit(localPath, "chore: initial commit");
+        boolean createdInitialCommit = client.createInitialCommit(localPath, "chore: initial commit");
+
+        assertTrue(createdInitialCommit);
 
         assertEquals(
             List.of(
@@ -335,7 +338,9 @@ class GitRepositoryClientTest {
 
         GitRepositoryClient client = new GitRepositoryClient(processExecutor);
 
-        client.createInitialCommit(localPath, "chore: initial commit");
+        boolean createdInitialCommit = client.createInitialCommit(localPath, "chore: initial commit");
+
+        assertFalse(createdInitialCommit);
 
         assertEquals(
             List.of(

@@ -50,6 +50,7 @@ public final class RepositoryPostCreationService {
 
     public PostCreationResult run(String repositoryName, Path repositoryPath, PostCreationRequest request) {
         boolean initializedGit = false;
+        boolean createdInitialCommit = false;
         boolean publishedToGitHub = false;
         String persistedRepositoryUri = null;
 
@@ -61,7 +62,7 @@ public final class RepositoryPostCreationService {
         }
         if (request.initializeGit() && !gitInitialized) {
             gitRepositoryClient.init(repositoryPath);
-            gitRepositoryClient.createInitialCommit(repositoryPath, INITIAL_COMMIT_MESSAGE);
+            createdInitialCommit = gitRepositoryClient.createInitialCommit(repositoryPath, INITIAL_COMMIT_MESSAGE);
             gitInitialized = true;
             initializedGit = true;
         }
@@ -85,7 +86,7 @@ public final class RepositoryPostCreationService {
             publishedToGitHub = true;
         }
 
-        return new PostCreationResult(initializedGit, publishedToGitHub, persistedRepositoryUri);
+        return new PostCreationResult(initializedGit, createdInitialCommit, publishedToGitHub, persistedRepositoryUri);
     }
 
     public record PostCreationCapabilities(boolean gitInitialized, boolean hasOriginRemote, boolean canPublishWithGh) {
@@ -94,7 +95,7 @@ public final class RepositoryPostCreationService {
     public record PostCreationRequest(boolean initializeGit, boolean publishToGitHub, RepositoryVisibility visibility) {
     }
 
-    public record PostCreationResult(boolean initializedGit, boolean publishedToGitHub, String persistedRepositoryUri) {
+    public record PostCreationResult(boolean initializedGit, boolean createdInitialCommit, boolean publishedToGitHub, String persistedRepositoryUri) {
     }
 
     private void persistRepositoryUri(String repositoryName, String originUri, String errorMessage) {

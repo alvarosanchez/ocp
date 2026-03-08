@@ -957,7 +957,10 @@ public final class InteractiveApp extends ToolkitApp {
 
         String message = postCreationFlowState.successMessage();
         if (result.initializedGit()) {
-            message += " Initialized git repository and created an initial commit.";
+            message += " Initialized git repository.";
+            if (result.createdInitialCommit()) {
+                message += " Created an initial commit.";
+            }
         }
         if (result.publishedToGitHub()) {
             message += " Published to GitHub and saved origin URI `" + result.persistedRepositoryUri() + "`.";

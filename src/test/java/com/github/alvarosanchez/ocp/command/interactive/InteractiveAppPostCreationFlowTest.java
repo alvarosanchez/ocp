@@ -232,7 +232,8 @@ class InteractiveAppPostCreationFlowTest {
 
         String finalStatus = readStatus(app);
         assertTrue(finalStatus.contains("Created and added repository `test-repo`"));
-        assertTrue(finalStatus.contains("Initialized git repository and created an initial commit"));
+        assertTrue(finalStatus.contains("Initialized git repository."));
+        assertTrue(finalStatus.contains("Created an initial commit."));
     }
 
     private InteractiveApp createApp() {
