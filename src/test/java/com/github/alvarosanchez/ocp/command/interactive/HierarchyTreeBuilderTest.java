@@ -112,7 +112,7 @@ class HierarchyTreeBuilderTest {
     void renderTreeNodeFallsBackToPlainTextWhenDataIsMissing() {
         TreeNode<NodeRef> node = TreeNode.of("group");
 
-        StyledElement<?> rendered = HierarchyTreeBuilder.renderTreeNode(node, Map.of(), Map.of());
+        StyledElement<?> rendered = HierarchyTreeBuilder.renderTreeNode(node, Map.of(), Map.of(), Map.of());
 
         TextElement text = assertInstanceOf(TextElement.class, rendered);
         assertEquals("group", text.content());
@@ -140,7 +140,8 @@ class HierarchyTreeBuilderTest {
         StyledElement<?> rendered = HierarchyTreeBuilder.renderTreeNode(
             node,
             Map.of("repo-a/active-profile", profile),
-            Map.of("repo-a/active-profile", "base-profile")
+            Map.of("repo-a/active-profile", "base-profile"),
+            Map.of()
         );
 
         RichTextElement richText = assertInstanceOf(RichTextElement.class, rendered);
@@ -165,7 +166,7 @@ class HierarchyTreeBuilderTest {
             NodeRef.inheritedFile("repo-a", "child", Path.of("/tmp/repo-a/base/shared.json"), "base")
         );
 
-        StyledElement<?> rendered = HierarchyTreeBuilder.renderTreeNode(node, Map.of(), Map.of());
+        StyledElement<?> rendered = HierarchyTreeBuilder.renderTreeNode(node, Map.of(), Map.of(), Map.of());
 
         RichTextElement richText = assertInstanceOf(RichTextElement.class, rendered);
         var spans = richText.text().lines().getFirst().spans();
@@ -175,6 +176,50 @@ class HierarchyTreeBuilderTest {
         assertEquals("shared.json", spans.get(1).content());
         assertEquals(Color.GRAY, spans.get(1).style().fg().orElseThrow());
         assertTrue(spans.get(1).style().effectiveModifiers().contains(Modifier.DIM));
+    }
+
+    @Test
+    void renderTreeNodeShowsDirtyRepositoryMarker() {
+        TreeNode<NodeRef> node = TreeNode.of(
+            "repo-a",
+            NodeRef.repository("repo-a", Path.of("/tmp/repo-a"))
+        );
+
+        StyledElement<?> rendered = HierarchyTreeBuilder.renderTreeNode(
+            node,
+            Map.of(),
+            Map.of(),
+            Map.of("repo-a", new RepositoryDirtyState(true, false))
+        );
+
+        RichTextElement richText = assertInstanceOf(RichTextElement.class, rendered);
+        var spans = richText.text().lines().getFirst().spans();
+        assertEquals(3, spans.size());
+        assertEquals("📦 ", spans.get(0).content());
+        assertEquals("repo-a", spans.get(1).content());
+        assertEquals(" ✏", spans.get(2).content());
+        assertEquals(Color.YELLOW, spans.get(2).style().fg().orElseThrow());
+    }
+
+    @Test
+    void renderTreeNodeShowsInspectionFailureMarker() {
+        TreeNode<NodeRef> node = TreeNode.of(
+            "repo-a",
+            NodeRef.repository("repo-a", Path.of("/tmp/repo-a"))
+        );
+
+        StyledElement<?> rendered = HierarchyTreeBuilder.renderTreeNode(
+            node,
+            Map.of(),
+            Map.of(),
+            Map.of("repo-a", RepositoryDirtyState.inspectionError())
+        );
+
+        RichTextElement richText = assertInstanceOf(RichTextElement.class, rendered);
+        var spans = richText.text().lines().getFirst().spans();
+        assertEquals(3, spans.size());
+        assertEquals(" !", spans.get(2).content());
+        assertEquals(Color.RED, spans.get(2).style().fg().orElseThrow());
     }
 
     @Test

@@ -10,7 +10,7 @@ class TreeShortcutHintsTest {
 
     @Test
     void returnsGlobalHintsWhenSelectionIsNull() {
-        TreeShortcutHints.ShortcutHints hints = TreeShortcutHints.forSelection(null, false, false);
+        TreeShortcutHints.ShortcutHints hints = TreeShortcutHints.forSelection(null, false, false, false, false);
 
         assertEquals(
             List.of(
@@ -27,12 +27,15 @@ class TreeShortcutHintsTest {
         TreeShortcutHints.ShortcutHints hints = TreeShortcutHints.forSelection(
             NodeRef.repository("repo", Path.of("/tmp/repo")),
             true,
+            false,
+            true,
             false
         );
 
         assertEquals(
             List.of(
                 new TreeShortcutHints.Shortcut("c", "create profile"),
+                new TreeShortcutHints.Shortcut("m", "migrate to git/github"),
                 new TreeShortcutHints.Shortcut("d", "delete repo"),
                 new TreeShortcutHints.Shortcut("r", "refresh repository")
             ),
@@ -44,6 +47,8 @@ class TreeShortcutHintsTest {
     void omitsRefreshHintWhenRepositoryIsNotRefreshable() {
         TreeShortcutHints.ShortcutHints hints = TreeShortcutHints.forSelection(
             NodeRef.repository("repo", Path.of("/tmp/repo")),
+            false,
+            false,
             false,
             false
         );
@@ -62,6 +67,8 @@ class TreeShortcutHintsTest {
         TreeShortcutHints.ShortcutHints hints = TreeShortcutHints.forSelection(
             NodeRef.profile("repo", "profile", Path.of("/tmp/repo/profile")),
             true,
+            true,
+            false,
             true
         );
 
@@ -71,6 +78,7 @@ class TreeShortcutHintsTest {
                 new TreeShortcutHints.Shortcut("c", "create profile"),
                 new TreeShortcutHints.Shortcut("d", "delete profile"),
                 new TreeShortcutHints.Shortcut("p", "go parent"),
+                new TreeShortcutHints.Shortcut("g", "commit and push"),
                 new TreeShortcutHints.Shortcut("r", "refresh repository")
             ),
             hints.actions()
@@ -82,7 +90,9 @@ class TreeShortcutHintsTest {
         TreeShortcutHints.ShortcutHints hints = TreeShortcutHints.forSelection(
             NodeRef.directory("repo", "profile", Path.of("/tmp/repo/profile/folder")),
             true,
-            true
+            true,
+            false,
+            false
         );
 
         assertEquals(
@@ -102,7 +112,9 @@ class TreeShortcutHintsTest {
         TreeShortcutHints.ShortcutHints hints = TreeShortcutHints.forSelection(
             NodeRef.file("repo", "profile", Path.of("/tmp/repo/profile/file.json")),
             true,
-            false
+            false,
+            false,
+            true
         );
 
         assertEquals(
@@ -110,6 +122,7 @@ class TreeShortcutHintsTest {
                 new TreeShortcutHints.Shortcut("e", "edit file"),
                 new TreeShortcutHints.Shortcut("u", "use profile"),
                 new TreeShortcutHints.Shortcut("d", "delete profile"),
+                new TreeShortcutHints.Shortcut("g", "commit and push"),
                 new TreeShortcutHints.Shortcut("r", "refresh repository")
             ),
             hints.actions()
@@ -121,7 +134,9 @@ class TreeShortcutHintsTest {
         TreeShortcutHints.ShortcutHints hints = TreeShortcutHints.forSelection(
             NodeRef.inheritedFile("repo", "profile", Path.of("/tmp/repo/base.json"), "parent"),
             true,
-            true
+            true,
+            false,
+            false
         );
 
         assertEquals(
@@ -129,6 +144,47 @@ class TreeShortcutHintsTest {
                 new TreeShortcutHints.Shortcut("u", "use profile"),
                 new TreeShortcutHints.Shortcut("d", "delete profile"),
                 new TreeShortcutHints.Shortcut("p", "go parent"),
+                new TreeShortcutHints.Shortcut("r", "refresh repository")
+            ),
+            hints.actions()
+        );
+    }
+
+    @Test
+    void omitsMigrationHintForGitBackedRepository() {
+        TreeShortcutHints.ShortcutHints hints = TreeShortcutHints.forSelection(
+            NodeRef.repository("repo", Path.of("/tmp/repo")),
+            true,
+            false,
+            false,
+            false
+        );
+
+        assertEquals(
+            List.of(
+                new TreeShortcutHints.Shortcut("c", "create profile"),
+                new TreeShortcutHints.Shortcut("d", "delete repo"),
+                new TreeShortcutHints.Shortcut("r", "refresh repository")
+            ),
+            hints.actions()
+        );
+    }
+
+    @Test
+    void showsCommitAndPushHintForDirtyGitBackedRepository() {
+        TreeShortcutHints.ShortcutHints hints = TreeShortcutHints.forSelection(
+            NodeRef.repository("repo", Path.of("/tmp/repo")),
+            true,
+            false,
+            false,
+            true
+        );
+
+        assertEquals(
+            List.of(
+                new TreeShortcutHints.Shortcut("c", "create profile"),
+                new TreeShortcutHints.Shortcut("g", "commit and push"),
+                new TreeShortcutHints.Shortcut("d", "delete repo"),
                 new TreeShortcutHints.Shortcut("r", "refresh repository")
             ),
             hints.actions()

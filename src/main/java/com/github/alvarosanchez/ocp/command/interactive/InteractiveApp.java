@@ -1,13 +1,20 @@
 package com.github.alvarosanchez.ocp.command.interactive;
 
 import com.github.alvarosanchez.ocp.command.OcpVersionProvider;
+import com.github.alvarosanchez.ocp.config.OcpConfigFile.RepositoryEntry;
 import com.github.alvarosanchez.ocp.config.RepositoryConfigFile;
 import com.github.alvarosanchez.ocp.command.Cli;
+import com.github.alvarosanchez.ocp.git.GitHubRepositoryClient.RepositoryVisibility;
 import com.github.alvarosanchez.ocp.model.Profile;
 import com.github.alvarosanchez.ocp.service.OnboardingService;
 import com.github.alvarosanchez.ocp.service.PathSegmentValidator;
 import com.github.alvarosanchez.ocp.service.ProfileService;
+import com.github.alvarosanchez.ocp.service.RepositoryPostCreationService;
+import com.github.alvarosanchez.ocp.service.RepositoryPostCreationService.PostCreationCapabilities;
+import com.github.alvarosanchez.ocp.service.RepositoryPostCreationService.PostCreationRequest;
+import com.github.alvarosanchez.ocp.service.RepositoryPostCreationService.PostCreationResult;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
+import com.github.alvarosanchez.ocp.service.RepositoryService.RepositoryCommitPushPreview;
 import com.github.alvarosanchez.ocp.service.RepositoryService.ConfiguredRepository;
 import dev.tamboui.style.Color;
 import dev.tamboui.text.Text;
@@ -50,7 +57,8 @@ public final class InteractiveApp extends ToolkitApp {
         NONE,
         PROMPT,
         STARTUP_NOTICE,
-        REFRESH_CONFLICT
+        REFRESH_CONFLICT,
+        COMMIT_CONFIRM
     }
 
     private static final String TREE_ID = "hierarchy-tree";
@@ -67,6 +75,7 @@ public final class InteractiveApp extends ToolkitApp {
     private static final String ERROR_REPOSITORY_SELECTION_REQUIRED = "Repository selection is required.";
     private static final String STATUS_DELETE_CANCELLED_REPOSITORY_MISMATCH = "Delete cancelled: repository name mismatch.";
     private static final String STATUS_DELETE_CANCELLED_PROFILE_MISMATCH = "Delete cancelled: profile name mismatch.";
+    private static final String DEFAULT_COMMIT_MESSAGE = "chore: persist local opencode configuration changes";
     private static final String STARTUP_UPDATE_DIALOG_TITLE = "OCP Notice";
     private static final List<TreeShortcutHints.Shortcut> GLOBAL_SHORTCUTS = List.of(
         TreeShortcutHints.Shortcut.TAB_SWITCH_PANE,
@@ -100,6 +109,7 @@ public final class InteractiveApp extends ToolkitApp {
     private final ProfileService profileService;
     private final RepositoryService repositoryService;
     private final OnboardingService onboardingService;
+    private final RepositoryPostCreationService repositoryPostCreationService;
     private final ObjectMapper objectMapper;
     private final String currentVersion = OcpVersionProvider.readVersion();
     private final BatPreviewRenderer batPreviewRenderer = new BatPreviewRenderer();
@@ -123,6 +133,7 @@ public final class InteractiveApp extends ToolkitApp {
     private List<TreeNode<NodeRef>> hierarchyRoots = List.of();
     private Map<String, Profile> profilesByName = Map.of();
     private Map<String, String> profileParentByName = Map.of();
+    private Map<String, RepositoryDirtyState> repositoryDirtyStateByName = Map.of();
 
     private Pane activePane = Pane.TREE;
     private String status = "Ready. Select a node in the hierarchy.";
@@ -136,10 +147,12 @@ public final class InteractiveApp extends ToolkitApp {
     private int spinnerIndex;
 
     private RefreshConflictState refreshConflict;
+    private CommitConfirmState commitConfirm;
     private RefreshOperation pendingRefreshOperation;
     private String refreshAllCompletionMessage = "Refreshed all repositories.";
 
     private NodeRef selectedNode;
+    private RepositoryCommitPushPreview selectedRepositoryCommitPushPreview;
     private String selectedFileContent = "";
     private Text selectedFilePreview = DetailPaneRenderer.plainText("");
     private List<String> splashLogoLines = DEFAULT_SPLASH_LOGO_LINES;
@@ -152,11 +165,13 @@ public final class InteractiveApp extends ToolkitApp {
         ProfileService profileService,
         RepositoryService repositoryService,
         OnboardingService onboardingService,
+        RepositoryPostCreationService repositoryPostCreationService,
         ObjectMapper objectMapper
     ) {
         this.profileService = profileService;
         this.repositoryService = repositoryService;
         this.onboardingService = onboardingService;
+        this.repositoryPostCreationService = repositoryPostCreationService;
         this.objectMapper = objectMapper;
         startupUpdateNotice = Cli.consumeStartupNotice();
     }
@@ -195,7 +210,9 @@ public final class InteractiveApp extends ToolkitApp {
         TreeShortcutHints.ShortcutHints treeShortcutHints = TreeShortcutHints.forSelection(
             selectedNode,
             isSelectedRepositoryRefreshable(),
-            selectedProfileHasParent()
+            selectedProfileHasParent(),
+            isSelectedRepositoryMigratable(),
+            isSelectedRepositoryCommitPushAvailable()
         );
 
         List<Element> treePaneContent = new ArrayList<>();
@@ -222,19 +239,14 @@ public final class InteractiveApp extends ToolkitApp {
                     .borderColor(activePane == Pane.DETAIL ? Color.GREEN : Color.GRAY)
                     .fill()
             ).fill(),
-            panel(
-                row(
-                    text(statusLine()),
-                    spacer(),
-                    text("v" + currentVersion).bold().fg(Color.CYAN)
-                )
-            ).rounded().borderColor(busy ? Color.GREEN : Color.YELLOW).length(3)
+            renderStatusPanel()
         );
 
         return switch (activeOverlay()) {
             case PROMPT -> column(root, renderPromptDialog());
             case STARTUP_NOTICE -> column(root, renderStartupUpdateDialog());
             case REFRESH_CONFLICT -> column(root, renderRefreshConflictDialog());
+            case COMMIT_CONFIRM -> column(root, renderCommitConfirmDialog());
             case NONE -> root;
         };
     }
@@ -248,6 +260,9 @@ public final class InteractiveApp extends ToolkitApp {
         }
         if (refreshConflict != null) {
             return ActiveOverlay.REFRESH_CONFLICT;
+        }
+        if (commitConfirm != null) {
+            return ActiveOverlay.COMMIT_CONFIRM;
         }
         return ActiveOverlay.NONE;
     }
@@ -276,6 +291,8 @@ public final class InteractiveApp extends ToolkitApp {
                 return EventResult.HANDLED;
             case REFRESH_CONFLICT:
                 return handleRefreshConflictKey(event);
+            case COMMIT_CONFIRM:
+                return handleCommitConfirmKey(event);
             case NONE:
                 break;
         }
@@ -328,6 +345,14 @@ public final class InteractiveApp extends ToolkitApp {
                 "Add existing repository",
                 List.of("Repository URI or local path", "Repository name")
             );
+            return EventResult.HANDLED;
+        }
+        if (event.isChar('m')) {
+            migrateSelectedRepository();
+            return EventResult.HANDLED;
+        }
+        if (event.isChar('g')) {
+            commitAndPushSelectedRepository();
             return EventResult.HANDLED;
         }
         if (event.isChar('d')) {
@@ -560,7 +585,14 @@ public final class InteractiveApp extends ToolkitApp {
                         repositoryName,
                         currentPrompt.values.getFirst()
                     );
-                    statusMessage = onboardingCompletedMessage(onboardingResult);
+                    maybeStartPostCreationFlow(
+                        PostCreationFlowSource.ONBOARDING,
+                        new RepositoryEntry(onboardingResult.repositoryName(), null, onboardingResult.repositoryPath().toString()),
+                        onboardingCompletedMessage(onboardingResult),
+                        true
+                    );
+                    reloadState();
+                    return;
                 }
                 case CREATE_PROFILE -> {
                     String repositoryName = currentPrompt.contextRepositoryName;
@@ -582,7 +614,17 @@ public final class InteractiveApp extends ToolkitApp {
                     }
                 }
                 case ADD_REPOSITORY -> {
-                    repositoryService.add(currentPrompt.values.getFirst(), currentPrompt.values.get(1));
+                    RepositoryEntry addedRepository = repositoryService.add(currentPrompt.values.getFirst(), currentPrompt.values.get(1));
+                    if (addedRepository.uri() == null) {
+                        maybeStartPostCreationFlow(
+                            PostCreationFlowSource.ADD_REPOSITORY,
+                            addedRepository,
+                            "Added repository `" + currentPrompt.values.get(1) + "`.",
+                            false
+                        );
+                        reloadState();
+                        return;
+                    }
                     statusMessage = "Added repository `" + currentPrompt.values.get(1) + "`.";
                 }
                 case DELETE_REPOSITORY -> {
@@ -623,6 +665,21 @@ public final class InteractiveApp extends ToolkitApp {
                         statusMessage = "Deleted repository `" + confirmation + "` (local folder kept).";
                     }
                 }
+                case COMMIT_AND_PUSH_REPOSITORY -> {
+                    String repositoryName = currentPrompt.contextRepositoryName;
+                    if (repositoryName == null || repositoryName.isBlank()) {
+                        throw new IllegalStateException(ERROR_REPOSITORY_SELECTION_REQUIRED);
+                    }
+                    runBusyOperation(
+                        "Committing and pushing repository `" + repositoryName + "`...",
+                        () -> {
+                            repositoryService.commitAndPush(repositoryName, currentPrompt.values.getFirst());
+                            return "Committed and pushed local changes for repository `" + repositoryName + "`.";
+                        },
+                        null
+                    );
+                    return;
+                }
                 case DELETE_PROFILE -> {
                     String confirmation = currentPrompt.values.getFirst();
                     String profileName = currentPrompt.expectedConfirmation;
@@ -643,8 +700,46 @@ public final class InteractiveApp extends ToolkitApp {
                     String repositoryName = currentPrompt.values.getFirst();
                     String locationPath = currentPrompt.values.get(1);
                     String profileName = currentPrompt.values.get(2).isBlank() ? null : currentPrompt.values.get(2);
-                    repositoryService.createAndAdd(repositoryName, profileName, locationPath);
-                    statusMessage = "Created and added repository `" + repositoryName + "`.";
+                    RepositoryEntry createdRepository = repositoryService.createAndAdd(repositoryName, profileName, locationPath);
+                    maybeStartPostCreationFlow(
+                        PostCreationFlowSource.CREATE_REPOSITORY,
+                        createdRepository,
+                        "Created and added repository `" + repositoryName + "`.",
+                        true
+                    );
+                    reloadState();
+                    return;
+                }
+                case POST_CREATION_GIT_INIT -> {
+                    PostCreationFlowState postCreationFlowState = requiredPostCreationFlowState(currentPrompt);
+                    postCreationFlowState = postCreationFlowState.withInitializeGit("yes".equalsIgnoreCase(currentPrompt.values.getFirst()));
+                    if (shouldPromptForGitHubPublish(postCreationFlowState)) {
+                        prompt = postCreationPublishPrompt(postCreationFlowState);
+                        status = "Publish `" + postCreationFlowState.repositoryName() + "` to GitHub?";
+                        return;
+                    }
+                    runBusyPostCreationFlow(postCreationFlowState);
+                    return;
+                }
+                case POST_CREATION_PUBLISH_GITHUB -> {
+                    PostCreationFlowState postCreationFlowState = requiredPostCreationFlowState(currentPrompt);
+                    postCreationFlowState = postCreationFlowState.withPublishToGitHub("yes".equalsIgnoreCase(currentPrompt.values.getFirst()));
+                    if (postCreationFlowState.publishToGitHub()) {
+                        prompt = postCreationVisibilityPrompt(postCreationFlowState);
+                        status = "Choose GitHub visibility for `" + postCreationFlowState.repositoryName() + "`.";
+                        return;
+                    }
+                    runBusyPostCreationFlow(postCreationFlowState);
+                    return;
+                }
+                case POST_CREATION_GITHUB_VISIBILITY -> {
+                    PostCreationFlowState postCreationFlowState = requiredPostCreationFlowState(currentPrompt);
+                    RepositoryVisibility visibility = "public".equalsIgnoreCase(currentPrompt.values.getFirst())
+                        ? RepositoryVisibility.PUBLIC
+                        : RepositoryVisibility.PRIVATE;
+                    postCreationFlowState = postCreationFlowState.withVisibility(visibility);
+                    runBusyPostCreationFlow(postCreationFlowState);
+                    return;
                 }
             }
             reloadState();
@@ -678,6 +773,183 @@ public final class InteractiveApp extends ToolkitApp {
             return message + " and backed up existing files to `" + onboardingResult.switchResult().backupDirectory() + "`.";
         }
         return message + ".";
+    }
+
+    private void maybeStartPostCreationFlow(
+        PostCreationFlowSource source,
+        RepositoryEntry repositoryEntry,
+        String successMessage,
+        boolean defaultInitializeGit
+    ) {
+        Path repositoryPath = Path.of(repositoryEntry.localPath());
+        PostCreationCapabilities capabilities = repositoryPostCreationService.capabilities(repositoryPath);
+        if (capabilities.hasOriginRemote()) {
+            String originUri = repositoryPostCreationService.persistExistingOrigin(repositoryEntry.name(), repositoryPath);
+            status = successMessage + " Saved origin URI `" + originUri + "`.";
+            return;
+        }
+        PostCreationFlowState postCreationFlowState = new PostCreationFlowState(
+            source,
+            repositoryEntry.name(),
+            repositoryPath,
+            successMessage,
+            !capabilities.gitInitialized(),
+            defaultInitializeGit,
+            capabilities.canPublishWithGh(),
+            false,
+            RepositoryVisibility.PRIVATE
+        );
+
+        if (postCreationFlowState.canInitializeGit()) {
+            prompt = postCreationGitInitPrompt(postCreationFlowState);
+            status = "Configure git setup for `" + postCreationFlowState.repositoryName() + "`.";
+            return;
+        }
+        if (shouldPromptForGitHubPublish(postCreationFlowState)) {
+            prompt = postCreationPublishPrompt(postCreationFlowState);
+            status = "Publish `" + postCreationFlowState.repositoryName() + "` to GitHub?";
+            return;
+        }
+        status = successMessage;
+    }
+
+    private void migrateSelectedRepository() {
+        if (selectedNode == null || selectedNode.kind() != NodeKind.REPOSITORY) {
+            status = STATUS_SELECT_NODE_FIRST;
+            return;
+        }
+        String repositoryName = selectedRepositoryName();
+        if (repositoryName == null) {
+            status = STATUS_SELECT_NODE_FIRST;
+            return;
+        }
+        ConfiguredRepository repository = selectedConfiguredRepository();
+        if (repository == null) {
+            status = STATUS_SELECT_NODE_FIRST;
+            return;
+        }
+        if (repository.isGitBacked()) {
+            status = "Repository `" + repositoryName + "` is already git-backed.";
+            return;
+        }
+        maybeStartPostCreationFlow(
+            PostCreationFlowSource.MIGRATE_REPOSITORY,
+            new RepositoryEntry(repository.name(), repository.uri(), repository.localPath()),
+            "Updated repository `" + repositoryName + "`.",
+            false
+        );
+        reloadState();
+    }
+
+    private void commitAndPushSelectedRepository() {
+        String repositoryName = selectedRepositoryName();
+        if (repositoryName == null) {
+            status = STATUS_SELECT_NODE_FIRST;
+            return;
+        }
+        ConfiguredRepository repository = selectedConfiguredRepository();
+        if (repository == null) {
+            status = STATUS_SELECT_NODE_FIRST;
+            return;
+        }
+        RepositoryDirtyState dirtyState = repositoryDirtyStateByName.get(repositoryName);
+        if (dirtyState != null && dirtyState.inspectionFailed()) {
+            if (status == null || status.isBlank() || "Ready. Select a node in the hierarchy.".equals(status)) {
+                status = "Unable to inspect repository `" + repositoryName + "` for local git changes.";
+            }
+            return;
+        }
+        if (!isSelectedRepositoryCommitPushAvailable()) {
+            if (!repository.isGitBacked()) {
+                status = "Repository `" + repositoryName + "` is file-based; nothing to commit and push.";
+                return;
+            }
+            status = "Repository `" + repositoryName + "` has no local git changes to commit and push.";
+            return;
+        }
+        String diff = repositoryService.getLocalDiff(repositoryName);
+        commitConfirm = new CommitConfirmState(repositoryName, diff);
+        status = "Review local changes for `" + repositoryName + "`.";
+    }
+
+    private PostCreationFlowState requiredPostCreationFlowState(PromptState promptState) {
+        if (promptState.postCreationFlowState == null) {
+            throw new IllegalStateException("Post-creation prompt state is missing.");
+        }
+        return promptState.postCreationFlowState;
+    }
+
+    private boolean shouldPromptForGitHubPublish(PostCreationFlowState postCreationFlowState) {
+        return postCreationFlowState.canPublishToGitHub()
+            && (!postCreationFlowState.canInitializeGit() || postCreationFlowState.initializeGit());
+    }
+
+    private PromptState postCreationGitInitPrompt(PostCreationFlowState postCreationFlowState) {
+        PromptState nextPrompt = PromptState.multiWithOptions(
+            PromptAction.POST_CREATION_GIT_INIT,
+            "Initialize git repository",
+            List.of("Initialize git and create initial commit?"),
+            List.of(List.of("yes", "no"))
+        );
+        nextPrompt.postCreationFlowState = postCreationFlowState;
+        if (!postCreationFlowState.initializeGit()) {
+            nextPrompt.values.set(0, "no");
+        }
+        return nextPrompt;
+    }
+
+    private PromptState postCreationPublishPrompt(PostCreationFlowState postCreationFlowState) {
+        PromptState nextPrompt = PromptState.multiWithOptions(
+            PromptAction.POST_CREATION_PUBLISH_GITHUB,
+            "Publish repository to GitHub",
+            List.of("Publish with gh and set `origin`?"),
+            List.of(List.of("no", "yes"))
+        );
+        nextPrompt.postCreationFlowState = postCreationFlowState;
+        return nextPrompt;
+    }
+
+    private PromptState postCreationVisibilityPrompt(PostCreationFlowState postCreationFlowState) {
+        PromptState nextPrompt = PromptState.multiWithOptions(
+            PromptAction.POST_CREATION_GITHUB_VISIBILITY,
+            "GitHub visibility",
+            List.of("Repository visibility"),
+            List.of(List.of("private", "public"))
+        );
+        nextPrompt.postCreationFlowState = postCreationFlowState;
+        if (postCreationFlowState.visibility() == RepositoryVisibility.PUBLIC) {
+            nextPrompt.values.set(0, "public");
+        }
+        return nextPrompt;
+    }
+
+    private void runBusyPostCreationFlow(PostCreationFlowState postCreationFlowState) {
+        runBusyOperation(
+            "Configuring repository `" + postCreationFlowState.repositoryName() + "`...",
+            () -> applyPostCreationFlow(postCreationFlowState),
+            null
+        );
+    }
+
+    private String applyPostCreationFlow(PostCreationFlowState postCreationFlowState) {
+        PostCreationResult result = repositoryPostCreationService.run(
+            postCreationFlowState.repositoryName(),
+            postCreationFlowState.repositoryPath(),
+            new PostCreationRequest(
+                postCreationFlowState.initializeGit(),
+                postCreationFlowState.publishToGitHub(),
+                postCreationFlowState.visibility()
+            )
+        );
+
+        String message = postCreationFlowState.successMessage();
+        if (result.initializedGit()) {
+            message += " Initialized git repository and created an initial commit.";
+        }
+        if (result.publishedToGitHub()) {
+            message += " Published to GitHub and saved origin URI `" + result.persistedRepositoryUri() + "`.";
+        }
+        return message;
     }
 
     private void refreshSelectedRepository() {
@@ -753,6 +1025,23 @@ public final class InteractiveApp extends ToolkitApp {
         return repositoryName != null && isRepositoryRefreshable(repositoryName);
     }
 
+    private boolean isSelectedRepositoryMigratable() {
+        if (selectedNode == null || selectedNode.kind() != NodeKind.REPOSITORY) {
+            return false;
+        }
+        ConfiguredRepository repository = selectedConfiguredRepository();
+        return repository != null && !repository.isGitBacked();
+    }
+
+    private boolean isSelectedRepositoryCommitPushAvailable() {
+        String repositoryName = selectedRepositoryName();
+        if (repositoryName == null) {
+            return false;
+        }
+        RepositoryDirtyState dirtyState = repositoryDirtyStateByName.get(repositoryName);
+        return dirtyState != null && dirtyState.hasLocalChanges() && !dirtyState.inspectionFailed();
+    }
+
     private boolean isRepositoryRefreshable(String repositoryName) {
         for (ConfiguredRepository repository : repositories) {
             if (repository.name().equals(repositoryName)) {
@@ -778,6 +1067,7 @@ public final class InteractiveApp extends ToolkitApp {
             repositories = List.of();
             status = "Error loading repositories: " + e.getMessage();
         }
+        repositoryDirtyStateByName = loadRepositoryDirtyStateByName(repositories);
 
         Map<String, Profile> byName = new HashMap<>();
         for (Profile profile : profiles) {
@@ -797,6 +1087,7 @@ public final class InteractiveApp extends ToolkitApp {
         hierarchyTree.roots(roots.toArray(TreeNode[]::new));
         hierarchyTree.selected(Math.max(0, previousSelection));
         syncSelectionAndPreview();
+        refreshSelectedRepositoryCommitPushPreview();
     }
 
     private List<TreeNode<NodeRef>> buildHierarchyTree() {
@@ -840,13 +1131,18 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     private StyledElement<?> renderTreeNode(TreeNode<NodeRef> node) {
-        return HierarchyTreeBuilder.renderTreeNode(node, profilesByName, profileParentByName);
+        return HierarchyTreeBuilder.renderTreeNode(node, profilesByName, profileParentByName, repositoryDirtyStateByName);
     }
 
     private void syncSelectionAndPreview() {
         TreeNode<NodeRef> selectedTreeNode = hierarchyTree.selectedNode();
         NodeRef nextSelectedNode = selectedTreeNode == null ? null : selectedTreeNode.data();
         if (Objects.equals(nextSelectedNode, selectedNode)) {
+            if (selectedNode != null && selectedNode.kind() == NodeKind.REPOSITORY) {
+                refreshSelectedRepositoryCommitPushPreview();
+            } else if (selectedNode != null && selectedNode.kind() == NodeKind.FILE && selectedNode.path() != null && !editMode) {
+                refreshSelectedFilePreview();
+            }
             return;
         }
 
@@ -855,30 +1151,25 @@ public final class InteractiveApp extends ToolkitApp {
         previewScrollOffset = 0;
 
         if (selectedNode == null || selectedNode.kind() != NodeKind.FILE || selectedNode.path() == null) {
+            refreshSelectedRepositoryCommitPushPreview();
             selectedFileContent = "";
             selectedFilePreview = DetailPaneRenderer.plainText("");
             editorState.setText("");
             return;
         }
 
-        try {
-            selectedFileContent = Files.readString(selectedNode.path());
-            selectedFilePreview = DetailPaneRenderer.plainText(selectedFileContent);
-            requestBatPreview(selectedNode.path(), selectedFileContent);
-            editorState.setText(selectedFileContent);
-            resetEditorCursorToTop();
-        } catch (IOException e) {
-            selectedFileContent = "";
-            selectedFilePreview = DetailPaneRenderer.plainText("");
-            editorState.setText("");
-            status = "Error loading file: " + e.getMessage();
-        }
+        refreshSelectedRepositoryCommitPushPreview();
+
+        refreshSelectedFilePreview();
+        resetEditorCursorToTop();
     }
 
     private Element renderDetailPane() {
         return DetailPaneRenderer.renderDetailPane(
             selectedNode,
             isSelectedRepositoryRefreshable(),
+            isSelectedRepositoryMigratable(),
+            isSelectedRepositoryCommitPushAvailable(),
             selectedProfileHasParent(),
             editMode,
             profilesByName,
@@ -1011,8 +1302,10 @@ public final class InteractiveApp extends ToolkitApp {
                 selectedFilePreview = DetailPaneRenderer.plainText(selectedFileContent);
                 requestBatPreview(filePath, selectedFileContent);
                 if (runner() != null) {
-                    runner().focusManager().setFocus(DETAIL_ID);
-                    activePane = Pane.DETAIL;
+                    runner().focusManager().setFocus(TREE_ID);
+                    activePane = Pane.TREE;
+                } else {
+                    activePane = Pane.TREE;
                 }
             }
         );
@@ -1030,6 +1323,19 @@ public final class InteractiveApp extends ToolkitApp {
     private String selectedRepositoryName() {
         if (selectedNode != null && selectedNode.repositoryName() != null) {
             return selectedNode.repositoryName();
+        }
+        return null;
+    }
+
+    private ConfiguredRepository selectedConfiguredRepository() {
+        String repositoryName = selectedRepositoryName();
+        if (repositoryName == null) {
+            return null;
+        }
+        for (ConfiguredRepository repository : repositories) {
+            if (repository.name().equals(repositoryName)) {
+                return repository;
+            }
         }
         return null;
     }
@@ -1104,6 +1410,70 @@ public final class InteractiveApp extends ToolkitApp {
             }
         }
         return null;
+    }
+
+    private Map<String, RepositoryDirtyState> loadRepositoryDirtyStateByName(List<ConfiguredRepository> configuredRepositories) {
+        Map<String, RepositoryDirtyState> dirtyStateByName = new HashMap<>();
+        for (ConfiguredRepository repository : configuredRepositories) {
+            if (!repository.isGitBacked()) {
+                dirtyStateByName.put(repository.name(), RepositoryDirtyState.clean());
+                continue;
+            }
+            try {
+                dirtyStateByName.put(
+                    repository.name(),
+                    RepositoryDirtyState.fromPreview(repositoryService.inspectCommitPush(repository.name()))
+                );
+            } catch (RuntimeException e) {
+                dirtyStateByName.put(repository.name(), RepositoryDirtyState.inspectionError());
+                status = "Error: " + e.getMessage();
+            }
+        }
+        return Map.copyOf(dirtyStateByName);
+    }
+
+    private void refreshSelectedRepositoryCommitPushPreview() {
+        if (selectedNode == null || selectedNode.kind() != NodeKind.REPOSITORY || selectedNode.repositoryName() == null) {
+            selectedRepositoryCommitPushPreview = null;
+            return;
+        }
+        try {
+            selectedRepositoryCommitPushPreview = repositoryService.inspectCommitPush(selectedNode.repositoryName());
+            repositoryDirtyStateByName = withRepositoryDirtyState(
+                selectedNode.repositoryName(),
+                RepositoryDirtyState.fromPreview(selectedRepositoryCommitPushPreview)
+            );
+        } catch (RuntimeException e) {
+            selectedRepositoryCommitPushPreview = null;
+            repositoryDirtyStateByName = withRepositoryDirtyState(selectedNode.repositoryName(), RepositoryDirtyState.inspectionError());
+            status = "Error: " + e.getMessage();
+        }
+    }
+
+    private void refreshSelectedFilePreview() {
+        if (selectedNode == null || selectedNode.kind() != NodeKind.FILE || selectedNode.path() == null) {
+            selectedFileContent = "";
+            selectedFilePreview = DetailPaneRenderer.plainText("");
+            editorState.setText("");
+            return;
+        }
+        try {
+            selectedFileContent = Files.readString(selectedNode.path());
+            selectedFilePreview = DetailPaneRenderer.plainText(selectedFileContent);
+            requestBatPreview(selectedNode.path(), selectedFileContent);
+            editorState.setText(selectedFileContent);
+        } catch (IOException e) {
+            selectedFileContent = "";
+            selectedFilePreview = DetailPaneRenderer.plainText("");
+            editorState.setText("");
+            status = "Error loading file: " + e.getMessage();
+        }
+    }
+
+    private Map<String, RepositoryDirtyState> withRepositoryDirtyState(String repositoryName, RepositoryDirtyState dirtyState) {
+        Map<String, RepositoryDirtyState> updated = new HashMap<>(repositoryDirtyStateByName);
+        updated.put(repositoryName, dirtyState);
+        return Map.copyOf(updated);
     }
 
     private static String profileKey(String repositoryName, String profileName) {
@@ -1215,6 +1585,90 @@ public final class InteractiveApp extends ToolkitApp {
         return SPINNER_FRAMES[spinnerIndex % SPINNER_FRAMES.length] + " " + busyMessage;
     }
 
+    private Element renderStatusPanel() {
+        int terminalWidth = resolvedTerminalColumns();
+        int contentWidth = Math.max(20, terminalWidth - 4);
+        String versionLabel = "v" + currentVersion;
+        boolean renderVersionInline = contentWidth - versionLabel.length() - 1 >= 12;
+        int statusWidth = renderVersionInline ? contentWidth - versionLabel.length() - 1 : contentWidth;
+
+        List<String> lines = wrapStatusLines(statusLine(), statusWidth);
+        List<Element> panelContent = new ArrayList<>();
+
+        if (renderVersionInline) {
+            panelContent.add(
+                row(
+                    text(lines.getFirst()),
+                    spacer(),
+                    text(versionLabel).bold().fg(Color.CYAN)
+                )
+            );
+            for (int i = 1; i < lines.size(); i++) {
+                panelContent.add(text(lines.get(i)));
+            }
+        } else {
+            for (String line : lines) {
+                panelContent.add(text(line));
+            }
+            panelContent.add(row(spacer(), text(versionLabel).bold().fg(Color.CYAN)));
+        }
+
+        return panel(
+            column(panelContent.toArray(Element[]::new))
+        ).rounded().borderColor(busy ? Color.GREEN : Color.YELLOW).length(2 + panelContent.size());
+    }
+
+    private int resolvedTerminalColumns() {
+        OptionalInt terminalColumns = parseColumns(System.getenv("COLUMNS"));
+        if (terminalColumns.isPresent()) {
+            return terminalColumns.getAsInt();
+        }
+        return 120;
+    }
+
+    static List<String> wrapStatusLines(String text, int width) {
+        if (text == null || text.isBlank()) {
+            return List.of("");
+        }
+        List<String> lines = new ArrayList<>();
+        StringBuilder currentLine = new StringBuilder();
+        for (String word : text.trim().split("\\s+")) {
+            if (word.length() > width) {
+                if (!currentLine.isEmpty()) {
+                    lines.add(currentLine.toString());
+                    currentLine.setLength(0);
+                }
+                int index = 0;
+                while (word.length() - index > width) {
+                    lines.add(word.substring(index, index + width));
+                    index += width;
+                }
+                if (index < word.length()) {
+                    currentLine.append(word.substring(index));
+                }
+                continue;
+            }
+
+            if (currentLine.isEmpty()) {
+                currentLine.append(word);
+                continue;
+            }
+
+            if (currentLine.length() + 1 + word.length() <= width) {
+                currentLine.append(' ').append(word);
+                continue;
+            }
+
+            lines.add(currentLine.toString());
+            currentLine.setLength(0);
+            currentLine.append(word);
+        }
+        if (!currentLine.isEmpty()) {
+            lines.add(currentLine.toString());
+        }
+        return lines.isEmpty() ? List.of("") : lines;
+    }
+
     private void syncActivePaneFromFocus() {
         if (runner() == null) {
             return;
@@ -1247,9 +1701,30 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     private void runBusyOperation(String message, Runnable operation, String successMessage, Runnable onSuccess) {
-        if (busy || runner() == null) {
+        runBusyOperation(message, () -> {
+            operation.run();
+            return successMessage;
+        }, onSuccess);
+    }
+
+    private void runBusyOperation(String message, java.util.function.Supplier<String> operation, Runnable onSuccess) {
+        if (busy) {
             return;
         }
+        if (runner() == null) {
+            try {
+                status = operation.get();
+                reloadState();
+                if (onSuccess != null) {
+                    onSuccess.run();
+                }
+            } catch (Exception e) {
+                status = "Error: " + e.getMessage();
+                reloadState();
+            }
+            return;
+        }
+        
         busy = true;
         busyMessage = message;
         spinnerIndex = 0;
@@ -1263,12 +1738,12 @@ public final class InteractiveApp extends ToolkitApp {
         );
 
         Thread.ofVirtual().start(() -> {
-            String finalMessage = successMessage;
+            String finalMessage = null;
             ProfileService.ProfileRefreshConflictException repositoryConflict = null;
             ProfileService.ProfileRefreshUserConfigConflictException mergedFilesConflict = null;
             boolean operationSucceeded = true;
             try {
-                operation.run();
+                finalMessage = operation.get();
             } catch (ProfileService.ProfileRefreshConflictException e) {
                 repositoryConflict = e;
                 operationSucceeded = false;
@@ -1399,6 +1874,37 @@ public final class InteractiveApp extends ToolkitApp {
 
     private Element renderRefreshConflictDialog() {
         return RefreshConflictDialogRenderer.render(refreshConflict, this::handleKeyEvent);
+    }
+
+    private Element renderCommitConfirmDialog() {
+        return CommitConfirmDialogRenderer.render(commitConfirm, this::handleKeyEvent);
+    }
+
+    private EventResult handleCommitConfirmKey(KeyEvent event) {
+        if (event.isQuit()) {
+            quit();
+            return EventResult.HANDLED;
+        }
+        if (event.isCancel()) {
+            commitConfirm = null;
+            status = "Commit cancelled.";
+            return EventResult.HANDLED;
+        }
+        if (event.isChar('y') || event.isChar('Y')) {
+            String repositoryName = commitConfirm.repositoryName();
+            commitConfirm = null;
+            PromptState nextPrompt = PromptState.single(
+                PromptAction.COMMIT_AND_PUSH_REPOSITORY,
+                "Commit and push changes",
+                "Commit message"
+            );
+            nextPrompt.contextRepositoryName = repositoryName;
+            nextPrompt.values.set(0, DEFAULT_COMMIT_MESSAGE);
+            prompt = nextPrompt;
+            status = "Review commit message for `" + repositoryName + "`.";
+            return EventResult.HANDLED;
+        }
+        return EventResult.HANDLED;
     }
 
     private Element renderPromptDialog() {

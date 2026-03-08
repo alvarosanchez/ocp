@@ -9,6 +9,7 @@ import com.github.alvarosanchez.ocp.config.OcpConfigFile;
 import com.github.alvarosanchez.ocp.config.OcpConfigFile.OcpConfigOptions;
 import com.github.alvarosanchez.ocp.service.OnboardingService;
 import com.github.alvarosanchez.ocp.service.ProfileService;
+import com.github.alvarosanchez.ocp.service.RepositoryPostCreationService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -74,6 +75,7 @@ class InteractiveAppOnboardingTest {
             applicationContext.getBean(ProfileService.class),
             applicationContext.getBean(RepositoryService.class),
             applicationContext.getBean(OnboardingService.class),
+            applicationContext.getBean(RepositoryPostCreationService.class),
             applicationContext.getBean(ObjectMapper.class)
         );
 
@@ -104,6 +106,7 @@ class InteractiveAppOnboardingTest {
             applicationContext.getBean(ProfileService.class),
             applicationContext.getBean(RepositoryService.class),
             applicationContext.getBean(OnboardingService.class),
+            applicationContext.getBean(RepositoryPostCreationService.class),
             applicationContext.getBean(ObjectMapper.class)
         );
 
@@ -138,6 +141,7 @@ class InteractiveAppOnboardingTest {
             applicationContext.getBean(ProfileService.class),
             applicationContext.getBean(RepositoryService.class),
             applicationContext.getBean(OnboardingService.class),
+            applicationContext.getBean(RepositoryPostCreationService.class),
             applicationContext.getBean(ObjectMapper.class)
         );
 
@@ -184,6 +188,7 @@ class InteractiveAppOnboardingTest {
             applicationContext.getBean(ProfileService.class),
             applicationContext.getBean(RepositoryService.class),
             applicationContext.getBean(OnboardingService.class),
+            applicationContext.getBean(RepositoryPostCreationService.class),
             applicationContext.getBean(ObjectMapper.class)
         );
 
@@ -211,6 +216,7 @@ class InteractiveAppOnboardingTest {
             applicationContext.getBean(ProfileService.class),
             applicationContext.getBean(RepositoryService.class),
             applicationContext.getBean(OnboardingService.class),
+            applicationContext.getBean(RepositoryPostCreationService.class),
             applicationContext.getBean(ObjectMapper.class)
         );
 
@@ -238,6 +244,7 @@ class InteractiveAppOnboardingTest {
             applicationContext.getBean(ProfileService.class),
             applicationContext.getBean(RepositoryService.class),
             applicationContext.getBean(OnboardingService.class),
+            applicationContext.getBean(RepositoryPostCreationService.class),
             applicationContext.getBean(ObjectMapper.class)
         );
 
@@ -263,6 +270,7 @@ class InteractiveAppOnboardingTest {
             applicationContext.getBean(ProfileService.class),
             applicationContext.getBean(RepositoryService.class),
             applicationContext.getBean(OnboardingService.class),
+            applicationContext.getBean(RepositoryPostCreationService.class),
             applicationContext.getBean(ObjectMapper.class)
         );
         app.onStart();
