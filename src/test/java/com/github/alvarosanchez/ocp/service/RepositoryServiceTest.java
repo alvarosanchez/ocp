@@ -388,6 +388,28 @@ class RepositoryServiceTest {
     }
 
     @Test
+    void setRepositoryUriPreservesUnrelatedRawEntries() throws IOException {
+        Path localRepository = tempDir.resolve("local-repository").toAbsolutePath().normalize();
+        Files.createDirectories(localRepository);
+        writeConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(
+                    new RepositoryEntry("local", null, localRepository.toString()),
+                    new RepositoryEntry("  spaced-name  ", null, "relative/path")
+                )
+            )
+        );
+
+        repositoryService.setRepositoryUri("local", "git@github.com:acme/local.git");
+
+        OcpConfigFile stored = objectMapper.readValue(Files.readString(tempDir.resolve("config/config.json")), OcpConfigFile.class);
+        assertEquals(2, stored.repositories().size());
+        assertEquals(new RepositoryEntry("local", "git@github.com:acme/local.git", localRepository.toString()), stored.repositories().get(0));
+        assertEquals(new RepositoryEntry("  spaced-name  ", null, "relative/path"), stored.repositories().get(1));
+    }
+
+    @Test
     void createAndAddRollsBackCreatedRepositoryWhenAddFails() throws IOException {
         Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
         Path existingRepository = tempDir.resolve("existing-repository");

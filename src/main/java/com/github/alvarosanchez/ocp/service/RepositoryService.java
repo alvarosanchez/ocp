@@ -278,9 +278,9 @@ public final class RepositoryService {
         }
 
         OcpConfigFile configFile = loadConfigFile();
-        List<RepositoryEntry> repositories = new ArrayList<>(load());
-        RepositoryEntry target = findConfiguredRepository(normalizedRepositoryName, repositories);
-        for (RepositoryEntry repository : repositories) {
+        List<RepositoryEntry> normalizedRepositories = new ArrayList<>(load());
+        RepositoryEntry target = findConfiguredRepository(normalizedRepositoryName, normalizedRepositories);
+        for (RepositoryEntry repository : normalizedRepositories) {
             if (repository.name().equals(normalizedRepositoryName)) {
                 continue;
             }
@@ -290,12 +290,12 @@ public final class RepositoryService {
         }
 
         List<RepositoryEntry> updated = new ArrayList<>();
-        for (RepositoryEntry repository : repositories) {
-            if (!repository.name().equals(normalizedRepositoryName)) {
+        for (RepositoryEntry repository : configFile.repositories()) {
+            if (!normalizeRepositoryName(repository.name()).equals(normalizedRepositoryName)) {
                 updated.add(repository);
                 continue;
             }
-            updated.add(new RepositoryEntry(repository.name(), normalizedRepositoryUri, target.localPath()));
+            updated.add(new RepositoryEntry(repository.name(), normalizedRepositoryUri, repository.localPath()));
         }
         saveConfig(new OcpConfigFile(configFile.config(), updated));
         return findConfiguredRepository(normalizedRepositoryName, updated);
