@@ -102,7 +102,7 @@ class RepositoryPostCreationServiceTest {
     }
 
     @Test
-    void runInitializesGitAndCreatesInitialCommitWhenRequested() throws IOException {
+    void runInitializesGitAndChecksForInitialCommitWhenRequested() throws IOException {
         StubGitProcessExecutor gitProcessExecutor = new StubGitProcessExecutor(
             List.of(new StubProcess(0, ""), new StubProcess(0, " M repository.json\n"), new StubProcess(0, ""))
         );

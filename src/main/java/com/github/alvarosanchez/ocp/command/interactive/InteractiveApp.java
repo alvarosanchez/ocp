@@ -1452,7 +1452,6 @@ public final class InteractiveApp extends ToolkitApp {
                 );
             } catch (RuntimeException e) {
                 dirtyStateByName.put(repository.name(), RepositoryDirtyState.inspectionError());
-                status = "Error: " + e.getMessage();
             }
         }
         return Map.copyOf(dirtyStateByName);

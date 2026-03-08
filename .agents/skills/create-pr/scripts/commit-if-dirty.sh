@@ -12,11 +12,12 @@ fi
 commit_message="$1"
 shift
 
-if [[ -z "$(git status --short)" ]]; then
-  echo "Worktree already clean. No commit created."
+git add "$@"
+
+if git diff --cached --quiet; then
+  echo "No staged changes for specified paths. No commit created."
   exit 0
 fi
 
-git add "$@"
 git status --short
 git commit -m "$commit_message"
