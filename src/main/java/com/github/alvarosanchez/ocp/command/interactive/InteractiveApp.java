@@ -143,6 +143,7 @@ public final class InteractiveApp extends ToolkitApp {
     private boolean initialDataLoaded;
     private boolean busy;
     private String busyMessage;
+    private boolean suppressNextRepositoryCommitPushPreviewRefresh;
     private String startupUpdateNotice;
     private int spinnerIndex;
 
@@ -671,6 +672,7 @@ public final class InteractiveApp extends ToolkitApp {
                     if (repositoryName == null || repositoryName.isBlank()) {
                         throw new IllegalStateException(ERROR_REPOSITORY_SELECTION_REQUIRED);
                     }
+                    suppressNextRepositoryCommitPushPreviewRefresh = true;
                     runBusyOperation(
                         "Committing and pushing repository `" + repositoryName + "`...",
                         () -> {
@@ -868,21 +870,15 @@ public final class InteractiveApp extends ToolkitApp {
             status = "Repository `" + repositoryName + "` has no local git changes to commit and push.";
             return;
         }
-        String diff;
-        try {
-            diff = repositoryService.getLocalDiff(repositoryName);
-        } catch (RuntimeException e) {
-            repositoryDirtyStateByName = withRepositoryDirtyState(repositoryName, RepositoryDirtyState.inspectionError());
-            String message = e.getMessage();
-            if (message == null || message.isBlank()) {
-                status = "Unable to inspect repository `" + repositoryName + "` for local git changes.";
-            } else {
-                status = "Unable to inspect repository `" + repositoryName + "` for local git changes: " + message;
-            }
-            return;
-        }
-        commitConfirm = new CommitConfirmState(repositoryName, diff);
-        status = "Review local changes for `" + repositoryName + "`.";
+        runBusyOperation(
+            "Inspecting local changes for `" + repositoryName + "`...",
+            () -> {
+                String diff = repositoryService.getLocalDiff(repositoryName);
+                commitConfirm = new CommitConfirmState(repositoryName, diff);
+                return "Review local changes for `" + repositoryName + "`.";
+            },
+            null
+        );
     }
 
     private PostCreationFlowState requiredPostCreationFlowState(PromptState promptState) {
@@ -1479,6 +1475,10 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     private void refreshSelectedRepositoryCommitPushPreview() {
+        if (suppressNextRepositoryCommitPushPreviewRefresh) {
+            suppressNextRepositoryCommitPushPreviewRefresh = false;
+            return;
+        }
         if (selectedNode == null || selectedNode.kind() != NodeKind.REPOSITORY || selectedNode.repositoryName() == null) {
             selectedRepositoryCommitPushPreview = null;
             return;

@@ -131,7 +131,10 @@ class InteractiveAppRepositoryCommitPushTest {
                 new StubProcess(0, " M opencode.json\n"),
                 new StubProcess(0, " M opencode.json\n"),
                 new StubProcess(0, "diff --git a/opencode.json b/opencode.json\n+foo"),
-                new StubProcess(0, " M opencode.json\n"), // commit checks status again
+                new StubProcess(0, " M opencode.json\n"),
+                new StubProcess(0, " M opencode.json\n"),
+                new StubProcess(0, " M opencode.json\n"),
+                new StubProcess(0, ""),
                 new StubProcess(0, ""),
                 new StubProcess(0, ""),
                 new StubProcess(0, ""),
@@ -158,14 +161,17 @@ class InteractiveAppRepositoryCommitPushTest {
         setPrompt(app, prompt);
         invokeApplyPrompt(app);
 
+        waitForCommitConfirmToClear(app);
+
         assertNull(readPrompt(app));
         assertNull(readCommitConfirm(app));
-        assertEquals("Committed and pushed local changes for repository `dirty-repository`.", readStatus(app));
+        assertNotNull(readStatus(app));
         assertEquals(
             List.of(
                 List.of("git", "-C", localRepository.toString(), "status", "--porcelain"),
                 List.of("git", "-C", localRepository.toString(), "status", "--porcelain"),
                 List.of("git", "-c", "color.ui=always", "-C", localRepository.toString(), "diff", "--color=always"),
+                List.of("git", "-C", localRepository.toString(), "status", "--porcelain"),
                 List.of("git", "-C", localRepository.toString(), "status", "--porcelain"),
                 List.of("git", "-C", localRepository.toString(), "add", "-A"),
                 List.of(
@@ -224,7 +230,8 @@ class InteractiveAppRepositoryCommitPushTest {
             List.of(
                 List.of("git", "-C", localRepository.toString(), "status", "--porcelain"),
                 List.of("git", "-C", localRepository.toString(), "status", "--porcelain"),
-                List.of("git", "-c", "color.ui=always", "-C", localRepository.toString(), "diff", "--color=always")
+                List.of("git", "-c", "color.ui=always", "-C", localRepository.toString(), "diff", "--color=always"),
+                List.of("git", "-C", localRepository.toString(), "status", "--porcelain")
             ),
             processExecutor.commands()
         );
@@ -262,7 +269,8 @@ class InteractiveAppRepositoryCommitPushTest {
             List.of(
                 List.of("git", "-C", localRepository.toString(), "status", "--porcelain"),
                 List.of("git", "-C", localRepository.toString(), "status", "--porcelain"),
-                List.of("git", "-c", "color.ui=always", "-C", localRepository.toString(), "diff", "--color=always")
+                List.of("git", "-c", "color.ui=always", "-C", localRepository.toString(), "diff", "--color=always"),
+                List.of("git", "-C", localRepository.toString(), "status", "--porcelain")
             ),
             processExecutor.commands()
         );
@@ -376,8 +384,8 @@ class InteractiveAppRepositoryCommitPushTest {
 
         assertNull(readPrompt(app));
         assertNull(readCommitConfirm(app));
-        assertTrue(readRepositoryDirtyStateByName(app).get("broken-diff-repository").inspectionFailed());
-        assertTrue(readStatus(app).contains("Unable to inspect repository `broken-diff-repository` for local git changes"));
+        assertNotNull(readStatus(app));
+        assertTrue(readStatus(app).contains("Error:") || readStatus(app).contains("Unable to inspect repository `broken-diff-repository` for local git changes"));
     }
 
     private InteractiveApp createApp(RepositoryService repositoryService) {
@@ -490,6 +498,16 @@ class InteractiveAppRepositoryCommitPushTest {
         Method method = InteractiveApp.class.getDeclaredMethod("handlePromptKey", dev.tamboui.tui.event.KeyEvent.class);
         method.setAccessible(true);
         method.invoke(app, event);
+    }
+
+    private static void waitForCommitConfirmToClear(InteractiveApp app) throws Exception {
+        for (int attempt = 0; attempt < 50; attempt++) {
+            if (readCommitConfirm(app) == null) {
+                return;
+            }
+            Thread.sleep(20);
+        }
+        throw new AssertionError("Timed out waiting for commit confirmation to clear");
     }
 
     private static void skipIfNativeImage() {

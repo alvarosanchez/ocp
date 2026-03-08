@@ -164,16 +164,16 @@ public final class GitRepositoryClient {
     }
 
     public boolean hasRemote(Path localPath, String remoteName) {
-        int exitCode = runExitCodeOnly(
-            localPath,
-            "remote get-url",
-            List.of("git", "-C", localPath.toString(), "remote", "get-url", remoteName)
-        );
-        return switch (exitCode) {
-            case 0 -> true;
-            case 2 -> false;
-            default -> throw new IllegalStateException("git remote get-url failed for " + localPath + " (exit code " + exitCode + ")");
-        };
+        try {
+            remoteUri(localPath, remoteName);
+            return true;
+        } catch (IllegalStateException e) {
+            String message = e.getMessage();
+            if (message != null && message.contains("No such remote")) {
+                return false;
+            }
+            throw e;
+        }
     }
 
     public String remoteUri(Path localPath, String remoteName) {
