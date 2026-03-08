@@ -164,7 +164,7 @@ public final class GitRepositoryClient {
     }
 
     public boolean hasRemote(Path localPath, String remoteName) {
-        return runExitCodeOnly(List.of("git", "-C", localPath.toString(), "remote", "get-url", remoteName)) == 0;
+        return runExitCodeOnly(localPath, "remote get-url", List.of("git", "-C", localPath.toString(), "remote", "get-url", remoteName)) == 0;
     }
 
     public String remoteUri(Path localPath, String remoteName) {
@@ -256,16 +256,16 @@ public final class GitRepositoryClient {
         }
     }
 
-    private int runExitCodeOnly(List<String> command) {
+    private int runExitCodeOnly(Path localPath, String operation, List<String> command) {
         try {
             Process process = processExecutor.start(command);
             process.getInputStream().readAllBytes();
             return process.waitFor();
         } catch (IOException e) {
-            return -1;
+            throw new IllegalStateException("Failed to " + operation + " git repository " + localPath, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while running git command.", e);
+            throw new IllegalStateException("Interrupted while running git " + operation + " for " + localPath, e);
         }
     }
 

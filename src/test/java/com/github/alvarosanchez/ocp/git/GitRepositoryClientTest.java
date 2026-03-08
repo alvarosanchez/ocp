@@ -418,11 +418,23 @@ class GitRepositoryClientTest {
                 () -> client.hasRemote(localPath, "origin")
             );
 
-            assertTrue(thrown.getMessage().contains("Interrupted while running git command"));
+            assertTrue(thrown.getMessage().contains("Interrupted while running git remote get-url"));
             assertTrue(Thread.currentThread().isInterrupted());
         } finally {
             Thread.interrupted();
         }
+    }
+
+    @Test
+    void hasRemoteThrowsWhenGitProcessCannotBeStarted() {
+        StubProcessExecutor processExecutor = new StubProcessExecutor(new IOException("boom"));
+        Path localPath = tempDir.resolve("repositories/repo-missing-git");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        IllegalStateException thrown = assertThrows(IllegalStateException.class, () -> client.hasRemote(localPath, "origin"));
+
+        assertTrue(thrown.getMessage().contains("Failed to remote get-url git repository"));
     }
 
     private static final class StubProcessExecutor extends GitProcessExecutor {
