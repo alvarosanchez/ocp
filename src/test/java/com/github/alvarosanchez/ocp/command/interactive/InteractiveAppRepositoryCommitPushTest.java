@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 import com.github.alvarosanchez.ocp.command.Cli;
 import com.github.alvarosanchez.ocp.config.OcpConfigFile;
@@ -121,6 +122,7 @@ class InteractiveAppRepositoryCommitPushTest {
 
     @Test
     void commitAndPushPromptRunsRepositoryCommitAndPush() throws Exception {
+        skipIfNativeImage();
         Path localRepository = tempDir.resolve("dirty-repository");
         Files.createDirectories(localRepository.resolve(".git"));
         writeConfig(new RepositoryEntry("dirty-repository", "git@github.com:acme/dirty-repository.git", localRepository.toString()));
@@ -187,6 +189,7 @@ class InteractiveAppRepositoryCommitPushTest {
 
     @Test
     void commitAndPushPromptCanBeCancelledAtConfirmDialog() throws Exception {
+        skipIfNativeImage();
         Path localRepository = tempDir.resolve("dirty-repository");
         Files.createDirectories(localRepository.resolve(".git"));
         writeConfig(new RepositoryEntry("dirty-repository", "git@github.com:acme/dirty-repository.git", localRepository.toString()));
@@ -229,6 +232,7 @@ class InteractiveAppRepositoryCommitPushTest {
 
     @Test
     void commitAndPushReviewCanBeCancelledBeforeCommitMessage() throws Exception {
+        skipIfNativeImage();
         Path localRepository = tempDir.resolve("dirty-repository");
         Files.createDirectories(localRepository.resolve(".git"));
         writeConfig(new RepositoryEntry("dirty-repository", "git@github.com:acme/dirty-repository.git", localRepository.toString()));
@@ -464,6 +468,13 @@ class InteractiveAppRepositoryCommitPushTest {
         Method method = InteractiveApp.class.getDeclaredMethod("handlePromptKey", dev.tamboui.tui.event.KeyEvent.class);
         method.setAccessible(true);
         method.invoke(app, event);
+    }
+
+    private static void skipIfNativeImage() {
+        assumeFalse(
+            System.getProperty("org.graalvm.nativeimage.imagecode") != null,
+            "Interactive KeyEvent tests require dev.tamboui built-in bindings resources not present in native test runtime"
+        );
     }
 
     private static final class RecordingGitProcessExecutor extends GitProcessExecutor {
