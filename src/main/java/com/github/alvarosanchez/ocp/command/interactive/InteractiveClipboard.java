@@ -26,7 +26,7 @@ final class InteractiveClipboard {
         String operatingSystem = System.getProperty("os.name", "").toLowerCase();
         List<List<String>> commands = operatingSystem.contains("mac")
             ? MAC_COMMANDS
-            : operatingSystem.contains("win")
+            : operatingSystem.contains("windows")
                 ? WINDOWS_COMMANDS
                 : LINUX_COMMANDS;
         for (List<String> command : commands) {
@@ -34,7 +34,18 @@ final class InteractiveClipboard {
                 return;
             }
         }
-        throw new IllegalStateException("Clipboard is unavailable. Install pbcopy, wl-copy, xclip, or xsel, or use a desktop session with clipboard support.");
+        throw new IllegalStateException(clipboardUnavailableMessage(operatingSystem));
+    }
+
+
+    private static String clipboardUnavailableMessage(String operatingSystem) {
+        if (operatingSystem.contains("mac")) {
+            return "Clipboard is unavailable. Install or enable pbcopy, or use a desktop session with clipboard support.";
+        }
+        if (operatingSystem.contains("windows")) {
+            return "Clipboard is unavailable. Ensure clip is available, or use a Windows session with clipboard support.";
+        }
+        return "Clipboard is unavailable. Install wl-copy, xclip, or xsel, or use a desktop session with clipboard support.";
     }
 
     private static boolean tryCopy(List<String> command, String value) {

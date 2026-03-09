@@ -143,8 +143,7 @@ class InteractiveAppSaveFocusTest {
             applicationContext.getBean(RepositoryService.class),
             applicationContext.getBean(OnboardingService.class),
             applicationContext.getBean(RepositoryPostCreationService.class),
-            objectMapper,
-            applicationContext
+            objectMapper
         );
     }
 

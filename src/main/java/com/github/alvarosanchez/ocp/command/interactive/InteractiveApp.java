@@ -1,8 +1,6 @@
 package com.github.alvarosanchez.ocp.command.interactive;
 
 import com.github.alvarosanchez.ocp.command.OcpVersionProvider;
-import com.github.alvarosanchez.ocp.command.OcpCommand;
-import com.github.alvarosanchez.ocp.command.SystemDependencies;
 import com.github.alvarosanchez.ocp.config.OcpConfigFile.RepositoryEntry;
 import com.github.alvarosanchez.ocp.config.RepositoryConfigFile;
 import com.github.alvarosanchez.ocp.command.Cli;
@@ -30,7 +28,6 @@ import dev.tamboui.toolkit.event.EventResult;
 import dev.tamboui.tui.event.KeyEvent;
 import dev.tamboui.widgets.input.TextAreaState;
 import dev.tamboui.widgets.tree.TreeNode;
-import io.micronaut.context.ApplicationContext;
 import io.micronaut.serde.ObjectMapper;
 
 import java.io.IOException;
@@ -119,7 +116,6 @@ public final class InteractiveApp extends ToolkitApp {
     private final OnboardingService onboardingService;
     private final RepositoryPostCreationService repositoryPostCreationService;
     private final ObjectMapper objectMapper;
-    private final ApplicationContext applicationContext;
     private final String currentVersion = OcpVersionProvider.readVersion();
     private final BatPreviewRenderer batPreviewRenderer;
 
@@ -185,8 +181,7 @@ public final class InteractiveApp extends ToolkitApp {
         RepositoryService repositoryService,
         OnboardingService onboardingService,
         RepositoryPostCreationService repositoryPostCreationService,
-        ObjectMapper objectMapper,
-        ApplicationContext applicationContext
+        ObjectMapper objectMapper
     ) {
         this(
             profileService,
@@ -194,7 +189,6 @@ public final class InteractiveApp extends ToolkitApp {
             onboardingService,
             repositoryPostCreationService,
             objectMapper,
-            applicationContext,
             new BatPreviewRenderer()
         );
     }
@@ -205,7 +199,6 @@ public final class InteractiveApp extends ToolkitApp {
         OnboardingService onboardingService,
         RepositoryPostCreationService repositoryPostCreationService,
         ObjectMapper objectMapper,
-        ApplicationContext applicationContext,
         BatPreviewRenderer batPreviewRenderer
     ) {
         this.profileService = profileService;
@@ -213,7 +206,6 @@ public final class InteractiveApp extends ToolkitApp {
         this.onboardingService = onboardingService;
         this.repositoryPostCreationService = repositoryPostCreationService;
         this.objectMapper = objectMapper;
-        this.applicationContext = applicationContext;
         this.batPreviewRenderer = batPreviewRenderer;
         startupUpdateNotice = Cli.consumeStartupNotice();
     }
@@ -238,7 +230,6 @@ public final class InteractiveApp extends ToolkitApp {
         );
 
         Thread.ofVirtual().start(this::loadInitialDataInBackground);
-        Thread.ofVirtual().start(this::runSplashStartupChecksInBackground);
         Thread.ofVirtual().start(this::prewarmBatAvailability);
     }
 
@@ -1852,29 +1843,6 @@ public final class InteractiveApp extends ToolkitApp {
     private void maybeHideSplash() {
         if (initialDataLoaded && splashMinimumElapsed) {
             splashVisible = false;
-        }
-    }
-
-    private void runSplashStartupChecksInBackground() {
-        finishSplashStartupChecks();
-    }
-
-    private void updateStartupStatus(String message) {
-        if (message == null || message.isBlank()) {
-            return;
-        }
-        if (runner() != null) {
-            runner().runOnRenderThread(() -> status = message);
-        } else {
-            status = message;
-        }
-    }
-
-    private void finishSplashStartupChecks() {
-        if (runner() != null) {
-            runner().runOnRenderThread(this::maybeHideSplash);
-        } else {
-            maybeHideSplash();
         }
     }
 

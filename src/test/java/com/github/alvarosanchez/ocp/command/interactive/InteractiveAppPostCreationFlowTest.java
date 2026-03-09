@@ -242,8 +242,7 @@ class InteractiveAppPostCreationFlowTest {
             applicationContext.getBean(RepositoryService.class),
             applicationContext.getBean(OnboardingService.class),
             applicationContext.getBean(RepositoryPostCreationService.class),
-            applicationContext.getBean(ObjectMapper.class),
-            applicationContext
+            applicationContext.getBean(ObjectMapper.class)
         );
     }
 

@@ -33,30 +33,6 @@ import picocli.CommandLine.Command;
 )
 public class OcpCommand implements Runnable {
 
-    private static final class ApplicationContextProvider {
-        private static final ThreadLocal<ApplicationContext> CURRENT = new ThreadLocal<>();
-
-        private ApplicationContextProvider() {
-        }
-
-        static void set(ApplicationContext context) {
-            CURRENT.set(context);
-        }
-
-        static void clear() {
-            CURRENT.remove();
-        }
-
-        static ApplicationContext context() {
-            ApplicationContext context = CURRENT.get();
-            if (context == null) {
-                throw new IllegalStateException("Interactive application context is unavailable.");
-            }
-            return context;
-        }
-    }
-
-
     private final ProfileService profileService;
     private final RepositoryService repositoryService;
     private final OnboardingService onboardingService;
@@ -97,16 +73,13 @@ public class OcpCommand implements Runnable {
             .propertySources(new CommandLinePropertySource(io.micronaut.core.cli.CommandLine.parse(args)));
         int exitCode;
         try (ApplicationContext context = builder.start()) {
-            ApplicationContextProvider.set(context);
             runStartupVersionCheck(context, args);
             exitCode = new CommandLine(OcpCommand.class, new MicronautFactory(context)).execute(args);
-        } finally {
-            ApplicationContextProvider.clear();
         }
         System.exit(exitCode);
     }
 
-    public static void runStartupVersionCheck(ApplicationContext context, String[] args) {
+    static void runStartupVersionCheck(ApplicationContext context, String[] args) {
         try {
             VersionCheckService.VersionCheckResult result = context.getBean(VersionCheckService.class).check();
             presentStartupVersionNotice(args, result.noticeMessage(), isInteractiveTerminal());
@@ -120,7 +93,7 @@ public class OcpCommand implements Runnable {
         }
     }
 
-    public static String startupVersionCheckFailureMessage(RuntimeException exception) {
+    static String startupVersionCheckFailureMessage(RuntimeException exception) {
         String baseMessage = "Could not check for newer ocp releases."
             + " Verify your OCP config file: "
             + resolvedConfigFilePath();
@@ -198,12 +171,8 @@ public class OcpCommand implements Runnable {
         return isInteractiveTerminal();
     }
 
-    ApplicationContext applicationContext() {
-        return ApplicationContextProvider.context();
-    }
-
     InteractiveApp createInteractiveApp() {
-        return new InteractiveApp(profileService, repositoryService, onboardingService, repositoryPostCreationService, objectMapper, applicationContext());
+        return new InteractiveApp(profileService, repositoryService, onboardingService, repositoryPostCreationService, objectMapper);
     }
 
 }
