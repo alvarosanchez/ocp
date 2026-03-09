@@ -8,7 +8,6 @@ import sys
 import termios
 import fcntl
 import time
-import shutil
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -24,9 +23,6 @@ OPENCODE_DIR = HOME_DIR / ".config" / "opencode"
 WORKSPACE_DIR = WORK_DIR / "workspace"
 REPO_DIR = WORK_DIR / "zzz-fixture-repo"
 FIXTURE_BIN = ROOT_DIR / "scripts" / "test-support" / "fixtures" / "bin"
-REAL_OCP_CONFIG_DIR = Path.home() / ".config" / "ocp"
-REAL_OCP_CONFIG_BACKUP = WORK_DIR / "backup-real-ocp-config"
-LOCK_FILE = Path("/tmp/ocp-repro-real-home.lock")
 
 for path in [CONFIG_DIR, CACHE_DIR, OPENCODE_DIR, WORKSPACE_DIR, REPO_DIR]:
     path.mkdir(parents=True, exist_ok=True)
@@ -64,37 +60,15 @@ else:
 )
 
 
-def install_fixture_config_into_real_home():
-    fd = os.open(LOCK_FILE, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-    os.close(fd)
-    REAL_OCP_CONFIG_BACKUP.parent.mkdir(parents=True, exist_ok=True)
-    if REAL_OCP_CONFIG_BACKUP.exists():
-        shutil.rmtree(REAL_OCP_CONFIG_BACKUP)
-    if REAL_OCP_CONFIG_DIR.exists():
-        shutil.move(str(REAL_OCP_CONFIG_DIR), str(REAL_OCP_CONFIG_BACKUP))
-    else:
-        REAL_OCP_CONFIG_BACKUP.mkdir(parents=True, exist_ok=True)
-    REAL_OCP_CONFIG_DIR.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(CONFIG_DIR, REAL_OCP_CONFIG_DIR)
-
-
-def restore_real_home_config():
-    if REAL_OCP_CONFIG_DIR.exists():
-        shutil.rmtree(REAL_OCP_CONFIG_DIR)
-    if REAL_OCP_CONFIG_BACKUP.exists() and any(REAL_OCP_CONFIG_BACKUP.iterdir()):
-        shutil.move(str(REAL_OCP_CONFIG_BACKUP), str(REAL_OCP_CONFIG_DIR))
-    elif REAL_OCP_CONFIG_BACKUP.exists():
-        shutil.rmtree(REAL_OCP_CONFIG_BACKUP)
-    if LOCK_FILE.exists():
-        LOCK_FILE.unlink()
-
-
 env = os.environ.copy()
 env["TERM"] = "xterm-256color"
 env["PATH"] = str(FIXTURE_BIN) + os.pathsep + env.get("PATH", "")
 env["OCP_BAT_PATH"] = os.environ.get("OCP_BAT_PATH", str(FIXTURE_BIN / "bat"))
 env["OCP_BAT_LOG"] = str(BAT_LOG_FILE)
-env["HOME"] = str(HOME_DIR)
+env["OCP_CONFIG_DIR"] = str(CONFIG_DIR)
+env["OCP_CACHE_DIR"] = str(CACHE_DIR)
+env["OCP_OPENCODE_CONFIG_DIR"] = str(OPENCODE_DIR)
+env["OCP_WORKING_DIR"] = str(WORKSPACE_DIR)
 argv = [
     str(ROOT_DIR / "scripts" / "test-support" / "run_native_repro.sh"),
     str(WORK_DIR),
@@ -193,125 +167,121 @@ def wait_for_predicate(fd, transcript, predicate, timeout=6.0):
     return current, normalize_terminal_output(current), False
 
 
-install_fixture_config_into_real_home()
-try:
-    pid, fd = pty.fork()
-    if pid == 0:
-        os.chdir(ROOT_DIR)
-        os.execvpe(argv[0], argv, env)
+pid, fd = pty.fork()
+if pid == 0:
+    os.chdir(ROOT_DIR)
+    os.execvpe(argv[0], argv, env)
 
-    fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("hhhh", 40, 120, 0, 0))
-    os.kill(pid, signal.SIGWINCH)
-    transcript = drain(fd, 4.0)
-    normalized = normalize_terminal_output(transcript)
+fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("hhhh", 40, 120, 0, 0))
+os.kill(pid, signal.SIGWINCH)
+transcript = drain(fd, 4.0)
+normalized = normalize_terminal_output(transcript)
 
-    # wait until the main UI is visible
-    transcript, normalized, interactive_started = wait_for_predicate(
-        fd,
-        transcript,
-        lambda n: (
-            "Repositories / Profiles / Files" in n
-            and "Ready. Select a node in the hierarchy." in n
-        ),
-        timeout=10.0,
+# wait until the main UI is visible
+transcript, normalized, interactive_started = wait_for_predicate(
+    fd,
+    transcript,
+    lambda n: (
+        "Repositories / Profiles / Files" in n
+        and "Ready. Select a node in the hierarchy." in n
+    ),
+    timeout=10.0,
+)
+
+# dismiss modal if present
+if "OCP Notice" in normalized:
+    transcript = send_key(fd, b"\x1b", transcript, 0.8)
+    transcript, normalized, _ = wait_for_predicate(
+        fd, transcript, lambda n: "OCP Notice" not in n, timeout=5.0
     )
 
-    # dismiss modal if present
-    if "OCP Notice" in normalized:
-        transcript = send_key(fd, b"\x1b", transcript, 0.8)
-        transcript, normalized, _ = wait_for_predicate(
-            fd, transcript, lambda n: "OCP Notice" not in n, timeout=5.0
-        )
-
+transcript = send_key(fd, b"\x1b[C", transcript, 0.6)
+transcript = send_key(fd, b"\x1b[B", transcript, 0.6)
+normalized = normalize_terminal_output(transcript)
+if "▶ 👤" in normalized:
     transcript = send_key(fd, b"\x1b[C", transcript, 0.6)
-    transcript = send_key(fd, b"\x1b[B", transcript, 0.6)
-    normalized = normalize_terminal_output(transcript)
-    if "▶ 👤" in normalized:
-        transcript = send_key(fd, b"\x1b[C", transcript, 0.6)
-    transcript = send_key(fd, b"\x1b[B", transcript, 0.6)
-    if SCENARIO == "deep-merge":
-        transcript = send_key(fd, b"\x1b[A", transcript, 0.6)
-    normalized = normalize_terminal_output(transcript)
-
-    # try opening selected node and shift focus to detail pane
-    transcript = send_key(fd, b"\r", transcript, 0.8)
-    transcript = send_key(fd, b"\t", transcript, 0.8)
-    transcript, normalized, _ = wait_for_predicate(
-        fd,
-        transcript,
-        lambda n: (
-            "Preview:" in n
-            or "opencode.json" in n
-            or "opencode.jsonc" in n
-            or "theme" in n
-            or "nested" in n
-            or "deep-merged" in n
-            or "parentOnly" in n
-            or "childOnly" in n
-        ),
-        timeout=5.0,
-    )
-
-    transcript, normalized, _ = wait_for_predicate(
-        fd,
-        transcript,
-        lambda n: "BAT_FIXTURE_HIT" in n,
-        timeout=4.0,
-    )
-
+transcript = send_key(fd, b"\x1b[B", transcript, 0.6)
+if SCENARIO == "deep-merge":
     transcript = send_key(fd, b"\x1b[A", transcript, 0.6)
-    transcript = send_key(fd, b"\x1b[B", transcript, 0.6)
+normalized = normalize_terminal_output(transcript)
+
+# try opening selected node and shift focus to detail pane
+transcript = send_key(fd, b"\r", transcript, 0.8)
+transcript = send_key(fd, b"\t", transcript, 0.8)
+transcript, normalized, _ = wait_for_predicate(
+    fd,
+    transcript,
+    lambda n: (
+        "Preview:" in n
+        or "opencode.json" in n
+        or "opencode.jsonc" in n
+        or "theme" in n
+        or "nested" in n
+        or "deep-merged" in n
+        or "parentOnly" in n
+        or "childOnly" in n
+    ),
+    timeout=5.0,
+)
+
+transcript, normalized, _ = wait_for_predicate(
+    fd,
+    transcript,
+    lambda n: "BAT_FIXTURE_HIT" in n,
+    timeout=4.0,
+)
+
+transcript = send_key(fd, b"\x1b[A", transcript, 0.6)
+transcript = send_key(fd, b"\x1b[B", transcript, 0.6)
+transcript, normalized, _ = wait_for_predicate(
+    fd,
+    transcript,
+    lambda n: (
+        "BAT_FIXTURE_HIT" in n
+        or ("parentOnly" in n and "childOnly" in n)
+        or ("theme" in n and "nested" in n)
+    ),
+    timeout=4.0,
+)
+
+if SCENARIO == "deep-merge":
     transcript, normalized, _ = wait_for_predicate(
         fd,
         transcript,
-        lambda n: (
-            "BAT_FIXTURE_HIT" in n
-            or ("parentOnly" in n and "childOnly" in n)
-            or ("theme" in n and "nested" in n)
-        ),
-        timeout=4.0,
+        lambda n: "parentOnly" in n and "childOnly" in n,
+        timeout=8.0,
     )
 
-    if SCENARIO == "deep-merge":
-        transcript, normalized, _ = wait_for_predicate(
-            fd,
-            transcript,
-            lambda n: "parentOnly" in n and "childOnly" in n,
-            timeout=8.0,
-        )
+transcript = send_key(fd, b"q", transcript, 0.5)
 
-    transcript = send_key(fd, b"q", transcript, 0.5)
+try:
+    os.kill(pid, signal.SIGTERM)
+except OSError:
+    pass
 
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except OSError:
-        pass
-
-    normalized = normalize_terminal_output(transcript)
-    OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT_FILE.write_text(transcript)
-    NORMALIZED_FILE.write_text(normalized)
-    if BAT_LOG_FILE.exists():
-        print(f"BAT_INVOCATIONS_LOG={BAT_LOG_FILE}")
-    preview_text_found = any(
-        token in normalized
-        for token in ["Preview:", "opencode.json", "opencode.jsonc", "theme", "nested"]
-    )
-    fixture_color_found = "\x1b[31m" in transcript or "\x1b[0;31m" in transcript
-    fixture_text_found = "BAT_FIXTURE_HIT" in normalized
-    deep_merge_label_found = "(deep-merged)" in normalized
-    merged_content_found = "parentOnly" in normalized and "childOnly" in normalized
-    reselect_content_found = (
-        "BAT_FIXTURE_HIT" in normalized
-        or ("parentOnly" in normalized and "childOnly" in normalized)
-        or ("theme" in normalized and "nested" in normalized)
-    )
-    print(f"INTERACTIVE_STARTED={interactive_started}")
-    print(f"PREVIEW_TEXT_FOUND={preview_text_found}")
-    print(f"FIXTURE_COLOR_FOUND={fixture_color_found}")
-    print(f"FIXTURE_TEXT_FOUND={fixture_text_found}")
-    print(f"DEEP_MERGE_LABEL_FOUND={deep_merge_label_found}")
-    print(f"MERGED_CONTENT_FOUND={merged_content_found}")
-    print(f"RESELECT_CONTENT_FOUND={reselect_content_found}")
-finally:
-    restore_real_home_config()
+normalized = normalize_terminal_output(transcript)
+OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+OUTPUT_FILE.write_text(transcript)
+NORMALIZED_FILE.write_text(normalized)
+if BAT_LOG_FILE.exists():
+    print(f"BAT_INVOCATIONS_LOG={BAT_LOG_FILE}")
+preview_text_found = any(
+    token in normalized
+    for token in ["Preview:", "opencode.json", "opencode.jsonc", "theme", "nested"]
+)
+fixture_color_found = "\x1b[31m" in transcript or "\x1b[0;31m" in transcript
+fixture_text_found = "BAT_FIXTURE_HIT" in normalized
+deep_merge_label_found = "(deep-merged)" in normalized
+merged_content_found = "parentOnly" in normalized and "childOnly" in normalized
+reselect_content_found = (
+    "BAT_FIXTURE_HIT" in normalized
+    or ("parentOnly" in normalized and "childOnly" in normalized)
+    or ("theme" in normalized and "nested" in normalized)
+)
+print(f"INTERACTIVE_STARTED={interactive_started}")
+print(f"PREVIEW_TEXT_FOUND={preview_text_found}")
+print(f"FIXTURE_COLOR_FOUND={fixture_color_found}")
+print(f"FIXTURE_TEXT_FOUND={fixture_text_found}")
+print(f"DEEP_MERGE_LABEL_FOUND={deep_merge_label_found}")
+print(f"MERGED_CONTENT_FOUND={merged_content_found}")
+print(f"RESELECT_CONTENT_FOUND={reselect_content_found}")

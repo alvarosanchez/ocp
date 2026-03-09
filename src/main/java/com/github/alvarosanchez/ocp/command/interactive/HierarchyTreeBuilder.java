@@ -348,10 +348,11 @@ final class HierarchyTreeBuilder {
                     );
                     continue;
                 }
-                if (!inherited && existing.inherited() && isMergeableJsonFile(relativePath)) {
+                if (!inherited && existing.inherited()) {
+                    boolean deepMerged = isMergeableJsonFile(relativePath);
                     filesByRelativePath.put(
                         relativePath,
-                        new ResolvedProfileFile(relativePath, file, false, null, true)
+                        new ResolvedProfileFile(relativePath, file, false, null, deepMerged)
                     );
                 }
             }

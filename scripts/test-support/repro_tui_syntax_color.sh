@@ -20,17 +20,22 @@ cat > "$PROFILE_DIR/opencode.json" <<'JSON'
 {"theme":"dark","nested":{"x":1}}
 JSON
 cat > "$CONFIG_DIR/config.json" <<JSON
-{"options":{},"repositories":[{"name":"repo-a","uri":null,"local_path":"$REPO_DIR"}]}
+{"config":{"latestOcpVersion":"0.1.0","lastOcpVersionCheckEpochSeconds":4102444800},"repositories":[{"name":"repo-a","uri":null,"localPath":"$REPO_DIR"}]}
 JSON
 
 cat > "$EXPECT_SCRIPT" <<'EXPECT'
 set timeout 20
 set root [lindex $argv 0]
 set output [lindex $argv 1]
-set env(ocp.config.dir) [lindex $argv 2]
-set env(ocp.cache.dir) [lindex $argv 3]
-set env(ocp.opencode.config.dir) [lindex $argv 4]
-set env(ocp.working.dir) [lindex $argv 5]
+set config_dir [lindex $argv 2]
+set cache_dir [lindex $argv 3]
+set opencode_dir [lindex $argv 4]
+set working_dir [lindex $argv 5]
+if {[info exists env(JAVA_TOOL_OPTIONS)]} {
+  set env(JAVA_TOOL_OPTIONS) "-Docp.config.dir=$config_dir -Docp.cache.dir=$cache_dir -Docp.opencode.config.dir=$opencode_dir -Docp.working.dir=$working_dir $env(JAVA_TOOL_OPTIONS)"
+} else {
+  set env(JAVA_TOOL_OPTIONS) "-Docp.config.dir=$config_dir -Docp.cache.dir=$cache_dir -Docp.opencode.config.dir=$opencode_dir -Docp.working.dir=$working_dir"
+}
 cd $root
 log_file -noappend $output
 stty rows 40 cols 120

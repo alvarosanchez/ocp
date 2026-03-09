@@ -6,10 +6,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -56,7 +56,7 @@ class BatPreviewRenderer {
         }
         Process process;
         try {
-            process = new ProcessBuilder("sh", "-c", shellQuote(batExecutable) + " --version")
+            process = new ProcessBuilder(batExecutable, "--version")
                 .redirectErrorStream(true)
                 .start();
         } catch (IOException _) {
@@ -76,23 +76,22 @@ class BatPreviewRenderer {
         if (batExecutable == null) {
             return null;
         }
-        List<String> commandParts = new ArrayList<>();
-        commandParts.add(shellQuote(batExecutable));
+        List<String> commandParts = new java.util.ArrayList<>();
+        commandParts.add(batExecutable);
         commandParts.add("--color=always");
         commandParts.add("--style=plain");
         commandParts.add("--paging=never");
-
         if (content == null) {
-            commandParts.add(shellQuote(filePath.toString()));
+            commandParts.add(filePath.toString());
         } else {
             commandParts.add("--file-name");
-            commandParts.add(shellQuote(String.valueOf(filePath.getFileName())));
+            commandParts.add(String.valueOf(filePath.getFileName()));
             commandParts.add("-");
         }
 
         Process process;
         try {
-            process = new ProcessBuilder("sh", "-c", String.join(" ", commandParts))
+            process = new ProcessBuilder(commandParts)
                 .redirectErrorStream(true)
                 .start();
         } catch (IOException _) {
@@ -160,7 +159,7 @@ class BatPreviewRenderer {
         String configuredBatPath = System.getenv(BAT_PATH_ENV);
         if (configuredBatPath != null && !configuredBatPath.isBlank()) {
             Path configuredCandidate = Paths.get(configuredBatPath);
-            if (configuredCandidate.toFile().isFile() && configuredCandidate.toFile().canExecute()) {
+            if (Files.isRegularFile(configuredCandidate) && Files.isExecutable(configuredCandidate)) {
                 return configuredCandidate.toString();
             }
         }
@@ -168,19 +167,27 @@ class BatPreviewRenderer {
         if (path == null || path.isBlank()) {
             return null;
         }
+        String[] executableNames = executableNames();
         for (String entry : path.split(java.io.File.pathSeparator)) {
             if (entry == null || entry.isBlank()) {
                 continue;
             }
-            Path candidate = Paths.get(entry).resolve("bat");
-            if (candidate.toFile().isFile() && candidate.toFile().canExecute()) {
-                return candidate.toString();
+            Path directory = Paths.get(entry);
+            for (String executableName : executableNames) {
+                Path candidate = directory.resolve(executableName);
+                if (Files.isRegularFile(candidate) && Files.isExecutable(candidate)) {
+                    return candidate.toString();
+                }
             }
         }
         return null;
     }
 
-    private String shellQuote(String value) {
-        return "'" + value.replace("'", "'\"'\"'") + "'";
+    private String[] executableNames() {
+        String osName = System.getProperty("os.name", "").toLowerCase();
+        if (osName.startsWith("windows")) {
+            return new String[] {"bat.exe", "bat.cmd", "bat.bat", "bat"};
+        }
+        return new String[] {"bat"};
     }
 }

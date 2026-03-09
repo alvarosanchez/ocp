@@ -1311,17 +1311,17 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     private void requestBatPreview(Path filePath, String contentSnapshot, boolean deepMergedPreview) {
-        if (filePath == null) {
+        if (filePath == null || !batAvailable) {
             return;
         }
-        String previewKey = filePath + "\n" + contentSnapshot + "\n" + deepMergedPreview;
+        String previewKey = buildPreviewKey(filePath, contentSnapshot, deepMergedPreview);
         if (Objects.equals(previewKey, lastRequestedPreviewKey)) {
             return;
         }
         Text cachedPreview = cachedPreview(previewKey);
         if (cachedPreview != null) {
             lastRequestedPreviewKey = previewKey;
-            applyBatPreview(filePath, contentSnapshot, cachedPreview);
+            applyBatPreview(filePath, previewKey, cachedPreview);
             return;
         }
         lastRequestedPreviewKey = previewKey;
@@ -1336,7 +1336,7 @@ public final class InteractiveApp extends ToolkitApp {
             if (hasVisiblePreviewContent(parsed)) {
                 cachePreview(previewKey, parsed);
             }
-            applyBatPreview(filePath, contentSnapshot, parsed);
+            applyBatPreview(filePath, previewKey, parsed);
             return;
         }
         previewRequestSequence++;
@@ -1355,10 +1355,17 @@ public final class InteractiveApp extends ToolkitApp {
                 return;
             }
             runner().runOnRenderThread(() -> {
-                applyBatPreview(filePath, contentSnapshot, parsed);
+                applyBatPreview(filePath, previewKey, parsed);
             });
         });
         thread.start();
+    }
+
+    private String buildPreviewKey(Path filePath, String contentSnapshot, boolean deepMergedPreview) {
+        String normalizedPath = filePath.toAbsolutePath().normalize().toString();
+        int contentLength = contentSnapshot == null ? 0 : contentSnapshot.length();
+        int contentHash = contentSnapshot == null ? 0 : contentSnapshot.hashCode();
+        return normalizedPath + "|" + deepMergedPreview + "|" + contentLength + "|" + contentHash;
     }
 
     private Text cachedPreview(String previewKey) {
@@ -1373,11 +1380,15 @@ public final class InteractiveApp extends ToolkitApp {
         }
     }
 
-    private void applyBatPreview(Path filePath, String contentSnapshot, Text parsed) {
+    private void applyBatPreview(Path filePath, String previewKey, Text parsed) {
         if (selectedNode == null || selectedNode.kind() != NodeKind.FILE || selectedNode.path() == null) {
             return;
         }
         if (!filePath.equals(selectedNode.path())) {
+            return;
+        }
+        String currentPreviewKey = buildPreviewKey(selectedNode.path(), selectedFilePreviewContent, selectedNode.deepMerged());
+        if (!Objects.equals(previewKey, currentPreviewKey)) {
             return;
         }
         if (!hasVisiblePreviewContent(parsed)) {
@@ -1618,13 +1629,10 @@ public final class InteractiveApp extends ToolkitApp {
             );
             String loadedFileContent = Files.readString(selectedNode.path());
             String resolvedPreviewContent = resolvedPreview.content();
-            boolean previewChanged = !Objects.equals(selectedFilePreviewContent, resolvedPreviewContent);
             selectedFileContent = loadedFileContent;
             selectedFilePreviewContent = resolvedPreviewContent;
-            if (previewChanged) {
-                selectedFilePreview = DetailPaneRenderer.plainText(selectedFilePreviewContent);
-                requestBatPreview(selectedNode.path(), selectedFilePreviewContent, resolvedPreview.deepMerged());
-            }
+            selectedFilePreview = DetailPaneRenderer.plainText(selectedFilePreviewContent);
+            requestBatPreview(selectedNode.path(), selectedFilePreviewContent, resolvedPreview.deepMerged());
             editorState.setText(selectedFileContent);
         } catch (IOException e) {
             selectedFileContent = "";
