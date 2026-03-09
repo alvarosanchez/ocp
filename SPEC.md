@@ -207,6 +207,7 @@ oss/opencode.json
 - In interactive mode, refresh (`r`) is shown only when the selected repository context is git-backed; file-based repositories do not offer refresh actions.
 - Interactive tree profile nodes visually show inheritance using a relationship marker (`👤 child ⇢ 👤 parent`).
 - Interactive tree includes inherited parent-only files under child profiles as read-only file nodes with subdued styling; inherited files cannot be edited.
+- Interactive tree shows overlapping inherited JSON/JSONC files that resolve via deep merge with a distinct `⛙` icon and subdued styling; selecting them previews the resolved merged contents with a `(deep-merged)` title suffix, while editing still opens the child profile file.
 - In interactive mode, repository scaffold creation prompts for directory name, location path, and optional initial profile name; after scaffolding, the repository is automatically added to the registry as a file-based repository.
 - In interactive mode, after local repository add/create and onboarding import, OCP runs a shared optional post-creation flow:
   - Offers git initialization with an initial commit (default: `yes` for interactive create and onboarding, `no` for adding existing local repositories).

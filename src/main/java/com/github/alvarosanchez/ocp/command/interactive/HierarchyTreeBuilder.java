@@ -109,7 +109,7 @@ final class HierarchyTreeBuilder {
             case REPOSITORY -> "📦 ";
             case PROFILE -> "👤 ";
             case DIRECTORY -> "📁 ";
-            case FILE -> data.inherited() ? "🔒 " : "📄 ";
+            case FILE -> data.inherited() ? "🔒 " : data.deepMerged() ? "⛙ " : "📄 ";
         };
 
         Color iconColor = switch (data.kind()) {
@@ -141,7 +141,7 @@ final class HierarchyTreeBuilder {
                 labelStyle = labelStyle.fg(Color.BRIGHT_WHITE);
             }
         }
-        if (data.kind() == NodeKind.FILE && data.inherited()) {
+        if (data.kind() == NodeKind.FILE && (data.inherited() || data.deepMerged())) {
             labelStyle = labelStyle.fg(Color.GRAY).dim();
         }
 
@@ -278,7 +278,9 @@ final class HierarchyTreeBuilder {
             ResolvedProfileFile file = directory.files.get(fileName);
             NodeRef fileNodeRef = file.inherited()
                 ? NodeRef.inheritedFile(repositoryName, profileName, file.sourcePath(), file.inheritedFromProfile())
-                : NodeRef.file(repositoryName, profileName, file.sourcePath());
+                : file.deepMerged()
+                    ? NodeRef.deepMergedFile(repositoryName, profileName, file.sourcePath())
+                    : NodeRef.file(repositoryName, profileName, file.sourcePath());
             children.add(
                 TreeNode.of(
                     fileName,
@@ -300,9 +302,6 @@ final class HierarchyTreeBuilder {
         Map<Path, ResolvedProfileFile> filesByRelativePath = new LinkedHashMap<>();
         Map<String, String> profileKeyByProfileName = profileKeyByProfileName(profilePathByName);
 
-        Path profilePath = profilePathByName.get(profileKey(repositoryName, profileName));
-        collectOwnFiles(profilePath, profileName, false, filesByRelativePath);
-
         Set<String> visitedProfiles = new HashSet<>();
         String currentParent = profileParentByName.get(profileKey(repositoryName, profileName));
         while (currentParent != null && !currentParent.isBlank() && visitedProfiles.add(currentParent)) {
@@ -315,6 +314,9 @@ final class HierarchyTreeBuilder {
             );
             currentParent = parentProfileKey == null ? null : profileParentByName.get(parentProfileKey);
         }
+
+        Path profilePath = profilePathByName.get(profileKey(repositoryName, profileName));
+        collectOwnFiles(profilePath, profileName, false, filesByRelativePath);
 
         return filesByRelativePath.values().stream()
             .sorted(Comparator.comparing(file -> file.relativePath().toString().toLowerCase()))
@@ -338,14 +340,29 @@ final class HierarchyTreeBuilder {
 
             for (Path file : files) {
                 Path relativePath = profilePath.relativize(file);
-                filesByRelativePath.putIfAbsent(
-                    relativePath,
-                    new ResolvedProfileFile(relativePath, file, inherited, inherited ? profileName : null)
-                );
+                ResolvedProfileFile existing = filesByRelativePath.get(relativePath);
+                if (existing == null) {
+                    filesByRelativePath.put(
+                        relativePath,
+                        new ResolvedProfileFile(relativePath, file, inherited, inherited ? profileName : null, false)
+                    );
+                    continue;
+                }
+                if (!inherited && existing.inherited() && isMergeableJsonFile(relativePath)) {
+                    filesByRelativePath.put(
+                        relativePath,
+                        new ResolvedProfileFile(relativePath, file, false, null, true)
+                    );
+                }
             }
         } catch (IOException e) {
             return;
         }
+    }
+
+    private static boolean isMergeableJsonFile(Path relativePath) {
+        String fileName = relativePath.getFileName().toString();
+        return fileName.endsWith(".json") || fileName.endsWith(".jsonc");
     }
 
     private static Map<String, Path> profilePathByName(List<ConfiguredRepository> repositories) {
@@ -389,7 +406,8 @@ final class HierarchyTreeBuilder {
         Path relativePath,
         Path sourcePath,
         boolean inherited,
-        String inheritedFromProfile
+        String inheritedFromProfile,
+        boolean deepMerged
     ) {
     }
 

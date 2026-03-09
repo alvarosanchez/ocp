@@ -511,6 +511,35 @@ class ProfileServiceTest {
     }
 
     @Test
+    void resolvedFilePreviewAllowsInheritedFileOutsideChildDirectory() throws IOException {
+        writeRepositoryMetadata(
+            "repo-local",
+            new RepositoryConfigFile(
+                List.of(
+                    new ProfileEntry("oca-omo"),
+                    new ProfileEntry("oca-omo-personal", null, "oca-omo")
+                )
+            )
+        );
+        Path repositoryDir = repositoriesRootDirectory().resolve("repo-local");
+        Path parentDir = repositoryDir.resolve("oca-omo");
+        Path childDir = repositoryDir.resolve("oca-omo-personal");
+        Files.createDirectories(parentDir);
+        Files.createDirectories(childDir);
+        Path inheritedFile = parentDir.resolve("oh-my-opencode.jsonc");
+        Files.writeString(inheritedFile, "{\"plugin\":\"parent\"}");
+
+        writeConfig(List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null)));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        ProfileService.ResolvedFilePreview preview = profileService.resolvedFilePreview("oca-omo-personal", inheritedFile);
+
+        assertEquals(Path.of("oh-my-opencode.jsonc"), preview.relativePath());
+        assertEquals("{\"plugin\":\"parent\"}", preview.content());
+        assertEquals(false, preview.deepMerged());
+    }
+
+    @Test
     void useProfileStoresMergedResolvedFilesUnderConfigDirectoryWhenCacheOverrideIsNotConfigured() throws IOException {
         String configuredCacheDir = System.getProperty("ocp.cache.dir");
         if (configuredCacheDir != null) {

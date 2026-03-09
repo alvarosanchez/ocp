@@ -11,6 +11,7 @@ import com.github.alvarosanchez.ocp.service.OnboardingService;
 import com.github.alvarosanchez.ocp.service.ProfileService;
 import com.github.alvarosanchez.ocp.service.RepositoryPostCreationService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
+import dev.tamboui.style.Color;
 import dev.tamboui.text.Text;
 import dev.tamboui.toolkit.elements.TreeElement;
 import dev.tamboui.widgets.tree.TreeNode;
@@ -25,6 +26,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -88,6 +90,143 @@ class InteractiveAppSelectionRefreshTest {
 
         assertEquals("second", readSelectedFileContent(app));
         assertEquals("second", readSelectedFilePreview(app).lines().getFirst().spans().getFirst().content());
+    }
+
+    @Test
+    void mergedJsonSelectionShowsResolvedPreviewButKeepsOriginalEditorContent() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path baseProfilePath = repositoryPath.resolve("base");
+        Path childProfilePath = repositoryPath.resolve("child");
+        Path filePath = childProfilePath.resolve("opencode.json");
+        Files.createDirectories(baseProfilePath);
+        Files.createDirectories(childProfilePath);
+        Files.writeString(repositoryPath.resolve("repository.json"), "{\"profiles\":[{\"name\":\"base\"},{\"name\":\"child\",\"extends_from\":\"base\"}]}");
+        Files.writeString(baseProfilePath.resolve("opencode.json"), "{\"base\":{\"enabled\":true},\"shared\":1}");
+        Files.writeString(filePath, "{\"child\":{\"enabled\":true},\"shared\":2}");
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = createApp();
+        invokeReloadState(app);
+        selectTreeNode(app, node -> node.kind() == NodeKind.FILE && filePath.equals(node.path()));
+        invokeSyncSelectionAndPreview(app);
+
+        assertEquals("{\"child\":{\"enabled\":true},\"shared\":2}", readSelectedFileContent(app));
+        assertEquals(
+            objectMapper.readValue("{\"base\":{\"enabled\":true},\"shared\":2,\"child\":{\"enabled\":true}}", Object.class),
+            objectMapper.readValue(previewPlainText(readSelectedFilePreview(app)), Object.class)
+        );
+        assertEquals("{\"child\":{\"enabled\":true},\"shared\":2}", readEditorText(app));
+    }
+
+    @Test
+    void selectedFilePreviewCanHoldStyledText() throws Exception {
+        InteractiveApp app = createApp();
+        Text styledPreview = new AnsiTextParser().parse("\u001B[31mred\u001B[0m");
+
+        Field field = InteractiveApp.class.getDeclaredField("selectedFilePreview");
+        field.setAccessible(true);
+        field.set(app, styledPreview);
+
+        Text storedPreview = readSelectedFilePreview(app);
+        assertEquals("red", storedPreview.lines().getFirst().spans().getFirst().content());
+        assertEquals(Color.indexed(1), storedPreview.lines().getFirst().spans().getFirst().style().fg().orElseThrow());
+    }
+
+    @Test
+    void refreshSelectedFilePreviewAppliesStyledBatPreviewWhenAvailable() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path profilePath = repositoryPath.resolve("default");
+        Path filePath = profilePath.resolve("opencode.json");
+        Files.createDirectories(profilePath);
+        Files.writeString(repositoryPath.resolve("repository.json"), "{\"profiles\":[{\"name\":\"default\"}]}");
+        Files.writeString(filePath, "plain");
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = new InteractiveApp(
+            applicationContext.getBean(ProfileService.class),
+            applicationContext.getBean(RepositoryService.class),
+            applicationContext.getBean(OnboardingService.class),
+            applicationContext.getBean(RepositoryPostCreationService.class),
+            objectMapper,
+            new FakeBatPreviewRenderer(new AnsiTextParser().parse("\u001B[31mstyled\u001B[0m"))
+        );
+        invokeReloadState(app);
+        setBatAvailable(app, true);
+        selectTreeNode(app, node -> node.kind() == NodeKind.FILE && filePath.equals(node.path()));
+        invokeSyncSelectionAndPreview(app);
+
+        Text preview = readSelectedFilePreview(app);
+        assertEquals("styled", preview.lines().getFirst().spans().getFirst().content());
+        assertEquals(Color.indexed(1), preview.lines().getFirst().spans().getFirst().style().fg().orElseThrow());
+    }
+
+    @Test
+    void refreshSelectedFilePreviewAppliesStyledBatPreviewForDeepMergedFile() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path baseProfilePath = repositoryPath.resolve("base");
+        Path childProfilePath = repositoryPath.resolve("child");
+        Path filePath = childProfilePath.resolve("opencode.json");
+        Files.createDirectories(baseProfilePath);
+        Files.createDirectories(childProfilePath);
+        Files.writeString(repositoryPath.resolve("repository.json"), "{\"profiles\":[{\"name\":\"base\"},{\"name\":\"child\",\"extends_from\":\"base\"}]}");
+        Files.writeString(baseProfilePath.resolve("opencode.json"), "{\"base\":{\"enabled\":true},\"shared\":1}");
+        Files.writeString(filePath, "{\"child\":{\"enabled\":true},\"shared\":2}");
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = new InteractiveApp(
+            applicationContext.getBean(ProfileService.class),
+            applicationContext.getBean(RepositoryService.class),
+            applicationContext.getBean(OnboardingService.class),
+            applicationContext.getBean(RepositoryPostCreationService.class),
+            objectMapper,
+            new FakeBatPreviewRenderer(new AnsiTextParser().parse("\u001B[31mmerged-styled\u001B[0m"))
+        );
+        invokeReloadState(app);
+        setBatAvailable(app, true);
+        selectTreeNode(app, node -> node.kind() == NodeKind.FILE && filePath.equals(node.path()));
+        invokeSyncSelectionAndPreview(app);
+
+        Text preview = readSelectedFilePreview(app);
+        assertEquals("merged-styled", preview.lines().getFirst().spans().getFirst().content());
+        assertEquals(Color.indexed(1), preview.lines().getFirst().spans().getFirst().style().fg().orElseThrow());
+    }
+
+    @Test
+    void previewCacheReusesStyledResultWhenReturningToSameFile() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path profilePath = repositoryPath.resolve("default");
+        Path filePath = profilePath.resolve("opencode.json");
+        Files.createDirectories(profilePath);
+        Files.writeString(repositoryPath.resolve("repository.json"), "{\"profiles\":[{\"name\":\"default\"}]}");
+        Files.writeString(filePath, "plain");
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        CountingBatPreviewRenderer renderer = new CountingBatPreviewRenderer(new AnsiTextParser().parse("\u001B[31mcached\u001B[0m"));
+        InteractiveApp app = new InteractiveApp(
+            applicationContext.getBean(ProfileService.class),
+            applicationContext.getBean(RepositoryService.class),
+            applicationContext.getBean(OnboardingService.class),
+            applicationContext.getBean(RepositoryPostCreationService.class),
+            objectMapper,
+            renderer
+        );
+        invokeReloadState(app);
+        setBatAvailable(app, true);
+
+        selectTreeNode(app, node -> node.kind() == NodeKind.FILE && filePath.equals(node.path()));
+        invokeSyncSelectionAndPreview(app);
+        assertEquals(1, renderer.highlightInvocations());
+
+        selectTreeNode(app, node -> node.kind() == NodeKind.PROFILE && "default".equals(node.profileName()));
+        invokeSyncSelectionAndPreview(app);
+
+        selectTreeNode(app, node -> node.kind() == NodeKind.FILE && filePath.equals(node.path()));
+        invokeSyncSelectionAndPreview(app);
+
+        assertEquals(1, renderer.highlightInvocations());
+        Text preview = readSelectedFilePreview(app);
+        assertEquals("cached", preview.lines().getFirst().spans().getFirst().content());
+        assertEquals(Color.indexed(1), preview.lines().getFirst().spans().getFirst().style().fg().orElseThrow());
     }
 
     private InteractiveApp createApp() {
@@ -215,6 +354,96 @@ class InteractiveAppSelectionRefreshTest {
         Field field = InteractiveApp.class.getDeclaredField("selectedFilePreview");
         field.setAccessible(true);
         return (Text) field.get(app);
+    }
+
+    private static String readEditorText(InteractiveApp app) throws Exception {
+        Field field = InteractiveApp.class.getDeclaredField("editorState");
+        field.setAccessible(true);
+        return ((dev.tamboui.widgets.input.TextAreaState) field.get(app)).text();
+    }
+
+    private static String flattenText(Text text) {
+        StringBuilder builder = new StringBuilder();
+        for (var line : text.lines()) {
+            for (var span : line.spans()) {
+                builder.append(span.content());
+            }
+        }
+        return builder.toString();
+    }
+
+    private static String previewPlainText(Text text) {
+        StringBuilder builder = new StringBuilder();
+        for (var line : text.lines()) {
+            if (!builder.isEmpty()) {
+                builder.append(System.lineSeparator());
+            }
+            for (var span : line.spans()) {
+                builder.append(span.content());
+            }
+        }
+        return builder.toString().trim();
+    }
+
+    private static void setBatAvailable(InteractiveApp app, boolean value) throws Exception {
+        Field field = InteractiveApp.class.getDeclaredField("batAvailable");
+        field.setAccessible(true);
+        field.setBoolean(app, value);
+    }
+
+    private static final class FakeBatPreviewRenderer extends BatPreviewRenderer {
+
+        private final Text preview;
+
+        private FakeBatPreviewRenderer(Text preview) {
+            this.preview = preview;
+        }
+
+        @Override
+        Text highlight(Path filePath) {
+            return preview;
+        }
+
+        @Override
+        Text highlight(Path filePath, String content) {
+            return preview;
+        }
+
+        @Override
+        boolean probeAvailability() {
+            return true;
+        }
+    }
+
+    private static final class CountingBatPreviewRenderer extends BatPreviewRenderer {
+
+        private final AtomicInteger invocations = new AtomicInteger();
+        private final Text preview;
+
+        private CountingBatPreviewRenderer(Text preview) {
+            this.preview = preview;
+        }
+
+        @Override
+        Text highlight(Path filePath) {
+            invocations.incrementAndGet();
+            return preview;
+        }
+
+        @Override
+        Text highlight(Path filePath, String content) {
+            invocations.incrementAndGet();
+            return preview;
+        }
+
+        @Override
+        boolean probeAvailability() {
+            return true;
+        }
+
+        private int highlightInvocations() {
+            return invocations.get();
+        }
     }
 
     private static void restoreProperty(String key, String value) {

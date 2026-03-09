@@ -133,9 +133,9 @@ final class DetailPaneRenderer {
                 .fill();
         }
 
-        return richTextArea(selectedFilePreview)
-            .text(scrolledPreviewText(selectedFilePreview, previewScrollOffset))
-            .title("Preview: " + selectedNode.path().getFileName())
+        Text previewText = scrolledPreviewText(selectedFilePreview, previewScrollOffset);
+        return richTextArea(previewText)
+            .title(previewTitle(selectedNode))
             .rounded()
             .borderColor(Color.CYAN)
             .focusedBorderColor(Color.GREEN)
@@ -158,6 +158,9 @@ final class DetailPaneRenderer {
             if (selectedNode.inherited()) {
                 return "Inherited file (read-only). Up/Down/PgUp/PgDn/Home/End scroll preview";
             }
+            if (selectedNode.deepMerged()) {
+                return "Preview shows resolved deep-merged contents. Press e to edit the profile file | Up/Down/PgUp/PgDn/Home/End scroll preview";
+            }
             return "Press e to edit selected file | Up/Down/PgUp/PgDn/Home/End scroll preview";
         }
         return "Detail pane";
@@ -171,6 +174,14 @@ final class DetailPaneRenderer {
             lines.add(Line.from(Span.raw(line)));
         }
         return Text.from(lines);
+    }
+
+    private static String previewTitle(NodeRef selectedNode) {
+        String fileName = String.valueOf(selectedNode.path().getFileName());
+        if (selectedNode.deepMerged()) {
+            return "Preview: " + fileName + " (deep-merged)";
+        }
+        return "Preview: " + fileName;
     }
 
     private static Text scrolledPreviewText(Text selectedFilePreview, int previewScrollOffset) {

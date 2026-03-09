@@ -179,6 +179,25 @@ class HierarchyTreeBuilderTest {
     }
 
     @Test
+    void renderTreeNodeMakesDeepMergedFileNodesVisiblyDistinct() {
+        TreeNode<NodeRef> node = TreeNode.of(
+            "opencode.json",
+            NodeRef.deepMergedFile("repo-a", "child", Path.of("/tmp/repo-a/child/opencode.json"))
+        );
+
+        StyledElement<?> rendered = HierarchyTreeBuilder.renderTreeNode(node, Map.of(), Map.of(), Map.of());
+
+        RichTextElement richText = assertInstanceOf(RichTextElement.class, rendered);
+        var spans = richText.text().lines().getFirst().spans();
+        assertEquals(2, spans.size());
+        assertEquals("⛙ ", spans.get(0).content());
+        assertEquals(Color.GRAY, spans.get(0).style().fg().orElseThrow());
+        assertEquals("opencode.json", spans.get(1).content());
+        assertEquals(Color.GRAY, spans.get(1).style().fg().orElseThrow());
+        assertTrue(spans.get(1).style().effectiveModifiers().contains(Modifier.DIM));
+    }
+
+    @Test
     void renderTreeNodeShowsDirtyRepositoryMarker() {
         TreeNode<NodeRef> node = TreeNode.of(
             "repo-a",
@@ -306,6 +325,47 @@ class HierarchyTreeBuilderTest {
         assertEquals("settings.json", settingsNode.label());
         assertEquals(childFile, settingsNode.data().path());
         assertFalse(settingsNode.data().inherited());
+    }
+
+    @Test
+    void buildHierarchyTreeMarksOverlappingJsonFilesAsDeepMerged() throws IOException {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path baseProfilePath = repositoryPath.resolve("base");
+        Path childProfilePath = repositoryPath.resolve("child");
+        Files.createDirectories(baseProfilePath);
+        Files.createDirectories(childProfilePath);
+        Path parentFile = baseProfilePath.resolve("opencode.json");
+        Path childFile = childProfilePath.resolve("opencode.json");
+        Files.writeString(parentFile, "{\"base\":true}");
+        Files.writeString(childFile, "{\"child\":true}");
+
+        ConfiguredRepository repository = new ConfiguredRepository(
+            "repo-a",
+            "git@example/repo-a.git",
+            repositoryPath.toString(),
+            List.of("base", "child")
+        );
+
+        List<TreeNode<NodeRef>> roots = HierarchyTreeBuilder.buildHierarchyTree(
+            List.of(repository),
+            List.of(),
+            Map.of("repo-a/child", "base"),
+            4,
+            20
+        );
+
+        TreeNode<NodeRef> childProfileNode = roots.getFirst().children().stream()
+            .filter(node -> "child".equals(node.label()))
+            .findFirst()
+            .orElseThrow();
+        TreeNode<NodeRef> mergedFileNode = childProfileNode.children().stream()
+            .filter(node -> "opencode.json".equals(node.label()))
+            .findFirst()
+            .orElseThrow();
+
+        assertEquals(childFile, mergedFileNode.data().path());
+        assertFalse(mergedFileNode.data().inherited());
+        assertTrue(mergedFileNode.data().deepMerged());
     }
 
     @Test
