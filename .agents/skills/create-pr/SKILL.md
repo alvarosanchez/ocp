@@ -254,6 +254,8 @@ Copilot review completion rule:
 - After a re-request, wait until Copilot has produced observable review activity for that head (review, thread, or comment) or until the bounded wait policy expires and you report the timeout/limitation explicitly.
 - Treat Copilot review completion for terminal-state purposes as valid only when the newest relevant Copilot review is tied to the current PR head SHA, not an older push.
 - Always re-fetch the current PR head SHA after every push and compare it to the commit OID of the latest Copilot review before concluding that the latest head has been reviewed.
+- Operationally, do not rely on human inspection alone: `copilot-review-state.sh` must surface the current `headRefOid`, the newest Copilot review `commit.oid`, and enough thread state to decide whether the latest head has actually been reviewed.
+- After CI turns green for a pushed head, you MUST run `copilot-review-state.sh` again and treat the loop as incomplete unless the newest Copilot review commit matches the current head SHA or the bounded wait timeout has been reached and reported explicitly.
 - Only after that completion check may you decide that there are no actionable Copilot comments remaining.
 
 Default caps:
