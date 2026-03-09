@@ -46,7 +46,7 @@ copilot_rerequest_workaround() {
   gh pr edit -R "$repo_ref" "$pr_number" --add-reviewer "@copilot" >/dev/null 2>&1 || return 1
   for reviewer in "${reviewers[@]}"; do
     if is_review_active "$reviewer"; then
-      printf 'requested_reviewer=%s\n' "@copilot"
+      printf 'requested_reviewer=%s\n' "$reviewer"
       printf 'pr_number=%s\n' "$pr_number"
       printf 'head_sha=%s\n' "$(gh pr view -R "$repo_ref" "$pr_number" --json headRefOid --jq '.headRefOid')"
       return 0

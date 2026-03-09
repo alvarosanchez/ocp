@@ -24,6 +24,7 @@ class BatPreviewRenderer {
     private static final Duration BAT_AVAILABILITY_TIMEOUT = Duration.ofSeconds(1);
 
     private final AnsiTextParser ansiTextParser = new AnsiTextParser();
+    private volatile String cachedBatExecutable;
 
     Text highlight(Path filePath) {
         if (filePath == null) {
@@ -156,11 +157,15 @@ class BatPreviewRenderer {
     }
 
     private String resolveBatExecutable() {
+        if (cachedBatExecutable != null) {
+            return cachedBatExecutable;
+        }
         String configuredBatPath = System.getenv(BAT_PATH_ENV);
         if (configuredBatPath != null && !configuredBatPath.isBlank()) {
             Path configuredCandidate = Paths.get(configuredBatPath);
             if (Files.isRegularFile(configuredCandidate) && Files.isExecutable(configuredCandidate)) {
-                return configuredCandidate.toString();
+                cachedBatExecutable = configuredCandidate.toString();
+                return cachedBatExecutable;
             }
         }
         String path = System.getenv("PATH");
@@ -176,7 +181,8 @@ class BatPreviewRenderer {
             for (String executableName : executableNames) {
                 Path candidate = directory.resolve(executableName);
                 if (Files.isRegularFile(candidate) && Files.isExecutable(candidate)) {
-                    return candidate.toString();
+                    cachedBatExecutable = candidate.toString();
+                    return cachedBatExecutable;
                 }
             }
         }

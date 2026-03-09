@@ -34,8 +34,11 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -1363,9 +1366,20 @@ public final class InteractiveApp extends ToolkitApp {
 
     private String buildPreviewKey(Path filePath, String contentSnapshot, boolean deepMergedPreview) {
         String normalizedPath = filePath.toAbsolutePath().normalize().toString();
-        int contentLength = contentSnapshot == null ? 0 : contentSnapshot.length();
-        int contentHash = contentSnapshot == null ? 0 : contentSnapshot.hashCode();
-        return normalizedPath + "|" + deepMergedPreview + "|" + contentLength + "|" + contentHash;
+        return normalizedPath + "|" + deepMergedPreview + "|" + contentFingerprint(contentSnapshot);
+    }
+
+    private String contentFingerprint(String contentSnapshot) {
+        if (contentSnapshot == null) {
+            return "0";
+        }
+        try {
+            MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
+            byte[] digest = messageDigest.digest(contentSnapshot.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 fingerprinting is not available.", e);
+        }
     }
 
     private Text cachedPreview(String previewKey) {
