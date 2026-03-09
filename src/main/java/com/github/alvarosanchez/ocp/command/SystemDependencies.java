@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-final class SystemDependencies {
+public final class SystemDependencies {
 
     private static final List<DependencyCheck> REQUIRED_DEPENDENCIES = List.of(
         new DependencyCheck("git", List.of("--version"), "Install Git and ensure it is available in PATH.")
@@ -13,7 +13,7 @@ final class SystemDependencies {
     private SystemDependencies() {
     }
 
-    static void verifyAll() {
+    public static void verifyAll() {
         for (DependencyCheck dependency : REQUIRED_DEPENDENCIES) {
             verify(dependency);
         }

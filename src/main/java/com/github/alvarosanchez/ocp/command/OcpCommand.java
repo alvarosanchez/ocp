@@ -79,7 +79,7 @@ public class OcpCommand implements Runnable {
         System.exit(exitCode);
     }
 
-    static void runStartupVersionCheck(ApplicationContext context, String[] args) {
+    public static void runStartupVersionCheck(ApplicationContext context, String[] args) {
         try {
             VersionCheckService.VersionCheckResult result = context.getBean(VersionCheckService.class).check();
             presentStartupVersionNotice(args, result.noticeMessage(), isInteractiveTerminal());
@@ -93,7 +93,7 @@ public class OcpCommand implements Runnable {
         }
     }
 
-    static String startupVersionCheckFailureMessage(RuntimeException exception) {
+    public static String startupVersionCheckFailureMessage(RuntimeException exception) {
         String baseMessage = "Could not check for newer ocp releases."
             + " Verify your OCP config file: "
             + resolvedConfigFilePath();
@@ -174,4 +174,5 @@ public class OcpCommand implements Runnable {
     InteractiveApp createInteractiveApp() {
         return new InteractiveApp(profileService, repositoryService, onboardingService, repositoryPostCreationService, objectMapper);
     }
+
 }
