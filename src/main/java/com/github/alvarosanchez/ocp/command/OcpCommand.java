@@ -33,6 +33,30 @@ import picocli.CommandLine.Command;
 )
 public class OcpCommand implements Runnable {
 
+    private static final class ApplicationContextProvider {
+        private static final ThreadLocal<ApplicationContext> CURRENT = new ThreadLocal<>();
+
+        private ApplicationContextProvider() {
+        }
+
+        static void set(ApplicationContext context) {
+            CURRENT.set(context);
+        }
+
+        static void clear() {
+            CURRENT.remove();
+        }
+
+        static ApplicationContext context() {
+            ApplicationContext context = CURRENT.get();
+            if (context == null) {
+                throw new IllegalStateException("Interactive application context is unavailable.");
+            }
+            return context;
+        }
+    }
+
+
     private final ProfileService profileService;
     private final RepositoryService repositoryService;
     private final OnboardingService onboardingService;
@@ -73,8 +97,11 @@ public class OcpCommand implements Runnable {
             .propertySources(new CommandLinePropertySource(io.micronaut.core.cli.CommandLine.parse(args)));
         int exitCode;
         try (ApplicationContext context = builder.start()) {
+            ApplicationContextProvider.set(context);
             runStartupVersionCheck(context, args);
             exitCode = new CommandLine(OcpCommand.class, new MicronautFactory(context)).execute(args);
+        } finally {
+            ApplicationContextProvider.clear();
         }
         System.exit(exitCode);
     }
@@ -171,8 +198,12 @@ public class OcpCommand implements Runnable {
         return isInteractiveTerminal();
     }
 
+    ApplicationContext applicationContext() {
+        return ApplicationContextProvider.context();
+    }
+
     InteractiveApp createInteractiveApp() {
-        return new InteractiveApp(profileService, repositoryService, onboardingService, repositoryPostCreationService, objectMapper);
+        return new InteractiveApp(profileService, repositoryService, onboardingService, repositoryPostCreationService, objectMapper, applicationContext());
     }
 
 }

@@ -154,7 +154,8 @@ class OcpCommandTest {
                 context.getBean(RepositoryService.class),
                 context.getBean(OnboardingService.class),
                 context.getBean(RepositoryPostCreationService.class),
-                context.getBean(ObjectMapper.class)
+                context.getBean(ObjectMapper.class),
+                context
             );
 
             Field startupNoticeField = InteractiveApp.class.getDeclaredField("startupUpdateNotice");

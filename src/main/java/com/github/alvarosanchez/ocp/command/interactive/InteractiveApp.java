@@ -30,6 +30,7 @@ import dev.tamboui.toolkit.event.EventResult;
 import dev.tamboui.tui.event.KeyEvent;
 import dev.tamboui.widgets.input.TextAreaState;
 import dev.tamboui.widgets.tree.TreeNode;
+import io.micronaut.context.ApplicationContext;
 import io.micronaut.serde.ObjectMapper;
 
 import java.io.IOException;
@@ -118,6 +119,7 @@ public final class InteractiveApp extends ToolkitApp {
     private final OnboardingService onboardingService;
     private final RepositoryPostCreationService repositoryPostCreationService;
     private final ObjectMapper objectMapper;
+    private final ApplicationContext applicationContext;
     private final String currentVersion = OcpVersionProvider.readVersion();
     private final BatPreviewRenderer batPreviewRenderer;
 
@@ -183,7 +185,8 @@ public final class InteractiveApp extends ToolkitApp {
         RepositoryService repositoryService,
         OnboardingService onboardingService,
         RepositoryPostCreationService repositoryPostCreationService,
-        ObjectMapper objectMapper
+        ObjectMapper objectMapper,
+        ApplicationContext applicationContext
     ) {
         this(
             profileService,
@@ -191,6 +194,7 @@ public final class InteractiveApp extends ToolkitApp {
             onboardingService,
             repositoryPostCreationService,
             objectMapper,
+            applicationContext,
             new BatPreviewRenderer()
         );
     }
@@ -201,6 +205,7 @@ public final class InteractiveApp extends ToolkitApp {
         OnboardingService onboardingService,
         RepositoryPostCreationService repositoryPostCreationService,
         ObjectMapper objectMapper,
+        ApplicationContext applicationContext,
         BatPreviewRenderer batPreviewRenderer
     ) {
         this.profileService = profileService;
@@ -208,6 +213,7 @@ public final class InteractiveApp extends ToolkitApp {
         this.onboardingService = onboardingService;
         this.repositoryPostCreationService = repositoryPostCreationService;
         this.objectMapper = objectMapper;
+        this.applicationContext = applicationContext;
         this.batPreviewRenderer = batPreviewRenderer;
         startupUpdateNotice = Cli.consumeStartupNotice();
     }
@@ -1852,21 +1858,38 @@ public final class InteractiveApp extends ToolkitApp {
     private void runSplashStartupChecksInBackground() {
         try {
             SystemDependencies.verifyAll();
-            String[] interactiveRootArgs = new String[0];
-            OcpCommand.runStartupVersionCheck(null, interactiveRootArgs);
         } catch (RuntimeException e) {
-            String message = OcpCommand.startupVersionCheckFailureMessage(e);
-            if (runner() != null) {
-                runner().runOnRenderThread(() -> status = message);
-            } else {
-                status = message;
-            }
+            updateStartupStatus(e.getMessage());
+            finishSplashStartupChecks();
+            return;
+        }
+
+        try {
+            String[] interactiveRootArgs = new String[0];
+            OcpCommand.runStartupVersionCheck(applicationContext, interactiveRootArgs);
+        } catch (RuntimeException e) {
+            updateStartupStatus(OcpCommand.startupVersionCheckFailureMessage(e));
         } finally {
-            if (runner() != null) {
-                runner().runOnRenderThread(this::maybeHideSplash);
-            } else {
-                maybeHideSplash();
-            }
+            finishSplashStartupChecks();
+        }
+    }
+
+    private void updateStartupStatus(String message) {
+        if (message == null || message.isBlank()) {
+            return;
+        }
+        if (runner() != null) {
+            runner().runOnRenderThread(() -> status = message);
+        } else {
+            status = message;
+        }
+    }
+
+    private void finishSplashStartupChecks() {
+        if (runner() != null) {
+            runner().runOnRenderThread(this::maybeHideSplash);
+        } else {
+            maybeHideSplash();
         }
     }
 

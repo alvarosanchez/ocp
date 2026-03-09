@@ -76,7 +76,8 @@ class InteractiveAppOnboardingTest {
             applicationContext.getBean(RepositoryService.class),
             applicationContext.getBean(OnboardingService.class),
             applicationContext.getBean(RepositoryPostCreationService.class),
-            applicationContext.getBean(ObjectMapper.class)
+            applicationContext.getBean(ObjectMapper.class),
+            applicationContext
         );
 
         app.onStart();
@@ -107,7 +108,8 @@ class InteractiveAppOnboardingTest {
             applicationContext.getBean(RepositoryService.class),
             applicationContext.getBean(OnboardingService.class),
             applicationContext.getBean(RepositoryPostCreationService.class),
-            applicationContext.getBean(ObjectMapper.class)
+            applicationContext.getBean(ObjectMapper.class),
+            applicationContext
         );
 
         Field promptField = InteractiveApp.class.getDeclaredField("prompt");
@@ -142,7 +144,8 @@ class InteractiveAppOnboardingTest {
             applicationContext.getBean(RepositoryService.class),
             applicationContext.getBean(OnboardingService.class),
             applicationContext.getBean(RepositoryPostCreationService.class),
-            applicationContext.getBean(ObjectMapper.class)
+            applicationContext.getBean(ObjectMapper.class),
+            applicationContext
         );
 
         Field promptField = InteractiveApp.class.getDeclaredField("prompt");
@@ -189,7 +192,8 @@ class InteractiveAppOnboardingTest {
             applicationContext.getBean(RepositoryService.class),
             applicationContext.getBean(OnboardingService.class),
             applicationContext.getBean(RepositoryPostCreationService.class),
-            applicationContext.getBean(ObjectMapper.class)
+            applicationContext.getBean(ObjectMapper.class),
+            applicationContext
         );
 
         app.onStart();
@@ -217,7 +221,8 @@ class InteractiveAppOnboardingTest {
             applicationContext.getBean(RepositoryService.class),
             applicationContext.getBean(OnboardingService.class),
             applicationContext.getBean(RepositoryPostCreationService.class),
-            applicationContext.getBean(ObjectMapper.class)
+            applicationContext.getBean(ObjectMapper.class),
+            applicationContext
         );
 
         Method loadInitialDataInBackground = InteractiveApp.class.getDeclaredMethod("loadInitialDataInBackground");
@@ -245,7 +250,8 @@ class InteractiveAppOnboardingTest {
             applicationContext.getBean(RepositoryService.class),
             applicationContext.getBean(OnboardingService.class),
             applicationContext.getBean(RepositoryPostCreationService.class),
-            applicationContext.getBean(ObjectMapper.class)
+            applicationContext.getBean(ObjectMapper.class),
+            applicationContext
         );
 
         app.onStart();
@@ -271,7 +277,8 @@ class InteractiveAppOnboardingTest {
             applicationContext.getBean(RepositoryService.class),
             applicationContext.getBean(OnboardingService.class),
             applicationContext.getBean(RepositoryPostCreationService.class),
-            applicationContext.getBean(ObjectMapper.class)
+            applicationContext.getBean(ObjectMapper.class),
+            applicationContext
         );
         app.onStart();
 

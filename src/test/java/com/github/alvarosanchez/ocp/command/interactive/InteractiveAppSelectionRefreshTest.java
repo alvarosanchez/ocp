@@ -1,7 +1,6 @@
 package com.github.alvarosanchez.ocp.command.interactive;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import com.github.alvarosanchez.ocp.command.Cli;
@@ -182,6 +181,7 @@ class InteractiveAppSelectionRefreshTest {
             applicationContext.getBean(OnboardingService.class),
             applicationContext.getBean(RepositoryPostCreationService.class),
             objectMapper,
+            applicationContext,
             new FakeBatPreviewRenderer(new AnsiTextParser().parse("\u001B[31mstyled\u001B[0m"))
         );
         invokeReloadState(app);
@@ -213,6 +213,7 @@ class InteractiveAppSelectionRefreshTest {
             applicationContext.getBean(OnboardingService.class),
             applicationContext.getBean(RepositoryPostCreationService.class),
             objectMapper,
+            applicationContext,
             new FakeBatPreviewRenderer(new AnsiTextParser().parse("\u001B[31mmerged-styled\u001B[0m"))
         );
         invokeReloadState(app);
@@ -242,6 +243,7 @@ class InteractiveAppSelectionRefreshTest {
             applicationContext.getBean(OnboardingService.class),
             applicationContext.getBean(RepositoryPostCreationService.class),
             objectMapper,
+            applicationContext,
             renderer
         );
         invokeReloadState(app);
@@ -269,7 +271,8 @@ class InteractiveAppSelectionRefreshTest {
             applicationContext.getBean(RepositoryService.class),
             applicationContext.getBean(OnboardingService.class),
             applicationContext.getBean(RepositoryPostCreationService.class),
-            objectMapper
+            objectMapper,
+            applicationContext
         );
     }
 

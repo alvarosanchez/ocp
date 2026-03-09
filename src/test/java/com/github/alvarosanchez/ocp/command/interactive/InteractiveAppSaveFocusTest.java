@@ -2,7 +2,6 @@ package com.github.alvarosanchez.ocp.command.interactive;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.alvarosanchez.ocp.command.Cli;
 import com.github.alvarosanchez.ocp.config.OcpConfigFile;
@@ -144,7 +143,8 @@ class InteractiveAppSaveFocusTest {
             applicationContext.getBean(RepositoryService.class),
             applicationContext.getBean(OnboardingService.class),
             applicationContext.getBean(RepositoryPostCreationService.class),
-            objectMapper
+            objectMapper,
+            applicationContext
         );
     }
 

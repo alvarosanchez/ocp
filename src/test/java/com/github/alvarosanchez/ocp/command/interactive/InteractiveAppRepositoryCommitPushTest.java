@@ -394,7 +394,8 @@ class InteractiveAppRepositoryCommitPushTest {
             repositoryService,
             applicationContext.getBean(OnboardingService.class),
             applicationContext.getBean(RepositoryPostCreationService.class),
-            objectMapper
+            objectMapper,
+            applicationContext
         );
     }
 
