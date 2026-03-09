@@ -153,7 +153,8 @@ For each new unresolved Copilot comment:
 1. inspect the requested change
 2. apply the smallest correct fix when necessary
 3. reply on the thread even if no code change is needed
-4. resolve the thread immediately after replying when no human discussion remains open
+4. confirm the reply command actually succeeded from command output; if the primary reply path fails, try the skill's fallback reply mechanism before giving up
+5. resolve the thread immediately after a confirmed reply when no human discussion remains open
 
 Use:
 
@@ -166,7 +167,8 @@ If reply or resolve fails, report the concrete limitation instead of claiming su
 
 Thread-resolution enforcement rule:
 
-- Replying is not enough. After replying, you MUST attempt `resolve-review-thread.sh` for that thread.
+- Replying is not enough. After a confirmed reply, you MUST attempt `resolve-review-thread.sh` for that thread.
+- Do not resolve a Copilot-owned thread unless reply creation has been confirmed, or you explicitly report that all supported reply mechanisms failed for that exact thread due to a permissions/platform limitation.
 - Treat any unresolved Copilot-owned thread as actionable until resolution is confirmed in the latest fetched review-thread set.
 - Do not declare Copilot remediation complete while Copilot-owned threads remain unresolved unless you explicitly report a permissions/platform limitation.
 
@@ -290,6 +292,8 @@ Do not merge the PR as part of this skill unless a higher-priority instruction e
 - If CI is pending for too long, report the exact run IDs and statuses instead of saying only that it is "still running."
 - If CI fails repeatedly for the same reason after fixes, stop at the cycle cap and summarize the repeated failure.
 - If reply creation succeeds but thread resolution fails, keep the reply and record the limitation.
+- If the primary REST reply path fails, `reply-to-review-comment.sh` must try the supported fallback reply mechanism before the thread is treated as blocked.
+- If every supported reply mechanism fails, report that exact per-thread limitation and do not claim that the thread was commented on.
 - If a thread contains unresolved human discussion, do not auto-resolve it unless your reply closes the remaining context too.
 
 ## Safety Rules
