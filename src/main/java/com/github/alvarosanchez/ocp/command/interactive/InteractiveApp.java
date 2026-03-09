@@ -1832,7 +1832,7 @@ public final class InteractiveApp extends ToolkitApp {
         }
         String fileSummary = candidate.configFiles()
             .stream()
-            .map(path -> "- " + path.getFileName() + "")
+            .map(path -> "- " + path.getFileName())
             .reduce((left, right) -> left + "\n" + right)
             .orElse("");
         prompt = PromptState.multiWithOptions(
@@ -1856,22 +1856,7 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     private void runSplashStartupChecksInBackground() {
-        try {
-            SystemDependencies.verifyAll();
-        } catch (RuntimeException e) {
-            updateStartupStatus(e.getMessage());
-            finishSplashStartupChecks();
-            return;
-        }
-
-        try {
-            String[] interactiveRootArgs = new String[0];
-            OcpCommand.runStartupVersionCheck(applicationContext, interactiveRootArgs);
-        } catch (RuntimeException e) {
-            updateStartupStatus(OcpCommand.startupVersionCheckFailureMessage(e));
-        } finally {
-            finishSplashStartupChecks();
-        }
+        finishSplashStartupChecks();
     }
 
     private void updateStartupStatus(String message) {
