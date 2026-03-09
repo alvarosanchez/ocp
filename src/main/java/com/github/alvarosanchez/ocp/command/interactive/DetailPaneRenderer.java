@@ -32,6 +32,8 @@ final class DetailPaneRenderer {
         boolean repositoryCommitPushAvailable,
         boolean selectedProfileHasParent,
         boolean editMode,
+        boolean selectedRepositoryHasLocalChanges,
+        boolean selectedRepositoryInspectionFailed,
         Map<String, Profile> profilesByName,
         Map<String, String> profileParentByName,
         Text selectedFilePreview,
@@ -57,6 +59,7 @@ final class DetailPaneRenderer {
             repositoryElements.add(text("Repository").bold().fg(Color.CYAN));
             repositoryElements.add(detailField("Name", selectedNode.repositoryName()));
             repositoryElements.add(detailField("Path", String.valueOf(selectedNode.path())));
+            repositoryElements.add(detailField("Indicators", statusDescription(selectedNode, selectedRepositoryHasLocalChanges, selectedRepositoryInspectionFailed)));
             List<TreeShortcutHints.Shortcut> repositoryShortcuts = new ArrayList<>();
             if (repositoryCommitPushAvailable) {
                 repositoryShortcuts.add(TreeShortcutHints.Shortcut.COMMIT_AND_PUSH_REPOSITORY);
@@ -66,9 +69,6 @@ final class DetailPaneRenderer {
             }
             if (repositoryRefreshable) {
                 repositoryShortcuts.add(TreeShortcutHints.Shortcut.REFRESH_REPOSITORY);
-            }
-            if (!repositoryShortcuts.isEmpty()) {
-                repositoryElements.add(ShortcutHintRenderer.line(repositoryShortcuts));
             }
             return column(
                 repositoryElements.toArray(Element[]::new)
@@ -87,9 +87,23 @@ final class DetailPaneRenderer {
             profileElements.add(detailField("Name", selectedNode.profileName()));
             profileElements.add(detailField("Repository", selectedNode.repositoryName()));
             profileElements.add(detailField("Path", String.valueOf(selectedNode.path())));
+            profileElements.add(detailField("Indicators", statusDescription(selectedNode, selectedRepositoryHasLocalChanges, selectedRepositoryInspectionFailed)));
+            profileElements.add(detailField("Description", profile == null || profile.description() == null || profile.description().isBlank() ? "none" : profile.description()));
             profileElements.add(detailField("Inherits from", parentProfileName == null ? "none" : parentProfileName));
             profileElements.add(detailField("Status", profile != null && profile.active() ? "active" : "inactive"));
             profileElements.add(detailField("Updates", profile != null && profile.updateAvailable() ? "available" : "up to date"));
+            if (profile != null && profile.repository() != null && !profile.repository().isBlank()) {
+                profileElements.add(detailField("Repository URI", profile.repository()));
+            }
+            if (profile != null && profile.version() != null && !profile.version().isBlank()) {
+                profileElements.add(detailField("Version", profile.version()));
+            }
+            if (profile != null && profile.lastUpdated() != null && !profile.lastUpdated().isBlank()) {
+                profileElements.add(detailField("Last updated", profile.lastUpdated()));
+            }
+            if (profile != null && profile.message() != null && !profile.message().isBlank()) {
+                profileElements.add(detailField("Message", profile.message()));
+            }
             List<TreeShortcutHints.Shortcut> profileShortcuts = new ArrayList<>();
             profileShortcuts.add(TreeShortcutHints.Shortcut.USE_PROFILE);
             if (selectedProfileHasParent) {
@@ -98,7 +112,6 @@ final class DetailPaneRenderer {
             if (repositoryRefreshable) {
                 profileShortcuts.add(TreeShortcutHints.Shortcut.REFRESH_REPOSITORY);
             }
-            profileElements.add(ShortcutHintRenderer.line(profileShortcuts));
             return column(
                 profileElements.toArray(Element[]::new)
             )
@@ -111,9 +124,7 @@ final class DetailPaneRenderer {
             return column(
                 text("Directory").bold().fg(Color.CYAN),
                 detailField("Path", String.valueOf(selectedNode.path())),
-                ShortcutHintRenderer.line(List.of(
-                    TreeShortcutHints.Shortcut.LEFT_RIGHT_COLLAPSE_EXPAND
-                ))
+                detailField("Indicators", statusDescription(selectedNode, selectedRepositoryHasLocalChanges, selectedRepositoryInspectionFailed))
             )
                 .id(detailId)
                 .focusable()
@@ -147,6 +158,26 @@ final class DetailPaneRenderer {
             .fill();
     }
 
+    static String statusDescription(NodeRef selectedNode, boolean selectedRepositoryHasLocalChanges, boolean selectedRepositoryInspectionFailed) {
+        if (selectedNode == null) {
+            return "none";
+        }
+        List<String> statuses = new ArrayList<>();
+        if (selectedNode.inherited()) {
+            statuses.add("inherited from parent profile (read-only)");
+        }
+        if (selectedNode.deepMerged()) {
+            statuses.add("preview shows deep-merged content");
+        }
+        if (selectedNode.kind() != NodeKind.FILE && selectedRepositoryHasLocalChanges) {
+            statuses.add("repository has local uncommitted changes (✏)");
+        }
+        if (selectedNode.kind() != NodeKind.FILE && selectedRepositoryInspectionFailed) {
+            statuses.add("repository status inspection failed (!)");
+        }
+        return statuses.isEmpty() ? "none" : String.join("; ", statuses);
+    }
+
     static String detailHint(NodeRef selectedNode, boolean editMode) {
         if (selectedNode == null) {
             return "Detail pane";
@@ -156,12 +187,12 @@ final class DetailPaneRenderer {
                 return "Editing mode: Ctrl+S save, Esc exit";
             }
             if (selectedNode.inherited()) {
-                return "Inherited file (read-only). Up/Down/PgUp/PgDn/Home/End scroll preview";
+                return "Inherited file (read-only). Press p to open the parent file | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview";
             }
             if (selectedNode.deepMerged()) {
-                return "Preview shows resolved deep-merged contents. Press e to edit the profile file | Up/Down/PgUp/PgDn/Home/End scroll preview";
+                return "Preview shows resolved deep-merged contents. Press e to edit the profile file | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview";
             }
-            return "Press e to edit selected file | Up/Down/PgUp/PgDn/Home/End scroll preview";
+            return "Press e to edit selected file | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview";
         }
         return "Detail pane";
     }

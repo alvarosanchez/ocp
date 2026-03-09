@@ -31,15 +31,15 @@ class DetailPaneRendererTest {
         NodeRef inheritedFile = NodeRef.inheritedFile("repo", "profile", Path.of("config.json"), "base");
 
         assertEquals(
-            "Press e to edit selected file | Up/Down/PgUp/PgDn/Home/End scroll preview",
+            "Press e to edit selected file | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview",
             DetailPaneRenderer.detailHint(file, false)
         );
         assertEquals(
-            "Preview shows resolved deep-merged contents. Press e to edit the profile file | Up/Down/PgUp/PgDn/Home/End scroll preview",
+            "Preview shows resolved deep-merged contents. Press e to edit the profile file | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview",
             DetailPaneRenderer.detailHint(deepMergedFile, false)
         );
         assertEquals(
-            "Inherited file (read-only). Up/Down/PgUp/PgDn/Home/End scroll preview",
+            "Inherited file (read-only). Press p to open the parent file | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview",
             DetailPaneRenderer.detailHint(inheritedFile, false)
         );
         assertEquals("Editing mode: Ctrl+S save, Esc exit", DetailPaneRenderer.detailHint(file, true));
@@ -64,6 +64,32 @@ class DetailPaneRendererTest {
     }
 
     @Test
+    void detailHintStillUsesFileSpecificMessagingAfterMetadataExpansion() {
+        NodeRef file = NodeRef.file("repo", "profile", Path.of("config.json"));
+        assertTrue(DetailPaneRenderer.detailHint(file, false).contains("y copies the absolute path"));
+    }
+
+    @Test
+    void statusDescriptionExplainsRepositoryDirtyMarker() {
+        assertEquals(
+            "repository has local uncommitted changes (✏)",
+            DetailPaneRenderer.statusDescription(NodeRef.repository("repo", Path.of("/tmp/repo")), true, false)
+        );
+    }
+
+    @Test
+    void statusDescriptionCombinesInheritedAndMergedFileStates() {
+        assertEquals(
+            "inherited from parent profile (read-only)",
+            DetailPaneRenderer.statusDescription(NodeRef.inheritedFile("repo", "profile", Path.of("config.json"), "base"), false, false)
+        );
+        assertEquals(
+            "preview shows deep-merged content",
+            DetailPaneRenderer.statusDescription(NodeRef.deepMergedFile("repo", "profile", Path.of("config.json")), false, false)
+        );
+    }
+
+    @Test
     void renderDetailPanePreservesStyledPreviewText() {
         Text styledPreview = Text.from(
             Line.from(
@@ -73,6 +99,8 @@ class DetailPaneRendererTest {
 
         Element element = DetailPaneRenderer.renderDetailPane(
             NodeRef.file("repo", "profile", Path.of("config.json")),
+            false,
+            false,
             false,
             false,
             false,
