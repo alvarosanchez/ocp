@@ -163,7 +163,6 @@ public final class InteractiveApp extends ToolkitApp {
     private boolean editMode;
     private boolean batAvailable;
     private int lastSyncedTreeSelection = Integer.MIN_VALUE;
-    private long previewRequestSequence;
     private String lastRequestedPreviewKey;
     private final Map<String, Text> previewCacheByKey = new LinkedHashMap<>(16, 0.75f, true) {
         @Override
@@ -1132,9 +1131,6 @@ public final class InteractiveApp extends ToolkitApp {
         hierarchyTree.selected(Math.max(0, previousSelection));
         lastSyncedTreeSelection = Integer.MIN_VALUE;
         syncSelectionAndPreview();
-        if (selectedNode != null && selectedNode.kind() == NodeKind.FILE && selectedNode.path() != null && !editMode) {
-            refreshSelectedFilePreview();
-        }
         refreshRepositoryDirtyStateByNameInBackground(repositories);
     }
 
@@ -1185,9 +1181,6 @@ public final class InteractiveApp extends ToolkitApp {
     private void syncSelectionAndPreview() {
         int currentSelection = hierarchyTree.selected();
         TreeNode<NodeRef> selectedTreeNode = hierarchyTree.selectedNode();
-        if (selectedTreeNode == null) {
-            return;
-        }
         NodeRef nextSelectedNode = selectedTreeNode == null ? null : selectedTreeNode.data();
         if (currentSelection == lastSyncedTreeSelection && isSameSelection(nextSelectedNode, selectedNode)) {
             return;
@@ -1339,13 +1332,20 @@ public final class InteractiveApp extends ToolkitApp {
             applyBatPreview(filePath, previewKey, parsed);
             return;
         }
-        previewRequestSequence++;
         Thread thread = Thread.ofPlatform().daemon(true).unstarted(() -> {
             Text parsed = deepMergedPreview
                 ? batPreviewRenderer.highlight(filePath, contentSnapshot)
                 : batPreviewRenderer.highlight(filePath);
             if (parsed == null) {
-                lastRequestedPreviewKey = null;
+                if (runner() == null) {
+                    lastRequestedPreviewKey = null;
+                } else {
+                    runner().runOnRenderThread(() -> {
+                        if (Objects.equals(lastRequestedPreviewKey, previewKey)) {
+                            lastRequestedPreviewKey = null;
+                        }
+                    });
+                }
                 return;
             }
             if (hasVisiblePreviewContent(parsed)) {
@@ -1416,6 +1416,7 @@ public final class InteractiveApp extends ToolkitApp {
             status = STATUS_INHERITED_FILE_READ_ONLY;
             return;
         }
+        NodeRef savedSelection = selectedNode;
         Path filePath = selectedNode.path();
         runBusyOperation(
             "Saving `" + filePath.getFileName() + "`...",
@@ -1429,6 +1430,9 @@ public final class InteractiveApp extends ToolkitApp {
             "Saved `" + filePath.getFileName() + "`.",
             () -> {
                 editMode = false;
+                if (runner() == null && savedSelection != null && savedSelection.kind() == NodeKind.FILE) {
+                    selectedNode = savedSelection;
+                }
                 selectedFileContent = editorState.text();
                 refreshSelectedFilePreview();
                 if (runner() != null) {
