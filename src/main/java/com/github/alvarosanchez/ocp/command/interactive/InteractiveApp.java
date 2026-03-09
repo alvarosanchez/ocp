@@ -1546,11 +1546,9 @@ public final class InteractiveApp extends ToolkitApp {
         }
         editMode = true;
         resetEditorCursorToTop();
+        activePane = Pane.DETAIL;
         if (runner() != null) {
             runner().focusManager().setFocus(EDITOR_ID);
-            activePane = Pane.DETAIL;
-        } else {
-            activePane = Pane.DETAIL;
         }
         status = "Editing `" + selectedNode.path().getFileName() + "`. Ctrl+S to save, Esc to cancel.";
     }
