@@ -2,6 +2,7 @@ package com.github.alvarosanchez.ocp.command.interactive;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.alvarosanchez.ocp.command.Cli;
 import com.github.alvarosanchez.ocp.config.OcpConfigFile;
@@ -82,7 +83,31 @@ class InteractiveAppSaveFocusTest {
         assertEquals("updated", Files.readString(filePath));
         assertFalse(readEditMode(app));
         assertEquals(Pane.TREE, readActivePane(app));
-        assertEquals("Saved `opencode.json`.", readStatus(app));
+        assertEquals("Saved opencode.json.", readStatus(app));
+    }
+
+
+    @Test
+    void escapeExitsEditModeAndReturnsToTreePane() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path profilePath = repositoryPath.resolve("default");
+        Path filePath = profilePath.resolve("opencode.json");
+        Files.createDirectories(profilePath);
+        Files.writeString(repositoryPath.resolve("repository.json"), "{\"profiles\":[{\"name\":\"default\"}]}");
+        Files.writeString(filePath, "original");
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = createApp();
+        invokeReloadState(app);
+        setSelectedNode(app, NodeRef.file("repo-a", "default", filePath));
+        setEditMode(app, true);
+        setActivePane(app, Pane.DETAIL);
+
+        invokeExitEditMode(app);
+
+        assertFalse(readEditMode(app));
+        assertEquals(Pane.TREE, readActivePane(app));
+        assertEquals("Exited edit mode.", readStatus(app));
     }
 
     @Test
@@ -134,6 +159,12 @@ class InteractiveAppSaveFocusTest {
 
     private static void invokeReloadState(InteractiveApp app) throws Exception {
         Method method = InteractiveApp.class.getDeclaredMethod("reloadState");
+        method.setAccessible(true);
+        method.invoke(app);
+    }
+
+    private static void invokeExitEditMode(InteractiveApp app) throws Exception {
+        Method method = InteractiveApp.class.getDeclaredMethod("exitEditModeToTree");
         method.setAccessible(true);
         method.invoke(app);
     }

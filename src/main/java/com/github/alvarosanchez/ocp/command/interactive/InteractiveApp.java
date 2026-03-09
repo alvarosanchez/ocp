@@ -1,6 +1,8 @@
 package com.github.alvarosanchez.ocp.command.interactive;
 
 import com.github.alvarosanchez.ocp.command.OcpVersionProvider;
+import com.github.alvarosanchez.ocp.command.OcpCommand;
+import com.github.alvarosanchez.ocp.command.SystemDependencies;
 import com.github.alvarosanchez.ocp.config.OcpConfigFile.RepositoryEntry;
 import com.github.alvarosanchez.ocp.config.RepositoryConfigFile;
 import com.github.alvarosanchez.ocp.command.Cli;
@@ -230,6 +232,7 @@ public final class InteractiveApp extends ToolkitApp {
         );
 
         Thread.ofVirtual().start(this::loadInitialDataInBackground);
+        Thread.ofVirtual().start(this::runSplashStartupChecksInBackground);
         Thread.ofVirtual().start(this::prewarmBatAvailability);
     }
 
@@ -246,15 +249,12 @@ public final class InteractiveApp extends ToolkitApp {
             isSelectedRepositoryRefreshable(),
             selectedProfileHasParent(),
             isSelectedRepositoryMigratable(),
-            isSelectedRepositoryCommitPushAvailable()
+            isSelectedRepositoryCommitPushAvailable(),
+            editMode
         );
 
         List<Element> treePaneContent = new ArrayList<>();
         treePaneContent.add(hierarchyTree.fill());
-        treePaneContent.add(ShortcutHintRenderer.line(treeShortcutHints.navigation()));
-        if (!treeShortcutHints.actions().isEmpty()) {
-            treePaneContent.add(ShortcutHintRenderer.line(treeShortcutHints.actions()));
-        }
 
         Element root = column(
             panel(
@@ -267,12 +267,13 @@ public final class InteractiveApp extends ToolkitApp {
             row(
                 panel(
                     treePaneContent.toArray(Element[]::new)
-                ).rounded().borderColor(activePane == Pane.TREE ? Color.GREEN : Color.GRAY).fill(),
+                ).rounded().borderColor(activePane == Pane.TREE ? Color.GREEN : Color.GRAY).percent(33),
                 panel(renderDetailPane())
                     .rounded()
                     .borderColor(activePane == Pane.DETAIL ? Color.GREEN : Color.GRAY)
-                    .fill()
+                    .percent(66)
             ).fill(),
+            renderShortcutPanel(treeShortcutHints),
             renderStatusPanel()
         );
 
@@ -344,12 +345,7 @@ public final class InteractiveApp extends ToolkitApp {
                 return EventResult.HANDLED;
             }
             if (event.isCancel()) {
-                editMode = false;
-                if (runner() != null) {
-                    runner().focusManager().setFocus(DETAIL_ID);
-                    activePane = Pane.DETAIL;
-                }
-                status = "Exited edit mode.";
+                exitEditModeToTree();
                 return EventResult.HANDLED;
             }
         }
@@ -497,6 +493,10 @@ public final class InteractiveApp extends ToolkitApp {
             navigateToParentProfile();
             return EventResult.HANDLED;
         }
+        if (event.isChar('y')) {
+            copySelectedPath();
+            return EventResult.HANDLED;
+        }
         if (event.isChar('e')) {
             if (selectedNode != null && selectedNode.kind() == NodeKind.FILE) {
                 if (selectedNode.inherited()) {
@@ -509,7 +509,7 @@ public final class InteractiveApp extends ToolkitApp {
                     runner().focusManager().setFocus(EDITOR_ID);
                     activePane = Pane.DETAIL;
                 }
-                status = "Editing `" + selectedNode.path().getFileName() + "`. Ctrl+S to save, Esc to cancel.";
+                status = "Editing " + selectedNode.path().getFileName() + ". Ctrl+S to save, Esc to cancel.";
             }
             return EventResult.HANDLED;
         }
@@ -636,15 +636,15 @@ public final class InteractiveApp extends ToolkitApp {
                     String parentProfileName = currentPrompt.values.get(1);
                     profileService.createProfile(currentPrompt.values.getFirst(), repositoryName, parentProfileName);
                     if (parentProfileName == null || parentProfileName.isBlank()) {
-                        statusMessage = "Created profile `" + currentPrompt.values.getFirst() + "` in repository `" + repositoryName + "`.";
+                        statusMessage = "Created profile " + currentPrompt.values.getFirst() + " in repository " + repositoryName + ".";
                     } else {
-                        statusMessage = "Created profile `"
+                        statusMessage = "Created profile "
                             + currentPrompt.values.getFirst()
-                            + "` in repository `"
+                            + " in repository "
                             + repositoryName
-                            + "` extending from `"
+                            + " extending from "
                             + parentProfileName
-                            + "`.";
+                            + ".";
                     }
                 }
                 case ADD_REPOSITORY -> {
@@ -653,13 +653,13 @@ public final class InteractiveApp extends ToolkitApp {
                         maybeStartPostCreationFlow(
                             PostCreationFlowSource.ADD_REPOSITORY,
                             addedRepository,
-                            "Added repository `" + currentPrompt.values.get(1) + "`.",
+                            "Added repository " + currentPrompt.values.get(1) + ".",
                             false
                         );
                         reloadState();
                         return;
                     }
-                    statusMessage = "Added repository `" + currentPrompt.values.get(1) + "`.";
+                    statusMessage = "Added repository " + currentPrompt.values.get(1) + ".";
                 }
                 case DELETE_REPOSITORY -> {
                     String confirmation = currentPrompt.values.getFirst();
@@ -670,7 +670,7 @@ public final class InteractiveApp extends ToolkitApp {
                         return;
                     }
                     repositoryService.delete(confirmation, false, false);
-                    statusMessage = "Deleted repository `" + confirmation + "`.";
+                    statusMessage = "Deleted repository " + confirmation + ".";
                 }
                 case DELETE_REPOSITORY_FORCE -> {
                     String confirmation = currentPrompt.values.getFirst();
@@ -681,7 +681,7 @@ public final class InteractiveApp extends ToolkitApp {
                         return;
                     }
                     repositoryService.delete(confirmation, true, false);
-                    statusMessage = "Deleted repository `" + confirmation + "` with local changes.";
+                    statusMessage = "Deleted repository " + confirmation + " with local changes.";
                 }
                 case DELETE_REPOSITORY_FILE_BASED -> {
                     String confirmation = currentPrompt.values.getFirst();
@@ -694,9 +694,9 @@ public final class InteractiveApp extends ToolkitApp {
                     boolean deleteLocalFolder = "yes".equalsIgnoreCase(currentPrompt.values.get(1));
                     repositoryService.delete(confirmation, false, deleteLocalFolder);
                     if (deleteLocalFolder) {
-                        statusMessage = "Deleted repository `" + confirmation + "` and local folder.";
+                        statusMessage = "Deleted repository " + confirmation + " and local folder.";
                     } else {
-                        statusMessage = "Deleted repository `" + confirmation + "` (local folder kept).";
+                        statusMessage = "Deleted repository " + confirmation + " (local folder kept).";
                     }
                 }
                 case COMMIT_AND_PUSH_REPOSITORY -> {
@@ -706,10 +706,10 @@ public final class InteractiveApp extends ToolkitApp {
                     }
                     suppressNextRepositoryCommitPushPreviewRefresh = true;
                     runBusyOperation(
-                        "Committing and pushing repository `" + repositoryName + "`...",
+                        "Committing and pushing repository " + repositoryName + "...",
                         () -> {
                             repositoryService.commitAndPush(repositoryName, currentPrompt.values.getFirst());
-                            return "Committed and pushed local changes for repository `" + repositoryName + "`.";
+                            return "Committed and pushed local changes for repository " + repositoryName + ".";
                         },
                         null
                     );
@@ -729,7 +729,7 @@ public final class InteractiveApp extends ToolkitApp {
                         throw new IllegalStateException(ERROR_REPOSITORY_SELECTION_REQUIRED);
                     }
                     profileService.deleteProfile(profileName, repositoryName);
-                    statusMessage = "Deleted profile `" + profileName + "` from repository `" + repositoryName + "`.";
+                    statusMessage = "Deleted profile " + profileName + " from repository " + repositoryName + ".";
                 }
                 case CREATE_REPOSITORY -> {
                     String repositoryName = currentPrompt.values.getFirst();
@@ -739,7 +739,7 @@ public final class InteractiveApp extends ToolkitApp {
                     maybeStartPostCreationFlow(
                         PostCreationFlowSource.CREATE_REPOSITORY,
                         createdRepository,
-                        "Created and added repository `" + repositoryName + "`.",
+                        "Created and added repository " + repositoryName + ".",
                         true
                     );
                     reloadState();
@@ -750,7 +750,7 @@ public final class InteractiveApp extends ToolkitApp {
                     postCreationFlowState = postCreationFlowState.withInitializeGit("yes".equalsIgnoreCase(currentPrompt.values.getFirst()));
                     if (shouldPromptForGitHubPublish(postCreationFlowState)) {
                         prompt = postCreationPublishPrompt(postCreationFlowState);
-                        status = "Publish `" + postCreationFlowState.repositoryName() + "` to GitHub?";
+                        status = "Publish " + postCreationFlowState.repositoryName() + " to GitHub?";
                         return;
                     }
                     runBusyPostCreationFlow(postCreationFlowState);
@@ -761,7 +761,7 @@ public final class InteractiveApp extends ToolkitApp {
                     postCreationFlowState = postCreationFlowState.withPublishToGitHub("yes".equalsIgnoreCase(currentPrompt.values.getFirst()));
                     if (postCreationFlowState.publishToGitHub()) {
                         prompt = postCreationVisibilityPrompt(postCreationFlowState);
-                        status = "Choose GitHub visibility for `" + postCreationFlowState.repositoryName() + "`.";
+                        status = "Choose GitHub visibility for " + postCreationFlowState.repositoryName() + ".";
                         return;
                     }
                     runBusyPostCreationFlow(postCreationFlowState);
@@ -795,17 +795,17 @@ public final class InteractiveApp extends ToolkitApp {
             return;
         }
         runBusyOperation(
-            "Applying profile `" + profileName + "`...",
+            "Applying profile " + profileName + "...",
             () -> profileService.useProfile(profileName),
-            "Switched to profile `" + profileName + "`.",
+            "Switched to profile " + profileName + ".",
             null
         );
     }
 
     private String onboardingCompletedMessage(OnboardingService.OnboardingResult onboardingResult) {
-        String message = "Imported existing OpenCode configuration as profile `" + onboardingResult.profileName() + "`";
+        String message = "Imported existing OpenCode configuration as profile " + onboardingResult.profileName();
         if (onboardingResult.switchResult().hasBackups()) {
-            return message + " and backed up existing files to `" + onboardingResult.switchResult().backupDirectory() + "`.";
+            return message + " and backed up existing files to " + onboardingResult.switchResult().backupDirectory() + ".";
         }
         return message + ".";
     }
@@ -821,7 +821,7 @@ public final class InteractiveApp extends ToolkitApp {
             PostCreationCapabilities capabilities = repositoryPostCreationService.capabilities(repositoryPath);
             if (capabilities.hasOriginRemote()) {
                 String originUri = repositoryPostCreationService.persistExistingOrigin(repositoryEntry.name(), repositoryPath);
-                status = successMessage + " Saved origin URI `" + originUri + "`.";
+                status = successMessage + " Saved origin URI " + originUri + ".";
                 return;
             }
             PostCreationFlowState postCreationFlowState = new PostCreationFlowState(
@@ -838,12 +838,12 @@ public final class InteractiveApp extends ToolkitApp {
 
             if (postCreationFlowState.canInitializeGit()) {
                 prompt = postCreationGitInitPrompt(postCreationFlowState);
-                status = "Configure git setup for `" + postCreationFlowState.repositoryName() + "`.";
+                status = "Configure git setup for " + postCreationFlowState.repositoryName() + ".";
                 return;
             }
             if (shouldPromptForGitHubPublish(postCreationFlowState)) {
                 prompt = postCreationPublishPrompt(postCreationFlowState);
-                status = "Publish `" + postCreationFlowState.repositoryName() + "` to GitHub?";
+                status = "Publish " + postCreationFlowState.repositoryName() + " to GitHub?";
                 return;
             }
             status = successMessage;
@@ -868,13 +868,13 @@ public final class InteractiveApp extends ToolkitApp {
             return;
         }
         if (repository.isGitBacked()) {
-            status = "Repository `" + repositoryName + "` is already git-backed.";
+            status = "Repository " + repositoryName + " is already git-backed.";
             return;
         }
         maybeStartPostCreationFlow(
             PostCreationFlowSource.MIGRATE_REPOSITORY,
             new RepositoryEntry(repository.name(), repository.uri(), repository.localPath()),
-            "Migration ready for repository `" + repositoryName + "`.",
+            "Migration ready for repository " + repositoryName + ".",
             false
         );
         reloadState();
@@ -893,23 +893,23 @@ public final class InteractiveApp extends ToolkitApp {
         }
         RepositoryDirtyState dirtyState = repositoryDirtyStateByName.get(repositoryName);
         if (dirtyState != null && dirtyState.inspectionFailed()) {
-            status = "Unable to inspect repository `" + repositoryName + "` for local git changes.";
+            status = "Unable to inspect repository " + repositoryName + " for local git changes.";
             return;
         }
         if (!isSelectedRepositoryCommitPushAvailable()) {
             if (!repository.isGitBacked()) {
-                status = "Repository `" + repositoryName + "` is file-based; nothing to commit and push.";
+                status = "Repository " + repositoryName + " is file-based; nothing to commit and push.";
                 return;
             }
-            status = "Repository `" + repositoryName + "` has no local git changes to commit and push.";
+            status = "Repository " + repositoryName + " has no local git changes to commit and push.";
             return;
         }
         final String[] diffHolder = new String[1];
         runBusyOperation(
-            "Inspecting local changes for `" + repositoryName + "`...",
+            "Inspecting local changes for " + repositoryName + "...",
             () -> {
                 diffHolder[0] = repositoryService.getLocalDiff(repositoryName);
-                return "Review local changes for `" + repositoryName + "`.";
+                return "Review local changes for " + repositoryName + ".";
             },
             () -> commitConfirm = new CommitConfirmState(repositoryName, diffHolder[0])
         );
@@ -945,7 +945,7 @@ public final class InteractiveApp extends ToolkitApp {
         PromptState nextPrompt = PromptState.multiWithOptions(
             PromptAction.POST_CREATION_PUBLISH_GITHUB,
             "Publish repository to GitHub",
-            List.of("Publish with gh and set `origin`?"),
+            List.of("Publish with gh and set origin?"),
             List.of(List.of("no", "yes"))
         );
         nextPrompt.postCreationFlowState = postCreationFlowState;
@@ -968,7 +968,7 @@ public final class InteractiveApp extends ToolkitApp {
 
     private void runBusyPostCreationFlow(PostCreationFlowState postCreationFlowState) {
         runBusyOperation(
-            "Configuring repository `" + postCreationFlowState.repositoryName() + "`...",
+            "Configuring repository " + postCreationFlowState.repositoryName() + "...",
             () -> applyPostCreationFlow(postCreationFlowState),
             null
         );
@@ -993,7 +993,7 @@ public final class InteractiveApp extends ToolkitApp {
             }
         }
         if (result.publishedToGitHub()) {
-            message += " Published to GitHub and saved origin URI `" + result.persistedRepositoryUri() + "`.";
+            message += " Published to GitHub and saved origin URI " + result.persistedRepositoryUri() + ".";
         }
         return message;
     }
@@ -1005,7 +1005,7 @@ public final class InteractiveApp extends ToolkitApp {
             return;
         }
         if (!isRepositoryRefreshable(repositoryName)) {
-            status = "Repository `" + repositoryName + "` is file-based; nothing to refresh.";
+            status = "Repository " + repositoryName + " is file-based; nothing to refresh.";
             return;
         }
         pendingRefreshOperation = RefreshOperation.singleRepository(repositoryName);
@@ -1038,9 +1038,9 @@ public final class InteractiveApp extends ToolkitApp {
         if (pendingRefreshOperation.scope() == RefreshScope.SINGLE_REPOSITORY) {
             String repositoryName = pendingRefreshOperation.repositoryName();
             runBusyOperation(
-                "Refreshing repository `" + repositoryName + "`...",
+                "Refreshing repository " + repositoryName + "...",
                 () -> profileService.refreshRepository(repositoryName),
-                "Refreshed repository `" + repositoryName + "`.",
+                "Refreshed repository " + repositoryName + ".",
                 () -> pendingRefreshOperation = null
             );
             return;
@@ -1158,7 +1158,7 @@ public final class InteractiveApp extends ToolkitApp {
                 RepositoryConfigFile repositoryConfig = objectMapper.readValue(Files.readString(metadataFile), RepositoryConfigFile.class);
                 parentByName.putAll(profileParentByName(repository.name(), repositoryConfig));
             } catch (IOException | RuntimeException e) {
-                status = "Error loading metadata from `" + metadataFile + "`: " + e.getMessage();
+                status = "Error loading metadata from " + metadataFile + ": " + e.getMessage();
             }
         }
         return Map.copyOf(parentByName);
@@ -1231,6 +1231,8 @@ public final class InteractiveApp extends ToolkitApp {
             isSelectedRepositoryCommitPushAvailable(),
             selectedProfileHasParent(),
             editMode,
+            selectedRepositoryHasLocalChanges(),
+            selectedRepositoryInspectionFailed(),
             profilesByName,
             profileParentByName,
             selectedFilePreview,
@@ -1253,6 +1255,24 @@ public final class InteractiveApp extends ToolkitApp {
             return EventResult.UNHANDLED;
         }
         return handleKeyEvent(event);
+    }
+
+    private boolean selectedRepositoryHasLocalChanges() {
+        String repositoryName = selectedRepositoryName();
+        if (repositoryName == null) {
+            return false;
+        }
+        RepositoryDirtyState dirtyState = repositoryDirtyStateByName.get(repositoryName);
+        return dirtyState != null && dirtyState.hasLocalChanges();
+    }
+
+    private boolean selectedRepositoryInspectionFailed() {
+        String repositoryName = selectedRepositoryName();
+        if (repositoryName == null) {
+            return false;
+        }
+        RepositoryDirtyState dirtyState = repositoryDirtyStateByName.get(repositoryName);
+        return dirtyState != null && dirtyState.inspectionFailed();
     }
 
     private boolean handlePreviewScrollKeys(KeyEvent event) {
@@ -1433,15 +1453,15 @@ public final class InteractiveApp extends ToolkitApp {
         NodeRef savedSelection = selectedNode;
         Path filePath = selectedNode.path();
         runBusyOperation(
-            "Saving `" + filePath.getFileName() + "`...",
+            "Saving " + filePath.getFileName() + "...",
             () -> {
                 try {
                     Files.writeString(filePath, editorState.text());
                 } catch (IOException e) {
-                    throw new IllegalStateException("Failed to save file `" + filePath + "`.", e);
+                    throw new IllegalStateException("Failed to save file " + filePath + ".", e);
                 }
             },
-            "Saved `" + filePath.getFileName() + "`.",
+            "Saved " + filePath.getFileName() + ".",
             () -> {
                 editMode = false;
                 if (runner() == null && savedSelection != null && savedSelection.kind() == NodeKind.FILE) {
@@ -1457,6 +1477,17 @@ public final class InteractiveApp extends ToolkitApp {
                 }
             }
         );
+    }
+
+    private void exitEditModeToTree() {
+        editMode = false;
+        if (runner() != null) {
+            runner().focusManager().setFocus(TREE_ID);
+            activePane = Pane.TREE;
+        } else {
+            activePane = Pane.TREE;
+        }
+        status = "Exited edit mode.";
     }
 
     private boolean isSaveKey(KeyEvent event) {
@@ -1511,15 +1542,39 @@ public final class InteractiveApp extends ToolkitApp {
             return;
         }
 
-        String parentProfileName = profileParentByName.get(profileKey(repositoryName, profileName));
+        String parentProfileName = selectedNode != null && selectedNode.inherited()
+            ? selectedNode.inheritedFromProfile()
+            : profileParentByName.get(profileKey(repositoryName, profileName));
         if (parentProfileName == null || parentProfileName.isBlank()) {
-            status = "Profile `" + profileName + "` does not extend another profile.";
+            status = "Profile " + profileName + " does not extend another profile.";
             return;
         }
 
         String parentRepositoryName = repositoryNameForProfile(parentProfileName);
-        if (parentRepositoryName == null || !selectProfileNode(parentRepositoryName, parentProfileName)) {
-            status = "Parent profile `" + parentProfileName + "` was not found in the tree.";
+        if (parentRepositoryName == null) {
+            status = "Parent profile " + parentProfileName + " was not found in the tree.";
+            return;
+        }
+
+        boolean selectingInheritedParentFile = selectedNode != null
+            && selectedNode.kind() == NodeKind.FILE
+            && selectedNode.inherited()
+            && selectedNode.path() != null
+            && selectedNode.profileName() != null;
+        Path inheritedParentPath = selectingInheritedParentFile ? selectedNode.path() : null;
+        boolean selectedParent = selectingInheritedParentFile
+            ? selectNode(node -> node.kind() == NodeKind.FILE
+                && parentRepositoryName.equals(node.repositoryName())
+                && parentProfileName.equals(node.profileName())
+                && inheritedParentPath.equals(node.path())
+                && !node.inherited())
+            : selectNode(node -> node.kind() == NodeKind.PROFILE
+                && parentRepositoryName.equals(node.repositoryName())
+                && parentProfileName.equals(node.profileName()));
+        if (!selectedParent) {
+            status = selectingInheritedParentFile
+                ? "Parent file in profile " + parentProfileName + " was not found in the tree."
+                : "Parent profile " + parentProfileName + " was not found in the tree.";
             return;
         }
 
@@ -1528,10 +1583,31 @@ public final class InteractiveApp extends ToolkitApp {
             runner().focusManager().setFocus(TREE_ID);
             activePane = Pane.TREE;
         }
-        status = "Selected parent profile `" + parentProfileName + "`.";
+        status = selectingInheritedParentFile
+            ? "Selected inherited parent file from profile " + parentProfileName + "."
+            : "Selected parent profile " + parentProfileName + ".";
     }
 
-    private boolean selectProfileNode(String repositoryName, String profileName) {
+    private void copySelectedPath() {
+        if (selectedNode == null || selectedNode.path() == null) {
+            status = STATUS_SELECT_NODE_FIRST;
+            return;
+        }
+        if (selectedNode.kind() != NodeKind.FILE) {
+            status = "Select a file first.";
+            return;
+        }
+
+        Path absolutePath = selectedNode.path().toAbsolutePath().normalize();
+        try {
+            InteractiveClipboard.copy(absolutePath.toString());
+            status = "Copied path " + absolutePath + " to the clipboard.";
+        } catch (IllegalStateException e) {
+            status = e.getMessage();
+        }
+    }
+
+    private boolean selectNode(java.util.function.Predicate<NodeRef> predicate) {
         int originalSelection = hierarchyTree.selected();
         int maxNodes = Math.max(1, countTreeNodes(hierarchyRoots));
         for (int index = 0; index < maxNodes; index++) {
@@ -1541,9 +1617,7 @@ public final class InteractiveApp extends ToolkitApp {
                 continue;
             }
             NodeRef selectedNodeRef = selectedTreeNode.data();
-            if (selectedNodeRef.kind() == NodeKind.PROFILE
-                && repositoryName.equals(selectedNodeRef.repositoryName())
-                && profileName.equals(selectedNodeRef.profileName())) {
+            if (predicate.test(selectedNodeRef)) {
                 return true;
             }
         }
@@ -1752,7 +1826,7 @@ public final class InteractiveApp extends ToolkitApp {
         }
         String fileSummary = candidate.configFiles()
             .stream()
-            .map(path -> "- `" + path.getFileName() + "`")
+            .map(path -> "- " + path.getFileName() + "")
             .reduce((left, right) -> left + "\n" + right)
             .orElse("");
         prompt = PromptState.multiWithOptions(
@@ -1775,11 +1849,47 @@ public final class InteractiveApp extends ToolkitApp {
         }
     }
 
+    private void runSplashStartupChecksInBackground() {
+        try {
+            SystemDependencies.verifyAll();
+            String[] interactiveRootArgs = new String[0];
+            OcpCommand.runStartupVersionCheck(null, interactiveRootArgs);
+        } catch (RuntimeException e) {
+            String message = OcpCommand.startupVersionCheckFailureMessage(e);
+            if (runner() != null) {
+                runner().runOnRenderThread(() -> status = message);
+            } else {
+                status = message;
+            }
+        } finally {
+            if (runner() != null) {
+                runner().runOnRenderThread(this::maybeHideSplash);
+            } else {
+                maybeHideSplash();
+            }
+        }
+    }
+
     private String statusLine() {
         if (!busy) {
             return status;
         }
         return SPINNER_FRAMES[spinnerIndex % SPINNER_FRAMES.length] + " " + busyMessage;
+    }
+
+    private Element renderShortcutPanel(TreeShortcutHints.ShortcutHints shortcutHints) {
+        List<Element> lines = new ArrayList<>();
+        if (!shortcutHints.navigation().isEmpty()) {
+            lines.add(ShortcutHintRenderer.line("Navigate", shortcutHints.navigation()));
+        }
+        if (!shortcutHints.actions().isEmpty()) {
+            lines.add(ShortcutHintRenderer.line(
+                "Actions",
+                shortcutHints.actions(),
+                ShortcutHintRenderer.emphasizedPrefixStyle()
+            ));
+        }
+        return panel(lines.toArray(Element[]::new)).rounded().borderColor(Color.CYAN).length(lines.size() + 2);
     }
 
     private Element renderStatusPanel() {
@@ -2039,18 +2149,18 @@ public final class InteractiveApp extends ToolkitApp {
 
         if (resolution == ProfileService.RefreshConflictResolution.DISCARD_AND_REFRESH) {
             runBusyOperation(
-                "Discarding local changes in repository `" + conflict.repositoryName() + "`...",
+                "Discarding local changes in repository " + conflict.repositoryName() + "...",
                 () -> profileService.resolveRefreshConflict(conflict, resolution),
-                "Local changes discarded in repository `" + conflict.repositoryName() + "`.",
+                "Local changes discarded in repository " + conflict.repositoryName() + ".",
                 this::attemptPendingRefresh
             );
             return;
         }
 
         runBusyOperation(
-            "Committing local changes and force-pushing repository `" + conflict.repositoryName() + "`...",
+            "Committing local changes and force-pushing repository " + conflict.repositoryName() + "...",
             () -> profileService.resolveRefreshConflict(conflict, resolution),
-            "Local changes committed and force-pushed for repository `" + conflict.repositoryName() + "`.",
+            "Local changes committed and force-pushed for repository " + conflict.repositoryName() + ".",
             this::attemptPendingRefresh
         );
     }
@@ -2062,9 +2172,9 @@ public final class InteractiveApp extends ToolkitApp {
         }
         refreshConflict = null;
         runBusyOperation(
-            "Discarding local merged-file changes for profile `" + conflict.profileName() + "`...",
+            "Discarding local merged-file changes for profile " + conflict.profileName() + "...",
             () -> profileService.resolveRefreshConflict(conflict, ProfileService.RefreshConflictResolution.DISCARD_AND_REFRESH),
-            "Local changes discarded in merged user config files for profile `" + conflict.profileName() + "`.",
+            "Local changes discarded in merged user config files for profile " + conflict.profileName() + ".",
             this::attemptPendingRefresh
         );
     }
@@ -2098,7 +2208,7 @@ public final class InteractiveApp extends ToolkitApp {
             nextPrompt.contextRepositoryName = repositoryName;
             nextPrompt.values.set(0, DEFAULT_COMMIT_MESSAGE);
             prompt = nextPrompt;
-            status = "Review commit message for `" + repositoryName + "`.";
+            status = "Review commit message for " + repositoryName + ".";
             return EventResult.HANDLED;
         }
         return EventResult.HANDLED;
@@ -2250,7 +2360,7 @@ public final class InteractiveApp extends ToolkitApp {
     private void loadSplashLogoLines() {
         try (var input = InteractiveApp.class.getResourceAsStream(SPLASH_LOGO_RESOURCE)) {
             if (input == null) {
-                status = "Splash logo file not found (`splash-logo.txt`), using default.";
+                status = "Splash logo file not found (splash-logo.txt), using default.";
                 return;
             }
 
