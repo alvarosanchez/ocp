@@ -4,15 +4,19 @@ import dev.tamboui.text.Text;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.UncheckedIOException;
+import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
-final class BatPreviewRenderer {
+class BatPreviewRenderer {
+
+    private static final String BAT_PATH_ENV = "OCP_BAT_PATH";
 
     private static final Duration BAT_HIGHLIGHT_TIMEOUT = Duration.ofSeconds(8);
     private static final Duration BAT_HIGHLIGHT_READER_JOIN_TIMEOUT = Duration.ofSeconds(1);
@@ -20,13 +24,26 @@ final class BatPreviewRenderer {
     private static final Duration BAT_AVAILABILITY_TIMEOUT = Duration.ofSeconds(1);
 
     private final AnsiTextParser ansiTextParser = new AnsiTextParser();
+    private volatile String cachedBatExecutable;
 
     Text highlight(Path filePath) {
         if (filePath == null) {
             return null;
         }
 
-        String highlighted = highlightWithBat(filePath);
+        String highlighted = highlightWithBat(filePath, null);
+        if (highlighted == null) {
+            return null;
+        }
+        return ansiTextParser.parse(highlighted);
+    }
+
+    Text highlight(Path filePath, String content) {
+        if (filePath == null || content == null) {
+            return null;
+        }
+
+        String highlighted = highlightWithBat(filePath, content);
         if (highlighted == null) {
             return null;
         }
@@ -34,9 +51,15 @@ final class BatPreviewRenderer {
     }
 
     boolean probeAvailability() {
+        String batExecutable = resolveBatExecutable();
+        if (batExecutable == null) {
+            return false;
+        }
         Process process;
         try {
-            process = new ProcessBuilder("bat", "--version").start();
+            process = new ProcessBuilder(batExecutable, "--version")
+                .redirectErrorStream(true)
+                .start();
         } catch (IOException _) {
             return false;
         }
@@ -49,84 +72,128 @@ final class BatPreviewRenderer {
         }
     }
 
-    private String highlightWithBat(Path filePath) {
-        List<String> command = new ArrayList<>();
-        command.add("bat");
-        command.add("--color=always");
-        command.add("--style=plain");
-        command.add("--paging=never");
-
-        String language = batLanguage(extension(filePath));
-        if (language != null) {
-            command.add("--language");
-            command.add(language);
+    private String highlightWithBat(Path filePath, String content) {
+        String batExecutable = resolveBatExecutable();
+        if (batExecutable == null) {
+            return null;
         }
-        command.add(filePath.toString());
+        List<String> commandParts = new java.util.ArrayList<>();
+        commandParts.add(batExecutable);
+        commandParts.add("--color=always");
+        commandParts.add("--style=plain");
+        commandParts.add("--paging=never");
+        if (content == null) {
+            commandParts.add(filePath.toString());
+        } else {
+            commandParts.add("--file-name");
+            commandParts.add(String.valueOf(filePath.getFileName()));
+            commandParts.add("-");
+        }
 
         Process process;
         try {
-            process = new ProcessBuilder(command)
+            process = new ProcessBuilder(commandParts)
                 .redirectErrorStream(true)
                 .start();
         } catch (IOException _) {
             return null;
         }
 
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        Thread reader = Thread.ofVirtual().start(() -> {
-            try {
-                process.getInputStream().transferTo(output);
+        ByteArrayOutputStream outputBuffer = new ByteArrayOutputStream();
+        AtomicReference<IOException> readFailure = new AtomicReference<>();
+        Thread outputReader = Thread.ofPlatform().daemon(true).unstarted(() -> {
+            try (var inputStream = process.getInputStream()) {
+                inputStream.transferTo(outputBuffer);
             } catch (IOException e) {
-                throw new UncheckedIOException(e);
+                readFailure.set(e);
             }
         });
+        outputReader.start();
 
+        if (content != null) {
+            try (OutputStreamWriter writer = new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8)) {
+                writer.write(content);
+                writer.flush();
+            } catch (IOException _) {
+                process.destroyForcibly();
+                waitForOutputReader(outputReader, BAT_HIGHLIGHT_READER_CANCEL_JOIN_TIMEOUT);
+                return null;
+            }
+        }
         try {
             boolean completed = process.waitFor(BAT_HIGHLIGHT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
             if (!completed) {
                 process.destroyForcibly();
-                reader.join(BAT_HIGHLIGHT_READER_CANCEL_JOIN_TIMEOUT.toMillis());
+                waitForOutputReader(outputReader, BAT_HIGHLIGHT_READER_CANCEL_JOIN_TIMEOUT);
                 return null;
             }
-            reader.join(BAT_HIGHLIGHT_READER_JOIN_TIMEOUT.toMillis());
+            waitForOutputReader(outputReader, BAT_HIGHLIGHT_READER_JOIN_TIMEOUT);
+            if (outputReader.isAlive()) {
+                process.destroyForcibly();
+                waitForOutputReader(outputReader, BAT_HIGHLIGHT_READER_CANCEL_JOIN_TIMEOUT);
+                return null;
+            }
             if (process.exitValue() != 0) {
                 return null;
             }
-            return output.toString(StandardCharsets.UTF_8);
-        } catch (UncheckedIOException _) {
-            return null;
+            if (readFailure.get() != null) {
+                return null;
+            }
+            return outputBuffer.toString(StandardCharsets.UTF_8);
         } catch (InterruptedException _) {
             Thread.currentThread().interrupt();
+            process.destroyForcibly();
+            waitForOutputReader(outputReader, BAT_HIGHLIGHT_READER_CANCEL_JOIN_TIMEOUT);
             return null;
         }
     }
 
-    private String batLanguage(String extension) {
-        return switch (extension) {
-            case "jsonc", "json" -> "json";
-            case "yaml", "yml" -> "yaml";
-            case "toml" -> "toml";
-            case "properties" -> "properties";
-            case "java" -> "java";
-            case "kts", "kt" -> "kotlin";
-            case "groovy" -> "groovy";
-            case "sh", "bash" -> "bash";
-            case "js" -> "javascript";
-            case "ts" -> "typescript";
-            case "py" -> "python";
-            default -> null;
-        };
+    private void waitForOutputReader(Thread outputReader, Duration timeout) {
+        try {
+            outputReader.join(timeout.toMillis());
+        } catch (InterruptedException _) {
+            Thread.currentThread().interrupt();
+        }
     }
 
-    private String extension(Path path) {
-        if (path.getFileName() == null) {
-            return "";
+    private String resolveBatExecutable() {
+        if (cachedBatExecutable != null) {
+            return cachedBatExecutable;
         }
-        String fileName = path.getFileName().toString();
-        int lastDot = fileName.lastIndexOf('.');
-        if (lastDot < 0 || lastDot == fileName.length() - 1) {
-            return "";
+        String configuredBatPath = System.getenv(BAT_PATH_ENV);
+        if (configuredBatPath != null && !configuredBatPath.isBlank()) {
+            Path configuredCandidate = Paths.get(configuredBatPath);
+            if (Files.isRegularFile(configuredCandidate) && Files.isExecutable(configuredCandidate)) {
+                cachedBatExecutable = configuredCandidate.toString();
+                return cachedBatExecutable;
+            }
         }
-        return fileName.substring(lastDot + 1).toLowerCase();
+        String path = System.getenv("PATH");
+        if (path == null || path.isBlank()) {
+            return null;
+        }
+        String[] executableNames = executableNames();
+        for (String entry : path.split(java.io.File.pathSeparator)) {
+            if (entry == null || entry.isBlank()) {
+                continue;
+            }
+            Path directory = Paths.get(entry);
+            for (String executableName : executableNames) {
+                Path candidate = directory.resolve(executableName);
+                if (Files.isRegularFile(candidate) && Files.isExecutable(candidate)) {
+                    cachedBatExecutable = candidate.toString();
+                    return cachedBatExecutable;
+                }
+            }
+        }
+        return null;
+    }
+
+    private String[] executableNames() {
+        String osName = System.getProperty("os.name", "").toLowerCase();
+        if (osName.startsWith("windows")) {
+            return new String[] {"bat.exe", "bat.cmd", "bat.bat", "bat"};
+        }
+        return new String[] {"bat"};
     }
 }

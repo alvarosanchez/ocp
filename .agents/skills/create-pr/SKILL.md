@@ -5,7 +5,7 @@ license: MIT
 compatibility: Compatible with git and GitHub CLI based workflows in Agent Skills compatible runtimes.
 metadata:
   author: local
-  version: "2.1.0"
+  version: "2.2.0"
 ---
 
 # Create PR
@@ -153,7 +153,7 @@ For each new unresolved Copilot comment:
 1. inspect the requested change
 2. apply the smallest correct fix when necessary
 3. reply on the thread even if no code change is needed
-4. resolve the thread when permissions allow and no human discussion remains open
+4. resolve the thread immediately after replying when no human discussion remains open
 
 Use:
 
@@ -163,6 +163,12 @@ Use:
 ```
 
 If reply or resolve fails, report the concrete limitation instead of claiming success.
+
+Thread-resolution enforcement rule:
+
+- Replying is not enough. After replying, you MUST attempt `resolve-review-thread.sh` for that thread.
+- Treat any unresolved Copilot-owned thread as actionable until resolution is confirmed in the latest fetched review-thread set.
+- Do not declare Copilot remediation complete while Copilot-owned threads remain unresolved unless you explicitly report a permissions/platform limitation.
 
 Operational rule for completion checks:
 
@@ -199,7 +205,14 @@ If autonomous commits are not allowed by the runtime, stop and report that the l
 
 ### 9. Re-request Copilot review after each follow-up push
 
-After a follow-up push, re-request Copilot review without mentioning `@copilot` in any comment:
+After a follow-up push, re-request Copilot review using the remove/add workaround:
+
+```bash
+gh pr edit <pr-number> --remove-reviewer @copilot || true
+gh pr edit <pr-number> --add-reviewer @copilot
+```
+
+Use the skill script wrapper so repository scoping and result validation are consistent:
 
 ```bash
 ./scripts/request-copilot-review.sh <owner> <repo> <pr-number>

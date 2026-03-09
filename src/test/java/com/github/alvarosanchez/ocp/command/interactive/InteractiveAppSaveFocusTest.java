@@ -85,6 +85,34 @@ class InteractiveAppSaveFocusTest {
         assertEquals("Saved `opencode.json`.", readStatus(app));
     }
 
+    @Test
+    void saveSelectedDeepMergedFileRefreshesResolvedPreviewContent() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path baseProfilePath = repositoryPath.resolve("base");
+        Path childProfilePath = repositoryPath.resolve("child");
+        Path filePath = childProfilePath.resolve("opencode.json");
+        Files.createDirectories(baseProfilePath);
+        Files.createDirectories(childProfilePath);
+        Files.writeString(repositoryPath.resolve("repository.json"), "{\"profiles\":[{\"name\":\"base\"},{\"name\":\"child\",\"extends_from\":\"base\"}]}");
+        Files.writeString(baseProfilePath.resolve("opencode.json"), "{\"base\":1,\"shared\":1}");
+        Files.writeString(filePath, "{\"child\":1,\"shared\":2}");
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = createApp();
+        invokeReloadState(app);
+        setSelectedNode(app, NodeRef.deepMergedFile("repo-a", "child", filePath));
+        setEditMode(app, true);
+        setEditorText(app, "{\"child\":1,\"shared\":3,\"new\":4}");
+
+        invokeSaveSelectedFile(app);
+
+        String preview = readSelectedFilePreviewText(app);
+        assertEquals(
+            objectMapper.readValue("{\"base\":1,\"shared\":3,\"child\":1,\"new\":4}", Object.class),
+            objectMapper.readValue(preview, Object.class)
+        );
+    }
+
     private InteractiveApp createApp() {
         return new InteractiveApp(
             applicationContext.getBean(ProfileService.class),
@@ -157,6 +185,19 @@ class InteractiveAppSaveFocusTest {
         Field field = InteractiveApp.class.getDeclaredField("status");
         field.setAccessible(true);
         return (String) field.get(app);
+    }
+
+    private static String readSelectedFilePreviewText(InteractiveApp app) throws Exception {
+        Field field = InteractiveApp.class.getDeclaredField("selectedFilePreview");
+        field.setAccessible(true);
+        dev.tamboui.text.Text text = (dev.tamboui.text.Text) field.get(app);
+        StringBuilder builder = new StringBuilder();
+        for (var line : text.lines()) {
+            for (var span : line.spans()) {
+                builder.append(span.content());
+            }
+        }
+        return builder.toString();
     }
 
     private static void restoreProperty(String key, String value) {

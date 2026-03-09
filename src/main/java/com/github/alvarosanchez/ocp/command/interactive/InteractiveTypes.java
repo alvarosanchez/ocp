@@ -53,22 +53,27 @@ record NodeRef(
     String profileName,
     Path path,
     boolean inherited,
-    String inheritedFromProfile
+    String inheritedFromProfile,
+    boolean deepMerged
 ) {
     static NodeRef repository(String repositoryName, Path path) {
-        return new NodeRef(NodeKind.REPOSITORY, repositoryName, null, path, false, null);
+        return new NodeRef(NodeKind.REPOSITORY, repositoryName, null, path, false, null, false);
     }
 
     static NodeRef profile(String repositoryName, String profileName, Path path) {
-        return new NodeRef(NodeKind.PROFILE, repositoryName, profileName, path, false, null);
+        return new NodeRef(NodeKind.PROFILE, repositoryName, profileName, path, false, null, false);
     }
 
     static NodeRef directory(String repositoryName, String profileName, Path path) {
-        return new NodeRef(NodeKind.DIRECTORY, repositoryName, profileName, path, false, null);
+        return new NodeRef(NodeKind.DIRECTORY, repositoryName, profileName, path, false, null, false);
     }
 
     static NodeRef file(String repositoryName, String profileName, Path path) {
-        return new NodeRef(NodeKind.FILE, repositoryName, profileName, path, false, null);
+        return new NodeRef(NodeKind.FILE, repositoryName, profileName, path, false, null, false);
+    }
+
+    static NodeRef deepMergedFile(String repositoryName, String profileName, Path path) {
+        return new NodeRef(NodeKind.FILE, repositoryName, profileName, path, false, null, true);
     }
 
     static NodeRef inheritedFile(
@@ -77,7 +82,7 @@ record NodeRef(
         Path path,
         String inheritedFromProfile
     ) {
-        return new NodeRef(NodeKind.FILE, repositoryName, profileName, path, true, inheritedFromProfile);
+        return new NodeRef(NodeKind.FILE, repositoryName, profileName, path, true, inheritedFromProfile, false);
     }
 }
 

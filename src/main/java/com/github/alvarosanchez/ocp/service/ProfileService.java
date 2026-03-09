@@ -175,6 +175,65 @@ public final class ProfileService {
         return profileNames;
     }
 
+    public ResolvedFilePreview resolvedFilePreview(String profileName, Path sourceFilePath) {
+        String normalizedProfileName = normalizeProfileName(profileName);
+        if (sourceFilePath == null) {
+            throw new IllegalStateException("Selected file path is required.");
+        }
+
+        Path normalizedSourceFilePath = sourceFilePath.toAbsolutePath().normalize();
+        Map<String, DiscoveredProfile> profilesByName = discoverProfilesByName();
+        DiscoveredProfile discoveredProfile = profilesByName.get(normalizedProfileName);
+        if (discoveredProfile == null) {
+            throw new IllegalStateException("Profile `" + normalizedProfileName + "` was not found.");
+        }
+
+        Path profilePath = profilePathFor(discoveredProfile).toAbsolutePath().normalize();
+        Path relativePath = null;
+        try {
+            Path candidateRelativePath = profilePath.relativize(normalizedSourceFilePath);
+            if (candidateRelativePath.getNameCount() > 0 && !candidateRelativePath.startsWith("..")) {
+                relativePath = candidateRelativePath;
+            }
+        } catch (IllegalArgumentException _) {
+            relativePath = null;
+        }
+
+        Map<Path, EffectiveProfileFile> effectiveFiles = effectiveProfileFilesByLogicalRelativePath(normalizedProfileName, profilesByName);
+        EffectiveProfileFile effectiveFile = null;
+        if (relativePath != null) {
+            Path logicalRelativePath = logicalRelativePath(relativePath);
+            EffectiveProfileFile mappedEffectiveFile = effectiveFiles.get(logicalRelativePath);
+            if (mappedEffectiveFile != null) {
+                if (!normalizedSourceFilePath.equals(mappedEffectiveFile.sourcePath().toAbsolutePath().normalize())) {
+                    throw new IllegalStateException(
+                        "File `" + normalizedSourceFilePath + "` is shadowed by another profile file in `" + normalizedProfileName + "`."
+                    );
+                }
+                effectiveFile = mappedEffectiveFile;
+            }
+        }
+        if (effectiveFile == null) {
+            for (EffectiveProfileFile candidate : effectiveFiles.values()) {
+                if (normalizedSourceFilePath.equals(candidate.sourcePath().toAbsolutePath().normalize())) {
+                    effectiveFile = candidate;
+                    break;
+                }
+            }
+        }
+        if (effectiveFile == null) {
+            String missingPath = relativePath == null ? normalizedSourceFilePath.toString() : relativePath.toString();
+            throw new IllegalStateException(
+                "File `" + missingPath + "` was not found in resolved profile `" + normalizedProfileName + "`."
+            );
+        }
+
+        String content = effectiveFile.mergedJson()
+            ? writeJsonValue(effectiveFile.jsonValue(), effectiveFile.relativePath())
+            : readFileContent(effectiveFile.sourcePath().toAbsolutePath().normalize());
+        return new ResolvedFilePreview(effectiveFile.relativePath(), content, effectiveFile.mergedJson());
+    }
+
     /**
      * Deletes a profile from a configured repository.
      *
@@ -905,6 +964,22 @@ public final class ProfileService {
         return path.getFileName().toString().endsWith(".jsonc");
     }
 
+    private String readFileContent(Path filePath) {
+        try {
+            return Files.readString(filePath);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read profile file `" + filePath + "`.", e);
+        }
+    }
+
+    private String writeJsonValue(Object value, Path relativePath) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to render merged profile file `" + relativePath + "`.", e);
+        }
+    }
+
     private List<Path> profileFiles(Path sourceDirectory) {
         if (!Files.exists(sourceDirectory)) {
             return List.of();
@@ -1246,6 +1321,9 @@ public final class ProfileService {
      * @param backedUpFiles number of existing non-symlink files moved to backups
      * @param backupDirectory backup root directory for moved files, or {@code null} when no backup was needed
      */
+    public record ResolvedFilePreview(Path relativePath, String content, boolean deepMerged) {
+    }
+
     public record ProfileSwitchResult(
         Path targetDirectory,
         int linkedFiles,

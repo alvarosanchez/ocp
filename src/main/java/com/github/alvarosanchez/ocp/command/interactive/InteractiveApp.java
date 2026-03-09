@@ -34,9 +34,13 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -77,6 +81,7 @@ public final class InteractiveApp extends ToolkitApp {
     private static final String STATUS_DELETE_CANCELLED_PROFILE_MISMATCH = "Delete cancelled: profile name mismatch.";
     private static final String DEFAULT_COMMIT_MESSAGE = "chore: persist local opencode configuration changes";
     private static final String STARTUP_UPDATE_DIALOG_TITLE = "OCP Notice";
+    private static final int PREVIEW_CACHE_MAX_ENTRIES = 128;
     private static final List<TreeShortcutHints.Shortcut> GLOBAL_SHORTCUTS = List.of(
         TreeShortcutHints.Shortcut.TAB_SWITCH_PANE,
         TreeShortcutHints.Shortcut.ADD_EXISTING_REPOSITORY,
@@ -112,7 +117,7 @@ public final class InteractiveApp extends ToolkitApp {
     private final RepositoryPostCreationService repositoryPostCreationService;
     private final ObjectMapper objectMapper;
     private final String currentVersion = OcpVersionProvider.readVersion();
-    private final BatPreviewRenderer batPreviewRenderer = new BatPreviewRenderer();
+    private final BatPreviewRenderer batPreviewRenderer;
 
     private final TreeElement<NodeRef> hierarchyTree = Toolkit.<NodeRef>tree()
         .title("Repositories / Profiles / Files")
@@ -155,11 +160,19 @@ public final class InteractiveApp extends ToolkitApp {
     private NodeRef selectedNode;
     private RepositoryCommitPushPreview selectedRepositoryCommitPushPreview;
     private String selectedFileContent = "";
+    private String selectedFilePreviewContent = "";
     private Text selectedFilePreview = DetailPaneRenderer.plainText("");
     private List<String> splashLogoLines = DEFAULT_SPLASH_LOGO_LINES;
     private boolean editMode;
     private boolean batAvailable;
-    private long previewRequestSequence;
+    private int lastSyncedTreeSelection = Integer.MIN_VALUE;
+    private String lastRequestedPreviewKey;
+    private final Map<String, Text> previewCacheByKey = new LinkedHashMap<>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Text> eldest) {
+            return size() > PREVIEW_CACHE_MAX_ENTRIES;
+        }
+    };
     private long repositoryDirtyStateRefreshSequence;
     private int previewScrollOffset;
 
@@ -170,11 +183,30 @@ public final class InteractiveApp extends ToolkitApp {
         RepositoryPostCreationService repositoryPostCreationService,
         ObjectMapper objectMapper
     ) {
+        this(
+            profileService,
+            repositoryService,
+            onboardingService,
+            repositoryPostCreationService,
+            objectMapper,
+            new BatPreviewRenderer()
+        );
+    }
+
+    InteractiveApp(
+        ProfileService profileService,
+        RepositoryService repositoryService,
+        OnboardingService onboardingService,
+        RepositoryPostCreationService repositoryPostCreationService,
+        ObjectMapper objectMapper,
+        BatPreviewRenderer batPreviewRenderer
+    ) {
         this.profileService = profileService;
         this.repositoryService = repositoryService;
         this.onboardingService = onboardingService;
         this.repositoryPostCreationService = repositoryPostCreationService;
         this.objectMapper = objectMapper;
+        this.batPreviewRenderer = batPreviewRenderer;
         startupUpdateNotice = Cli.consumeStartupNotice();
     }
 
@@ -1100,6 +1132,7 @@ public final class InteractiveApp extends ToolkitApp {
         hierarchyRoots = roots;
         hierarchyTree.roots(roots.toArray(TreeNode[]::new));
         hierarchyTree.selected(Math.max(0, previousSelection));
+        lastSyncedTreeSelection = Integer.MIN_VALUE;
         syncSelectionAndPreview();
         refreshRepositoryDirtyStateByNameInBackground(repositories);
     }
@@ -1149,22 +1182,23 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     private void syncSelectionAndPreview() {
+        int currentSelection = hierarchyTree.selected();
         TreeNode<NodeRef> selectedTreeNode = hierarchyTree.selectedNode();
         NodeRef nextSelectedNode = selectedTreeNode == null ? null : selectedTreeNode.data();
-        if (Objects.equals(nextSelectedNode, selectedNode)) {
-            if (selectedNode != null && selectedNode.kind() == NodeKind.FILE && selectedNode.path() != null && !editMode) {
-                refreshSelectedFilePreview();
-            }
+        if (currentSelection == lastSyncedTreeSelection && isSameSelection(nextSelectedNode, selectedNode)) {
             return;
         }
+        lastSyncedTreeSelection = currentSelection;
 
         selectedNode = nextSelectedNode;
+        lastRequestedPreviewKey = null;
         editMode = false;
         previewScrollOffset = 0;
 
         if (selectedNode == null || selectedNode.kind() != NodeKind.FILE || selectedNode.path() == null) {
             refreshSelectedRepositoryCommitPushPreview();
             selectedFileContent = "";
+            selectedFilePreviewContent = "";
             selectedFilePreview = DetailPaneRenderer.plainText("");
             editorState.setText("");
             return;
@@ -1174,6 +1208,19 @@ public final class InteractiveApp extends ToolkitApp {
 
         refreshSelectedFilePreview();
         resetEditorCursorToTop();
+    }
+
+    private boolean isSameSelection(NodeRef left, NodeRef right) {
+        if (left == right) {
+            return true;
+        }
+        if (left == null || right == null) {
+            return false;
+        }
+        return left.kind() == right.kind()
+            && Objects.equals(left.repositoryName(), right.repositoryName())
+            && Objects.equals(left.profileName(), right.profileName())
+            && Objects.equals(left.path(), right.path());
     }
 
     private Element renderDetailPane() {
@@ -1259,34 +1306,120 @@ public final class InteractiveApp extends ToolkitApp {
         return runner().focusManager().focusedId();
     }
 
-    private void requestBatPreview(Path filePath, String contentSnapshot) {
-        if (filePath == null || runner() == null || !batAvailable) {
+    private void requestBatPreview(Path filePath, String contentSnapshot, boolean deepMergedPreview) {
+        if (filePath == null || !batAvailable) {
             return;
         }
-        long requestId = ++previewRequestSequence;
-
-        Thread.ofVirtual().start(() -> {
-            Text parsed = batPreviewRenderer.highlight(filePath);
+        String previewKey = buildPreviewKey(filePath, contentSnapshot, deepMergedPreview);
+        if (Objects.equals(previewKey, lastRequestedPreviewKey)) {
+            return;
+        }
+        Text cachedPreview = cachedPreview(previewKey);
+        if (cachedPreview != null) {
+            lastRequestedPreviewKey = previewKey;
+            applyBatPreview(filePath, previewKey, cachedPreview);
+            return;
+        }
+        lastRequestedPreviewKey = previewKey;
+        if (runner() == null) {
+            Text parsed = deepMergedPreview
+                ? batPreviewRenderer.highlight(filePath, contentSnapshot)
+                : batPreviewRenderer.highlight(filePath);
             if (parsed == null) {
+                lastRequestedPreviewKey = null;
                 return;
             }
-
+            if (hasVisiblePreviewContent(parsed)) {
+                cachePreview(previewKey, parsed);
+            }
+            applyBatPreview(filePath, previewKey, parsed);
+            return;
+        }
+        Thread thread = Thread.ofPlatform().daemon(true).unstarted(() -> {
+            Text parsed = deepMergedPreview
+                ? batPreviewRenderer.highlight(filePath, contentSnapshot)
+                : batPreviewRenderer.highlight(filePath);
+            if (parsed == null) {
+                if (runner() == null) {
+                    lastRequestedPreviewKey = null;
+                } else {
+                    runner().runOnRenderThread(() -> {
+                        if (Objects.equals(lastRequestedPreviewKey, previewKey)) {
+                            lastRequestedPreviewKey = null;
+                        }
+                    });
+                }
+                return;
+            }
+            if (hasVisiblePreviewContent(parsed)) {
+                cachePreview(previewKey, parsed);
+            }
+            if (runner() == null) {
+                return;
+            }
             runner().runOnRenderThread(() -> {
-                if (requestId != previewRequestSequence) {
-                    return;
-                }
-                if (selectedNode == null || selectedNode.kind() != NodeKind.FILE || selectedNode.path() == null) {
-                    return;
-                }
-                if (!filePath.equals(selectedNode.path())) {
-                    return;
-                }
-                if (!Objects.equals(contentSnapshot, selectedFileContent)) {
-                    return;
-                }
-                selectedFilePreview = parsed;
+                applyBatPreview(filePath, previewKey, parsed);
             });
         });
+        thread.start();
+    }
+
+    private String buildPreviewKey(Path filePath, String contentSnapshot, boolean deepMergedPreview) {
+        String normalizedPath = filePath.toAbsolutePath().normalize().toString();
+        return normalizedPath + "|" + deepMergedPreview + "|" + contentFingerprint(contentSnapshot);
+    }
+
+    private String contentFingerprint(String contentSnapshot) {
+        if (contentSnapshot == null) {
+            return "0";
+        }
+        try {
+            MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
+            byte[] digest = messageDigest.digest(contentSnapshot.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 fingerprinting is not available.", e);
+        }
+    }
+
+    private Text cachedPreview(String previewKey) {
+        synchronized (previewCacheByKey) {
+            return previewCacheByKey.get(previewKey);
+        }
+    }
+
+    private void cachePreview(String previewKey, Text preview) {
+        synchronized (previewCacheByKey) {
+            previewCacheByKey.put(previewKey, preview);
+        }
+    }
+
+    private void applyBatPreview(Path filePath, String previewKey, Text parsed) {
+        if (selectedNode == null || selectedNode.kind() != NodeKind.FILE || selectedNode.path() == null) {
+            return;
+        }
+        if (!filePath.equals(selectedNode.path())) {
+            return;
+        }
+        String currentPreviewKey = buildPreviewKey(selectedNode.path(), selectedFilePreviewContent, selectedNode.deepMerged());
+        if (!Objects.equals(previewKey, currentPreviewKey)) {
+            return;
+        }
+        if (!hasVisiblePreviewContent(parsed)) {
+            return;
+        }
+        selectedFilePreview = parsed;
+    }
+
+    private boolean hasVisiblePreviewContent(Text preview) {
+        for (var line : preview.lines()) {
+            for (var span : line.spans()) {
+                if (!span.content().isBlank()) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private void saveSelectedFile() {
@@ -1297,6 +1430,7 @@ public final class InteractiveApp extends ToolkitApp {
             status = STATUS_INHERITED_FILE_READ_ONLY;
             return;
         }
+        NodeRef savedSelection = selectedNode;
         Path filePath = selectedNode.path();
         runBusyOperation(
             "Saving `" + filePath.getFileName() + "`...",
@@ -1310,9 +1444,11 @@ public final class InteractiveApp extends ToolkitApp {
             "Saved `" + filePath.getFileName() + "`.",
             () -> {
                 editMode = false;
+                if (runner() == null && savedSelection != null && savedSelection.kind() == NodeKind.FILE) {
+                    selectedNode = savedSelection;
+                }
                 selectedFileContent = editorState.text();
-                selectedFilePreview = DetailPaneRenderer.plainText(selectedFileContent);
-                requestBatPreview(filePath, selectedFileContent);
+                refreshSelectedFilePreview();
                 if (runner() != null) {
                     runner().focusManager().setFocus(TREE_ID);
                     activePane = Pane.TREE;
@@ -1499,17 +1635,32 @@ public final class InteractiveApp extends ToolkitApp {
     private void refreshSelectedFilePreview() {
         if (selectedNode == null || selectedNode.kind() != NodeKind.FILE || selectedNode.path() == null) {
             selectedFileContent = "";
+            selectedFilePreviewContent = "";
             selectedFilePreview = DetailPaneRenderer.plainText("");
             editorState.setText("");
             return;
         }
         try {
-            selectedFileContent = Files.readString(selectedNode.path());
-            selectedFilePreview = DetailPaneRenderer.plainText(selectedFileContent);
-            requestBatPreview(selectedNode.path(), selectedFileContent);
+            ProfileService.ResolvedFilePreview resolvedPreview = profileService.resolvedFilePreview(
+                selectedNode.profileName(),
+                selectedNode.path()
+            );
+            String loadedFileContent = Files.readString(selectedNode.path());
+            String resolvedPreviewContent = resolvedPreview.content();
+            selectedFileContent = loadedFileContent;
+            selectedFilePreviewContent = resolvedPreviewContent;
+            selectedFilePreview = DetailPaneRenderer.plainText(selectedFilePreviewContent);
+            requestBatPreview(selectedNode.path(), selectedFilePreviewContent, resolvedPreview.deepMerged());
             editorState.setText(selectedFileContent);
         } catch (IOException e) {
             selectedFileContent = "";
+            selectedFilePreviewContent = "";
+            selectedFilePreview = DetailPaneRenderer.plainText("");
+            editorState.setText("");
+            status = "Error loading file: " + e.getMessage();
+        } catch (RuntimeException e) {
+            selectedFileContent = "";
+            selectedFilePreviewContent = "";
             selectedFilePreview = DetailPaneRenderer.plainText("");
             editorState.setText("");
             status = "Error loading file: " + e.getMessage();
@@ -1541,7 +1692,7 @@ public final class InteractiveApp extends ToolkitApp {
             runner().runOnRenderThread(() -> {
                 batAvailable = available;
                 if (available && selectedNode != null && selectedNode.kind() == NodeKind.FILE && selectedNode.path() != null) {
-                    requestBatPreview(selectedNode.path(), selectedFileContent);
+                    requestBatPreview(selectedNode.path(), selectedFilePreviewContent, selectedNode.deepMerged());
                 }
             });
         } else {
