@@ -44,16 +44,7 @@ final class DetailPaneRenderer {
         KeyEventHandler handlePreviewKeyEvent
     ) {
         if (editMode && editTitle != null) {
-            return textArea(editorState)
-                .title(editTitle)
-                .rounded()
-                .borderColor(Color.GREEN)
-                .focusedBorderColor(Color.GREEN)
-                .showLineNumbers()
-                .id(editorId)
-                .focusable()
-                .onKeyEvent(handleKeyEvent)
-                .fill();
+            return editorElement(editTitle, editorState, editorId, handleKeyEvent);
         }
 
         if (selectedNode == null) {
@@ -138,16 +129,7 @@ final class DetailPaneRenderer {
             String fallbackTitle = selectedNode != null && selectedNode.path() != null
                 ? "Editing: " + selectedNode.path().getFileName()
                 : "Editing";
-            return textArea(editorState)
-                .title(fallbackTitle)
-                .rounded()
-                .borderColor(Color.GREEN)
-                .focusedBorderColor(Color.GREEN)
-                .showLineNumbers()
-                .id(editorId)
-                .focusable()
-                .onKeyEvent(handleKeyEvent)
-                .fill();
+            return editorElement(fallbackTitle, editorState, editorId, handleKeyEvent);
         }
 
         Text previewText = scrolledPreviewText(selectedFilePreview, previewScrollOffset);
@@ -194,6 +176,24 @@ final class DetailPaneRenderer {
             lines.add(Line.from(Span.raw(line)));
         }
         return Text.from(lines);
+    }
+
+    private static Element editorElement(
+        String title,
+        TextAreaState editorState,
+        String editorId,
+        KeyEventHandler handleKeyEvent
+    ) {
+        return textArea(editorState)
+            .title(title)
+            .rounded()
+            .borderColor(Color.GREEN)
+            .focusedBorderColor(Color.GREEN)
+            .showLineNumbers()
+            .id(editorId)
+            .focusable()
+            .onKeyEvent(handleKeyEvent)
+            .fill();
     }
 
     private static String previewTitle(NodeRef selectedNode) {
