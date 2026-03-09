@@ -32,6 +32,7 @@ final class DetailPaneRenderer {
         boolean repositoryCommitPushAvailable,
         boolean selectedProfileHasParent,
         boolean editMode,
+        String editTitle,
         Map<String, Profile> profilesByName,
         Map<String, String> profileParentByName,
         Text selectedFilePreview,
@@ -42,6 +43,19 @@ final class DetailPaneRenderer {
         KeyEventHandler handleKeyEvent,
         KeyEventHandler handlePreviewKeyEvent
     ) {
+        if (editMode && editTitle != null) {
+            return textArea(editorState)
+                .title(editTitle)
+                .rounded()
+                .borderColor(Color.GREEN)
+                .focusedBorderColor(Color.GREEN)
+                .showLineNumbers()
+                .id(editorId)
+                .focusable()
+                .onKeyEvent(handleKeyEvent)
+                .fill();
+        }
+
         if (selectedNode == null) {
             return column(
                 text("Select a repository, profile, or file on the left.").dim(),
@@ -121,8 +135,11 @@ final class DetailPaneRenderer {
         }
 
         if (editMode) {
+            String fallbackTitle = selectedNode != null && selectedNode.path() != null
+                ? "Editing: " + selectedNode.path().getFileName()
+                : "Editing";
             return textArea(editorState)
-                .title("Editing: " + selectedNode.path().getFileName())
+                .title(fallbackTitle)
                 .rounded()
                 .borderColor(Color.GREEN)
                 .focusedBorderColor(Color.GREEN)
@@ -147,7 +164,10 @@ final class DetailPaneRenderer {
             .fill();
     }
 
-    static String detailHint(NodeRef selectedNode, boolean editMode) {
+    static String detailHint(NodeRef selectedNode, boolean editMode, boolean editingConfigFile) {
+        if (editMode && editingConfigFile) {
+            return "Editing mode: Ctrl+S save, Esc exit";
+        }
         if (selectedNode == null) {
             return "Detail pane";
         }

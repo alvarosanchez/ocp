@@ -87,6 +87,7 @@ public final class InteractiveApp extends ToolkitApp {
         TreeShortcutHints.Shortcut.ADD_EXISTING_REPOSITORY,
         TreeShortcutHints.Shortcut.CREATE_NEW_REPOSITORY,
         TreeShortcutHints.Shortcut.REFRESH_ALL_REPOSITORIES,
+        TreeShortcutHints.Shortcut.EDIT_OCP_CONFIG,
         TreeShortcutHints.Shortcut.QUIT
     );
     private static final List<TreeShortcutHints.Shortcut> PROMPT_SHORTCUTS = List.of(
@@ -164,6 +165,8 @@ public final class InteractiveApp extends ToolkitApp {
     private Text selectedFilePreview = DetailPaneRenderer.plainText("");
     private List<String> splashLogoLines = DEFAULT_SPLASH_LOGO_LINES;
     private boolean editMode;
+    private boolean editingConfigFile;
+    private Path configFileEditPath;
     private boolean batAvailable;
     private int lastSyncedTreeSelection = Integer.MIN_VALUE;
     private String lastRequestedPreviewKey;
@@ -338,6 +341,24 @@ public final class InteractiveApp extends ToolkitApp {
             return EventResult.HANDLED;
         }
 
+        if (editMode && editingConfigFile) {
+            if (isSaveKey(event)) {
+                saveConfigFile();
+                return EventResult.HANDLED;
+            }
+            if (event.isCancel()) {
+                editMode = false;
+                editingConfigFile = false;
+                configFileEditPath = null;
+                if (runner() != null) {
+                    runner().focusManager().setFocus(DETAIL_ID);
+                    activePane = Pane.DETAIL;
+                }
+                status = "Exited edit mode.";
+                return EventResult.HANDLED;
+            }
+        }
+
         if (editMode && selectedNode != null && selectedNode.kind() == NodeKind.FILE) {
             if (isSaveKey(event)) {
                 saveSelectedFile();
@@ -495,6 +516,10 @@ public final class InteractiveApp extends ToolkitApp {
         }
         if (event.isChar('p')) {
             navigateToParentProfile();
+            return EventResult.HANDLED;
+        }
+        if (event.isChar('E')) {
+            editConfigFile();
             return EventResult.HANDLED;
         }
         if (event.isChar('e')) {
@@ -1193,6 +1218,8 @@ public final class InteractiveApp extends ToolkitApp {
         selectedNode = nextSelectedNode;
         lastRequestedPreviewKey = null;
         editMode = false;
+        editingConfigFile = false;
+        configFileEditPath = null;
         previewScrollOffset = 0;
 
         if (selectedNode == null || selectedNode.kind() != NodeKind.FILE || selectedNode.path() == null) {
@@ -1224,6 +1251,10 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     private Element renderDetailPane() {
+        String editTitle = editingConfigFile ? "Editing: config.json"
+            : (editMode && selectedNode != null && selectedNode.kind() == NodeKind.FILE
+                ? "Editing: " + selectedNode.path().getFileName()
+                : null);
         return DetailPaneRenderer.renderDetailPane(
             selectedNode,
             isSelectedRepositoryRefreshable(),
@@ -1231,6 +1262,7 @@ public final class InteractiveApp extends ToolkitApp {
             isSelectedRepositoryCommitPushAvailable(),
             selectedProfileHasParent(),
             editMode,
+            editTitle,
             profilesByName,
             profileParentByName,
             selectedFilePreview,
@@ -1461,6 +1493,67 @@ public final class InteractiveApp extends ToolkitApp {
 
     private boolean isSaveKey(KeyEvent event) {
         return event.hasCtrl() && (event.isChar('s') || event.isChar('S') || event.character() == 19);
+    }
+
+    private void editConfigFile() {
+        Path configPath = resolvedConfigFilePath();
+        if (!Files.isRegularFile(configPath)) {
+            status = "OCP config file not found: " + configPath;
+            return;
+        }
+        try {
+            String content = Files.readString(configPath);
+            configFileEditPath = configPath;
+            editingConfigFile = true;
+            editMode = true;
+            editorState.setText(content);
+            resetEditorCursorToTop();
+            if (runner() != null) {
+                runner().focusManager().setFocus(EDITOR_ID);
+                activePane = Pane.DETAIL;
+            }
+            status = "Editing `config.json`. Ctrl+S to save, Esc to cancel.";
+        } catch (IOException e) {
+            status = "Error reading OCP config: " + e.getMessage();
+        }
+    }
+
+    private void saveConfigFile() {
+        if (configFileEditPath == null) {
+            return;
+        }
+        Path filePath = configFileEditPath;
+        runBusyOperation(
+            "Saving `config.json`...",
+            () -> {
+                try {
+                    Files.writeString(filePath, editorState.text());
+                } catch (IOException e) {
+                    throw new IllegalStateException("Failed to save OCP config file `" + filePath + "`.", e);
+                }
+            },
+            "Saved `config.json`.",
+            () -> {
+                editMode = false;
+                editingConfigFile = false;
+                configFileEditPath = null;
+                reloadState();
+                if (runner() != null) {
+                    runner().focusManager().setFocus(TREE_ID);
+                    activePane = Pane.TREE;
+                } else {
+                    activePane = Pane.TREE;
+                }
+            }
+        );
+    }
+
+    private static Path resolvedConfigFilePath() {
+        String configuredPath = System.getProperty("ocp.config.dir");
+        if (configuredPath != null && !configuredPath.isBlank()) {
+            return Path.of(configuredPath).resolve("config.json");
+        }
+        return Path.of(System.getProperty("user.home"), ".config", "ocp", "config.json");
     }
 
     private void resetEditorCursorToTop() {

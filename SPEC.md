@@ -200,7 +200,8 @@ oss/opencode.json
   - Git-backed repos with local changes show a warning and require explicit force confirmation.
   - File-based repos ask whether to also delete the local folder.
 - In interactive mode, `c` (create profile) creates the profile inside the currently selected repository context (repository, profile, or file node), and prompts for optional inheritance using a selectable list of all resolvable profile names across configured repositories.
-- In interactive mode, action keys are explicit: `r` refresh selected repository, `R` refresh all repositories, `u` use selected profile, `e` edit selected file, and `p` jump to the selected profile's parent; `Enter` does not trigger these actions.
+- In interactive mode, action keys are explicit: `r` refresh selected repository, `R` refresh all repositories, `u` use selected profile, `e` edit selected file, `E` edit OCP configuration file, and `p` jump to the selected profile's parent; `Enter` does not trigger these actions.
+- In interactive mode, `E` (edit OCP config) is a global action that opens `~/.config/ocp/config.json` in the right-pane editor; saving with `Ctrl+S` writes the file and reloads the tree, and `Esc` discards changes.
 - In interactive mode, selecting a file-based repository node also exposes `m` to migrate that repository into the shared Git/GitHub post-creation flow.
 - In interactive mode, selecting a git-backed repository node with local uncommitted changes also exposes `g` to prompt for a commit message, commit all local changes, and push them to the tracked remote branch.
 - In interactive mode, git-backed repository nodes with local uncommitted changes are visually marked in the tree.

@@ -21,7 +21,7 @@ class DetailPaneRendererTest {
 
     @Test
     void detailHintReturnsDefaultForNullSelection() {
-        assertEquals("Detail pane", DetailPaneRenderer.detailHint(null, false));
+        assertEquals("Detail pane", DetailPaneRenderer.detailHint(null, false, false));
     }
 
     @Test
@@ -32,17 +32,17 @@ class DetailPaneRendererTest {
 
         assertEquals(
             "Press e to edit selected file | Up/Down/PgUp/PgDn/Home/End scroll preview",
-            DetailPaneRenderer.detailHint(file, false)
+            DetailPaneRenderer.detailHint(file, false, false)
         );
         assertEquals(
             "Preview shows resolved deep-merged contents. Press e to edit the profile file | Up/Down/PgUp/PgDn/Home/End scroll preview",
-            DetailPaneRenderer.detailHint(deepMergedFile, false)
+            DetailPaneRenderer.detailHint(deepMergedFile, false, false)
         );
         assertEquals(
             "Inherited file (read-only). Up/Down/PgUp/PgDn/Home/End scroll preview",
-            DetailPaneRenderer.detailHint(inheritedFile, false)
+            DetailPaneRenderer.detailHint(inheritedFile, false, false)
         );
-        assertEquals("Editing mode: Ctrl+S save, Esc exit", DetailPaneRenderer.detailHint(file, true));
+        assertEquals("Editing mode: Ctrl+S save, Esc exit", DetailPaneRenderer.detailHint(file, true, false));
     }
 
     @Test
@@ -78,6 +78,7 @@ class DetailPaneRendererTest {
             false,
             false,
             false,
+            null,
             Map.of(),
             Map.of(),
             styledPreview,
