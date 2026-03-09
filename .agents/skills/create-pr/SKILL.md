@@ -48,20 +48,20 @@ Do not use this skill when the user asks only to:
 
 ## Skill Layout
 
-This skill uses deterministic shell scripts in `scripts/` for repeated operations:
+This skill uses deterministic shell scripts in `.agents/skills/create-pr/scripts/` for repeated operations:
 
-- `scripts/preflight.sh`
-- `scripts/inspect-worktree.sh`
-- `scripts/commit-if-dirty.sh`
-- `scripts/push-branch.sh`
-- `scripts/pr-view.sh`
-- `scripts/pr-create.sh`
-- `scripts/copilot-review-state.sh`
-- `scripts/reply-to-review-comment.sh`
-- `scripts/resolve-review-thread.sh`
-- `scripts/ci-status.sh`
-- `scripts/ci-run-log.sh`
-- `scripts/request-copilot-review.sh`
+- `.agents/skills/create-pr/scripts/preflight.sh`
+- `.agents/skills/create-pr/scripts/inspect-worktree.sh`
+- `.agents/skills/create-pr/scripts/commit-if-dirty.sh`
+- `.agents/skills/create-pr/scripts/push-branch.sh`
+- `.agents/skills/create-pr/scripts/pr-view.sh`
+- `.agents/skills/create-pr/scripts/pr-create.sh`
+- `.agents/skills/create-pr/scripts/copilot-review-state.sh`
+- `.agents/skills/create-pr/scripts/reply-to-review-comment.sh`
+- `.agents/skills/create-pr/scripts/resolve-review-thread.sh`
+- `.agents/skills/create-pr/scripts/ci-status.sh`
+- `.agents/skills/create-pr/scripts/ci-run-log.sh`
+- `.agents/skills/create-pr/scripts/request-copilot-review.sh`
 
 ## Operating Procedure
 
@@ -70,7 +70,7 @@ This skill uses deterministic shell scripts in `scripts/` for repeated operation
 Run:
 
 ```bash
-./scripts/preflight.sh
+./.agents/skills/create-pr/scripts/preflight.sh
 ```
 
 Stop and report a blocker if authentication fails, the branch is detached, or the current branch matches the repository default branch.
@@ -80,13 +80,13 @@ Stop and report a blocker if authentication fails, the branch is detached, or th
 Run:
 
 ```bash
-./scripts/inspect-worktree.sh
+./.agents/skills/create-pr/scripts/inspect-worktree.sh
 ```
 
 If the worktree is dirty and commits are allowed by higher-priority runtime rules, create the initial commit before any push or PR creation:
 
 ```bash
-./scripts/commit-if-dirty.sh "<commit-message>" <relevant-files...>
+./.agents/skills/create-pr/scripts/commit-if-dirty.sh "<commit-message>" <relevant-files...>
 ```
 
 If commits are not allowed in the surrounding runtime, stop and report that PR creation is blocked on user-authorized commit/push.
@@ -96,7 +96,7 @@ If commits are not allowed in the surrounding runtime, stop and report that PR c
 Run:
 
 ```bash
-./scripts/push-branch.sh [remote]
+./.agents/skills/create-pr/scripts/push-branch.sh [remote]
 ```
 
 Default remote is `origin`.
@@ -106,7 +106,7 @@ Default remote is `origin`.
 First inspect current PR state:
 
 ```bash
-./scripts/pr-view.sh
+./.agents/skills/create-pr/scripts/pr-view.sh
 ```
 
 If a PR already exists for the branch, reuse it.
@@ -114,10 +114,10 @@ If a PR already exists for the branch, reuse it.
 If no PR exists, create one with a prepared title/body:
 
 ```bash
-./scripts/pr-create.sh <base-branch> <title> <body-file> [--draft]
+./.agents/skills/create-pr/scripts/pr-create.sh <base-branch> <title> <body-file> [--draft]
 ```
 
-Then run `./scripts/pr-view.sh` again and record the PR number and URL.
+Then run `./.agents/skills/create-pr/scripts/pr-view.sh` again and record the PR number and URL.
 
 ### 5. Wait for CI first, then Copilot review
 
@@ -126,8 +126,8 @@ CI and Copilot review are both required, but the default loop order is CI first,
 Run:
 
 ```bash
-./scripts/ci-status.sh <pr-number>
-./scripts/copilot-review-state.sh <owner> <repo> <pr-number>
+./.agents/skills/create-pr/scripts/ci-status.sh <pr-number>
+./.agents/skills/create-pr/scripts/copilot-review-state.sh <owner> <repo> <pr-number>
 ```
 
 Default bounded waiting policy:
@@ -158,8 +158,8 @@ For each new unresolved Copilot comment:
 Use:
 
 ```bash
-./scripts/reply-to-review-comment.sh <owner> <repo> <comment-id> <reply-body>
-./scripts/resolve-review-thread.sh <thread-id>
+./.agents/skills/create-pr/scripts/reply-to-review-comment.sh <owner> <repo> <comment-id> <reply-body>
+./.agents/skills/create-pr/scripts/resolve-review-thread.sh <thread-id>
 ```
 
 If reply or resolve fails, report the concrete limitation instead of claiming success.
@@ -182,12 +182,12 @@ CI is part of the loop, not an optional side check.
 
 After PR creation and after every push:
 
-1. run `./scripts/ci-status.sh <pr-number>`
+1. run `./.agents/skills/create-pr/scripts/ci-status.sh <pr-number>`
 2. if required checks are pending, keep waiting
 3. if a required check fails, inspect the failing run with:
 
 ```bash
-./scripts/ci-run-log.sh <run-id>
+./.agents/skills/create-pr/scripts/ci-run-log.sh <run-id>
 ```
 
 Then fix only the root cause, run the closest local verification, and continue the loop.
@@ -197,8 +197,8 @@ Then fix only the root cause, run the closest local verification, and continue t
 If either Copilot or CI remediation changes code, validate locally and then commit/push under the same rules used earlier:
 
 ```bash
-./scripts/commit-if-dirty.sh "<commit-message>" <relevant-files...>
-./scripts/push-branch.sh [remote]
+./.agents/skills/create-pr/scripts/commit-if-dirty.sh "<commit-message>" <relevant-files...>
+./.agents/skills/create-pr/scripts/push-branch.sh [remote]
 ```
 
 If autonomous commits are not allowed by the runtime, stop and report that the loop is blocked on user-authorized commit/push.
@@ -215,7 +215,7 @@ gh pr edit <pr-number> --add-reviewer @copilot
 Use the skill script wrapper so repository scoping and result validation are consistent:
 
 ```bash
-./scripts/request-copilot-review.sh <owner> <repo> <pr-number>
+./.agents/skills/create-pr/scripts/request-copilot-review.sh <owner> <repo> <pr-number>
 ```
 
 This is a required step after every remediation push, not an optional best-effort extra. Do not continue to the next wait cycle until you have attempted the re-request and recorded the concrete result.
@@ -306,7 +306,7 @@ Do not merge the PR as part of this skill unless a higher-priority instruction e
 - [ ] `description` includes PR creation, dirty-worktree commit handling, Copilot review, and CI loop triggers.
 - [ ] The workflow includes an initial commit step for dirty worktrees when commits are allowed.
 - [ ] The workflow treats CI as a required wait-and-remediate loop, not just Copilot review.
-- [ ] Repeated shell operations live under `scripts/`.
+- [ ] Repeated shell operations live under `.agents/skills/create-pr/scripts/`.
 - [ ] Trigger phrases are broad enough to catch plain "create a PR" requests.
 - [ ] The skill does not instruct the agent to mention `@copilot`.
 - [ ] The loop has bounded wait policies and bounded remediation caps.
