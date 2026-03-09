@@ -95,7 +95,7 @@ class InteractiveAppFileOperationsTest {
         assertTrue(readEditMode(app));
         assertEquals(Pane.DETAIL, readActivePane(app));
         assertEquals("", readEditorText(app));
-        assertEquals("Editing `child.json`. Ctrl+S to save, Esc to cancel.", readStatus(app));
+        assertEquals("Editing child.json. Ctrl+S to save, Esc to cancel.", readStatus(app));
     }
 
     @Test
@@ -120,7 +120,7 @@ class InteractiveAppFileOperationsTest {
         invokeApplyPrompt(app);
 
         assertFalse(Files.exists(filePath));
-        assertEquals("Deleted `opencode.json` from profile `default`.", readStatus(app));
+        assertEquals("Deleted opencode.json from profile default.", readStatus(app));
     }
 
     @Test
@@ -146,6 +146,27 @@ class InteractiveAppFileOperationsTest {
 
         assertTrue(Files.exists(filePath));
         assertEquals("Delete cancelled: file name mismatch.", readStatus(app));
+    }
+
+    @Test
+    void selectFileNodeUsesVisibleTreeNodesWithoutRenderedFlatEntries() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path profilePath = repositoryPath.resolve("default");
+        Path nestedPath = profilePath.resolve("nested");
+        Path filePath = nestedPath.resolve("created.json");
+        Files.createDirectories(nestedPath);
+        Files.writeString(repositoryPath.resolve("repository.json"), "{\"profiles\":[{\"name\":\"default\"}]}");
+        Files.writeString(filePath, "{}");
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = createApp();
+        invokeReloadState(app);
+
+        assertTrue(invokeSelectFileNode(app, "repo-a", "default", filePath));
+
+        invokeSyncSelectionAndPreview(app);
+
+        assertEquals(filePath.toAbsolutePath().normalize(), readSelectedNode(app).path().toAbsolutePath().normalize());
     }
 
     private InteractiveApp createApp() {
@@ -177,6 +198,18 @@ class InteractiveAppFileOperationsTest {
         Method method = InteractiveApp.class.getDeclaredMethod("applyPrompt");
         method.setAccessible(true);
         method.invoke(app);
+    }
+
+    private static void invokeSyncSelectionAndPreview(InteractiveApp app) throws Exception {
+        Method method = InteractiveApp.class.getDeclaredMethod("syncSelectionAndPreview");
+        method.setAccessible(true);
+        method.invoke(app);
+    }
+
+    private static boolean invokeSelectFileNode(InteractiveApp app, String repositoryName, String profileName, Path filePath) throws Exception {
+        Method method = InteractiveApp.class.getDeclaredMethod("selectFileNode", String.class, String.class, Path.class);
+        method.setAccessible(true);
+        return (boolean) method.invoke(app, repositoryName, profileName, filePath);
     }
 
     private static void setPrompt(InteractiveApp app, PromptState prompt) throws Exception {

@@ -680,8 +680,8 @@ public final class InteractiveApp extends ToolkitApp {
                     Path createdFile = profileService.createFile(profileName, repositoryName, relativeDirectory, fileName);
                     String fileLabel = createdFile.getFileName().toString();
                     runBusyOperation(
-                        "Preparing `" + fileLabel + "`...",
-                        () -> "Created `" + fileLabel + "` in profile `" + profileName + "`.",
+                        "Preparing " + fileLabel + "...",
+                        () -> "Created " + fileLabel + " in profile " + profileName + ".",
                         () -> {
                             if (runner() == null) {
                                 selectedNode = NodeRef.file(repositoryName, profileName, createdFile);
@@ -801,7 +801,7 @@ public final class InteractiveApp extends ToolkitApp {
                     }
                     Path relativeFilePath = selectedFileRelativePath();
                     profileService.deleteFile(profileName, repositoryName, relativeFilePath);
-                    statusMessage = "Deleted `" + fileName + "` from profile `" + profileName + "`.";
+                    statusMessage = "Deleted " + fileName + " from profile " + profileName + ".";
                 }
                 case CREATE_REPOSITORY -> {
                     String repositoryName = currentPrompt.values.getFirst();
@@ -1255,7 +1255,7 @@ public final class InteractiveApp extends ToolkitApp {
 
     private void syncSelectionAndPreview() {
         int currentSelection = hierarchyTree.selected();
-        TreeNode<NodeRef> selectedTreeNode = hierarchyTree.selectedNode();
+        TreeNode<NodeRef> selectedTreeNode = visibleTreeNodeAt(currentSelection);
         NodeRef nextSelectedNode = selectedTreeNode == null ? null : selectedTreeNode.data();
         if (currentSelection == lastSyncedTreeSelection && isSameSelection(nextSelectedNode, selectedNode)) {
             return;
@@ -1550,7 +1550,7 @@ public final class InteractiveApp extends ToolkitApp {
         if (runner() != null) {
             runner().focusManager().setFocus(EDITOR_ID);
         }
-        status = "Editing `" + selectedNode.path().getFileName() + "`. Ctrl+S to save, Esc to cancel.";
+        status = "Editing " + selectedNode.path().getFileName() + ". Ctrl+S to save, Esc to cancel.";
     }
 
     private String selectedRepositoryName() {
@@ -1617,47 +1617,77 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     private boolean selectProfileNode(String repositoryName, String profileName) {
-        int originalSelection = hierarchyTree.selected();
-        int maxNodes = Math.max(1, countTreeNodes(hierarchyRoots));
-        for (int index = 0; index < maxNodes; index++) {
-            hierarchyTree.selected(index);
-            TreeNode<NodeRef> selectedTreeNode = hierarchyTree.selectedNode();
-            if (selectedTreeNode == null || selectedTreeNode.data() == null) {
-                continue;
-            }
-            NodeRef selectedNodeRef = selectedTreeNode.data();
-            if (selectedNodeRef.kind() == NodeKind.PROFILE
-                && repositoryName.equals(selectedNodeRef.repositoryName())
-                && profileName.equals(selectedNodeRef.profileName())) {
-                return true;
-            }
-        }
-        hierarchyTree.selected(originalSelection);
-        return false;
+        return selectVisibleNode(nodeRef -> nodeRef.kind() == NodeKind.PROFILE
+            && repositoryName.equals(nodeRef.repositoryName())
+            && profileName.equals(nodeRef.profileName()));
     }
 
     private boolean selectFileNode(String repositoryName, String profileName, Path filePath) {
-        int originalSelection = hierarchyTree.selected();
         Path normalizedFilePath = filePath.toAbsolutePath().normalize();
-        int maxNodes = Math.max(1, countTreeNodes(hierarchyRoots));
-        for (int index = 0; index < maxNodes; index++) {
-            hierarchyTree.selected(index);
-            TreeNode<NodeRef> selectedTreeNode = hierarchyTree.selectedNode();
-            if (selectedTreeNode == null || selectedTreeNode.data() == null) {
-                continue;
-            }
-            NodeRef selectedNodeRef = selectedTreeNode.data();
-            if (selectedNodeRef.kind() != NodeKind.FILE || selectedNodeRef.path() == null) {
-                continue;
-            }
-            if (repositoryName.equals(selectedNodeRef.repositoryName())
-                && profileName.equals(selectedNodeRef.profileName())
-                && normalizedFilePath.equals(selectedNodeRef.path().toAbsolutePath().normalize())) {
-                return true;
+        return selectVisibleNode(nodeRef -> nodeRef.kind() == NodeKind.FILE
+            && nodeRef.path() != null
+            && repositoryName.equals(nodeRef.repositoryName())
+            && profileName.equals(nodeRef.profileName())
+            && normalizedFilePath.equals(nodeRef.path().toAbsolutePath().normalize()));
+    }
+
+    private boolean selectVisibleNode(java.util.function.Predicate<NodeRef> predicate) {
+        int originalSelection = hierarchyTree.selected();
+        expandAncestorsForSelection(predicate);
+        int selectedIndex = visibleNodeIndex(predicate);
+        if (selectedIndex < 0) {
+            hierarchyTree.selected(originalSelection);
+            return false;
+        }
+        hierarchyTree.selected(selectedIndex);
+        return true;
+    }
+
+    private void expandAncestorsForSelection(java.util.function.Predicate<NodeRef> predicate) {
+        for (TreeNode<NodeRef> root : hierarchyRoots) {
+            expandAncestorsForSelection(root, predicate);
+        }
+    }
+
+    private boolean expandAncestorsForSelection(TreeNode<NodeRef> node, java.util.function.Predicate<NodeRef> predicate) {
+        if (node.data() != null && predicate.test(node.data())) {
+            return true;
+        }
+        if (node.isLeaf()) {
+            return false;
+        }
+        boolean descendantMatched = false;
+        for (TreeNode<NodeRef> child : node.children()) {
+            descendantMatched = expandAncestorsForSelection(child, predicate) || descendantMatched;
+        }
+        if (descendantMatched) {
+            node.expanded(true);
+        }
+        return descendantMatched;
+    }
+
+    private int visibleNodeIndex(java.util.function.Predicate<NodeRef> predicate) {
+        VisibleNodeSearch search = new VisibleNodeSearch(predicate);
+        for (TreeNode<NodeRef> root : hierarchyRoots) {
+            if (search.visit(root)) {
+                return search.matchIndex();
             }
         }
-        hierarchyTree.selected(originalSelection);
-        return false;
+        return -1;
+    }
+
+    private TreeNode<NodeRef> visibleTreeNodeAt(int selectedIndex) {
+        if (selectedIndex < 0) {
+            return null;
+        }
+        VisibleNodeLookup lookup = new VisibleNodeLookup(selectedIndex);
+        for (TreeNode<NodeRef> root : hierarchyRoots) {
+            TreeNode<NodeRef> match = lookup.visit(root);
+            if (match != null) {
+                return match;
+            }
+        }
+        return null;
     }
 
     private Path selectedFileCreationRelativeDirectory() {
@@ -2407,6 +2437,61 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     private record OnboardingLoadResult(OnboardingService.OnboardingCandidate candidate, String errorStatus) {
+    }
+
+    private static final class VisibleNodeSearch {
+        private final java.util.function.Predicate<NodeRef> predicate;
+        private int currentIndex;
+        private int matchIndex = -1;
+
+        private VisibleNodeSearch(java.util.function.Predicate<NodeRef> predicate) {
+            this.predicate = predicate;
+        }
+
+        private boolean visit(TreeNode<NodeRef> node) {
+            if (node.data() != null && predicate.test(node.data())) {
+                matchIndex = currentIndex;
+                return true;
+            }
+            currentIndex++;
+            if (!node.isLeaf() && node.isExpanded()) {
+                for (TreeNode<NodeRef> child : node.children()) {
+                    if (visit(child)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        private int matchIndex() {
+            return matchIndex;
+        }
+    }
+
+    private static final class VisibleNodeLookup {
+        private final int targetIndex;
+        private int currentIndex;
+
+        private VisibleNodeLookup(int targetIndex) {
+            this.targetIndex = targetIndex;
+        }
+
+        private TreeNode<NodeRef> visit(TreeNode<NodeRef> node) {
+            if (currentIndex == targetIndex) {
+                return node;
+            }
+            currentIndex++;
+            if (!node.isLeaf() && node.isExpanded()) {
+                for (TreeNode<NodeRef> child : node.children()) {
+                    TreeNode<NodeRef> match = visit(child);
+                    if (match != null) {
+                        return match;
+                    }
+                }
+            }
+            return null;
+        }
     }
 
 }
