@@ -13,13 +13,14 @@ import static dev.tamboui.toolkit.Toolkit.text;
 final class CommitConfirmDialogRenderer {
 
     private static final int COMMIT_DIFF_PREVIEW_LINES = 20;
+    static final String DIALOG_ID = "commit-confirm-dialog";
 
     private CommitConfirmDialogRenderer() {
     }
 
     static Element render(CommitConfirmState state, KeyEventHandler keyEventHandler) {
         List<Element> content = new ArrayList<>();
-        content.add(text("Review changes for repository `" + state.repositoryName() + "` before commit and push.").fg(Color.YELLOW));
+        content.add(text("Review changes for repository " + state.repositoryName() + " before commit and push.").fg(Color.YELLOW));
         content.add(text("Diff:").bold().fg(Color.CYAN));
         content.addAll(buildColoredDiffPreview(state.diff()));
         content.add(text("Press [Y] to continue to the commit message, [Esc] to cancel.").bold().fg(Color.YELLOW));
@@ -29,6 +30,7 @@ final class CommitConfirmDialogRenderer {
             .borderColor(Color.YELLOW)
             .width(132)
             .padding(1)
+            .id(DIALOG_ID)
             .focusable()
             .onKeyEvent(keyEventHandler);
     }

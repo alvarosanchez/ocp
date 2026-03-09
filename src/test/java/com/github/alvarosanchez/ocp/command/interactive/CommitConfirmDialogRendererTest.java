@@ -36,7 +36,7 @@ class CommitConfirmDialogRendererTest {
         List<TextElement> textChildren = textChildren(dialog);
         List<String> contents = textChildren.stream().map(TextElement::content).toList();
 
-        assertTrue(contents.contains("Review changes for repository `my-repo` before commit and push."));
+        assertTrue(contents.contains("Review changes for repository my-repo before commit and push."));
         assertTrue(contents.contains("Diff:"));
         assertTrue(contents.contains("--- a/file.txt"));
         assertTrue(contents.contains("+++ b/file.txt"));
