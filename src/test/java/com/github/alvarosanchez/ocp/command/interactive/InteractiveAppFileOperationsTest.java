@@ -99,6 +99,34 @@ class InteractiveAppFileOperationsTest {
     }
 
     @Test
+    void createFileFromSelectedFileOpensNewSiblingInsteadOfOriginalFile() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path profilePath = repositoryPath.resolve("default");
+        Path existingFile = profilePath.resolve("existing.json");
+        Path createdFile = profilePath.resolve("created.json");
+        Files.createDirectories(profilePath);
+        Files.writeString(repositoryPath.resolve("repository.json"), "{\"profiles\":[{\"name\":\"default\"}]}");
+        Files.writeString(existingFile, "{\"existing\":true}");
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = createApp();
+        invokeReloadState(app);
+        setSelectedNode(app, NodeRef.file("repo-a", "default", existingFile));
+
+        PromptState prompt = PromptState.single(PromptAction.CREATE_FILE, "Create file", "File name");
+        prompt.values.set(0, "created.json");
+        setPrompt(app, prompt);
+
+        invokeApplyPrompt(app);
+
+        assertEquals(NodeKind.FILE, readSelectedNode(app).kind());
+        assertEquals(createdFile.toAbsolutePath().normalize(), readSelectedNode(app).path().toAbsolutePath().normalize());
+        assertTrue(readEditMode(app));
+        assertEquals("", readEditorText(app));
+        assertEquals("Editing created.json. Ctrl+S to save, Esc to cancel.", readStatus(app));
+    }
+
+    @Test
     void deleteFileRemovesEditableSelectionAfterConfirmation() throws Exception {
         Path repositoryPath = tempDir.resolve("repo-a");
         Path profilePath = repositoryPath.resolve("default");

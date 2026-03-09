@@ -682,16 +682,7 @@ public final class InteractiveApp extends ToolkitApp {
                     runBusyOperation(
                         "Preparing " + fileLabel + "...",
                         () -> "Created " + fileLabel + " in profile " + profileName + ".",
-                        () -> {
-                            if (runner() == null) {
-                                selectedNode = NodeRef.file(repositoryName, profileName, createdFile);
-                                refreshSelectedFilePreview();
-                            } else {
-                                selectFileNode(repositoryName, profileName, createdFile);
-                                syncSelectionAndPreview();
-                            }
-                            startEditingSelectedFile();
-                        }
+                        () -> openCreatedFile(repositoryName, profileName, createdFile)
                     );
                     return;
                 }
@@ -1629,6 +1620,22 @@ public final class InteractiveApp extends ToolkitApp {
             && repositoryName.equals(nodeRef.repositoryName())
             && profileName.equals(nodeRef.profileName())
             && normalizedFilePath.equals(nodeRef.path().toAbsolutePath().normalize()));
+    }
+
+    private void openCreatedFile(String repositoryName, String profileName, Path createdFile) {
+        NodeRef createdFileNode = NodeRef.file(repositoryName, profileName, createdFile);
+        boolean selectedInTree = false;
+        if (runner() != null) {
+            selectedInTree = selectFileNode(repositoryName, profileName, createdFile);
+        }
+        if (selectedInTree) {
+            syncSelectionAndPreview();
+        }
+        if (!isSameSelection(selectedNode, createdFileNode)) {
+            selectedNode = createdFileNode;
+        }
+        refreshSelectedFilePreview();
+        startEditingSelectedFile();
     }
 
     private boolean selectVisibleNode(java.util.function.Predicate<NodeRef> predicate) {
