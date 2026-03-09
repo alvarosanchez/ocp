@@ -175,6 +175,41 @@ public final class ProfileService {
         return profileNames;
     }
 
+    /**
+     * Creates an empty file inside a configured profile directory.
+     *
+     * @param profileName profile name that owns the file
+     * @param repositoryName configured repository name
+     * @param relativeDirectory relative directory inside the profile
+     * @param fileName file name to create
+     * @return absolute path to the created file
+     */
+    public Path createFile(String profileName, String repositoryName, Path relativeDirectory, String fileName) {
+        String normalizedProfileName = normalizeProfileName(profileName);
+        String normalizedRepositoryName = normalizeRepositoryName(repositoryName);
+        String normalizedFileName = PathSegmentValidator.requireSinglePathSegment(fileName, "File name");
+        Path normalizedRelativeDirectory = normalizeRelativeProfilePath(relativeDirectory, "Directory path");
+        Path profilePath = profilePathFor(normalizedRepositoryName, normalizedProfileName);
+        Path targetDirectory = profilePath.resolve(normalizedRelativeDirectory).normalize();
+        Path targetFile = targetDirectory.resolve(normalizedFileName).normalize();
+        if (!targetFile.startsWith(profilePath)) {
+            throw new IllegalStateException("File path must stay inside profile `" + normalizedProfileName + "`.");
+        }
+        if (Files.exists(targetFile)) {
+            throw new IllegalStateException("File `" + normalizedFileName + "` already exists in profile `" + normalizedProfileName + "`.");
+        }
+
+        try {
+            Files.createDirectories(targetDirectory);
+            return Files.createFile(targetFile);
+        } catch (IOException e) {
+            throw new UncheckedIOException(
+                "Failed to create file `" + normalizedFileName + "` in profile `" + normalizedProfileName + "`.",
+                e
+            );
+        }
+    }
+
     public ResolvedFilePreview resolvedFilePreview(String profileName, Path sourceFilePath) {
         String normalizedProfileName = normalizeProfileName(profileName);
         if (sourceFilePath == null) {
@@ -273,6 +308,40 @@ public final class ProfileService {
             writeActiveProfile(null);
         }
         return true;
+    }
+
+    /**
+     * Deletes a file from a configured profile directory.
+     *
+     * @param profileName profile name that owns the file
+     * @param repositoryName configured repository name
+     * @param relativeFilePath relative file path inside the profile
+     * @return {@code true} when the file is deleted
+     */
+    public boolean deleteFile(String profileName, String repositoryName, Path relativeFilePath) {
+        String normalizedProfileName = normalizeProfileName(profileName);
+        String normalizedRepositoryName = normalizeRepositoryName(repositoryName);
+        Path normalizedRelativeFilePath = normalizeRequiredRelativeProfilePath(relativeFilePath, "File path");
+        Path profilePath = profilePathFor(normalizedRepositoryName, normalizedProfileName);
+        Path targetFile = profilePath.resolve(normalizedRelativeFilePath).normalize();
+        if (!targetFile.startsWith(profilePath)) {
+            throw new IllegalStateException("File path must stay inside profile `" + normalizedProfileName + "`.");
+        }
+        if (!Files.isRegularFile(targetFile)) {
+            throw new IllegalStateException(
+                "File `" + normalizedRelativeFilePath + "` was not found in profile `" + normalizedProfileName + "`."
+            );
+        }
+
+        try {
+            Files.delete(targetFile);
+            return true;
+        } catch (IOException e) {
+            throw new UncheckedIOException(
+                "Failed to delete file `" + normalizedRelativeFilePath + "` from profile `" + normalizedProfileName + "`.",
+                e
+            );
+        }
     }
 
     private boolean createProfileInRepository(String profileName, Path repositoryPath, String parentProfileName) {
@@ -1013,6 +1082,28 @@ public final class ProfileService {
         return PathSegmentValidator.requireSinglePathSegment(normalizedProfileName, "Parent profile name");
     }
 
+    private Path normalizeRelativeProfilePath(Path relativePath, String fieldLabel) {
+        if (relativePath == null) {
+            return Path.of("");
+        }
+        Path normalizedPath = relativePath.normalize();
+        if (normalizedPath.isAbsolute() || normalizedPath.startsWith("..")) {
+            throw new IllegalStateException(fieldLabel + " must stay inside the selected profile.");
+        }
+        return normalizedPath;
+    }
+
+    private Path normalizeRequiredRelativeProfilePath(Path relativePath, String fieldLabel) {
+        Path normalizedPath = normalizeRelativeProfilePath(relativePath, fieldLabel);
+        if (normalizedPath.getNameCount() == 0) {
+            throw new IllegalStateException(fieldLabel + " is required.");
+        }
+        for (Path segment : normalizedPath) {
+            PathSegmentValidator.validateSinglePathSegment(segment.toString(), fieldLabel);
+        }
+        return normalizedPath;
+    }
+
     private RepositoryEntry findRepositoryEntry(String normalizedRepositoryName) {
         return repositoryService
             .load()
@@ -1020,6 +1111,11 @@ public final class ProfileService {
             .filter(entry -> entry.name().equals(normalizedRepositoryName))
             .findFirst()
             .orElseThrow(() -> new IllegalStateException("Repository `" + normalizedRepositoryName + "` was not found."));
+    }
+
+    private Path profilePathFor(String normalizedRepositoryName, String normalizedProfileName) {
+        RepositoryEntry repositoryEntry = findRepositoryEntry(normalizedRepositoryName);
+        return Path.of(repositoryEntry.localPath()).resolve(normalizedProfileName).toAbsolutePath().normalize();
     }
 
     private Optional<ProfileSwitchResult> refreshActiveProfileIfAffectedByRepository(String refreshedRepositoryName) {

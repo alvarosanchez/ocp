@@ -76,16 +76,17 @@ public final class InteractiveApp extends ToolkitApp {
     private static final String REFRESH_CANCELLED_MESSAGE = "Refresh cancelled. Local changes were left untouched.";
     private static final String STATUS_SELECT_NODE_FIRST = "Select a repository, profile, or file first.";
     private static final String STATUS_INHERITED_FILE_READ_ONLY = "Inherited file is read-only and cannot be edited.";
+    private static final String STATUS_INHERITED_FILE_DELETE_FORBIDDEN = "Inherited file is read-only and cannot be deleted.";
     private static final String ERROR_REPOSITORY_SELECTION_REQUIRED = "Repository selection is required.";
     private static final String STATUS_DELETE_CANCELLED_REPOSITORY_MISMATCH = "Delete cancelled: repository name mismatch.";
     private static final String STATUS_DELETE_CANCELLED_PROFILE_MISMATCH = "Delete cancelled: profile name mismatch.";
+    private static final String STATUS_DELETE_CANCELLED_FILE_MISMATCH = "Delete cancelled: file name mismatch.";
     private static final String DEFAULT_COMMIT_MESSAGE = "chore: persist local opencode configuration changes";
     private static final String STARTUP_UPDATE_DIALOG_TITLE = "OCP Notice";
     private static final int PREVIEW_CACHE_MAX_ENTRIES = 128;
     private static final List<TreeShortcutHints.Shortcut> GLOBAL_SHORTCUTS = List.of(
         TreeShortcutHints.Shortcut.TAB_SWITCH_PANE,
         TreeShortcutHints.Shortcut.ADD_EXISTING_REPOSITORY,
-        TreeShortcutHints.Shortcut.CREATE_NEW_REPOSITORY,
         TreeShortcutHints.Shortcut.REFRESH_ALL_REPOSITORIES,
         TreeShortcutHints.Shortcut.QUIT
     );
@@ -440,6 +441,20 @@ public final class InteractiveApp extends ToolkitApp {
                 return EventResult.HANDLED;
             }
 
+            if (selectedNode.kind() == NodeKind.FILE) {
+                if (selectedNode.inherited()) {
+                    status = STATUS_INHERITED_FILE_DELETE_FORBIDDEN;
+                    return EventResult.HANDLED;
+                }
+                prompt = PromptState.single(
+                    PromptAction.DELETE_FILE,
+                    "Delete file",
+                    "Type file name to confirm: " + selectedNode.path().getFileName()
+                );
+                prompt.expectedConfirmation = selectedNode.path().getFileName().toString();
+                return EventResult.HANDLED;
+            }
+
             String profileName = selectedProfileName();
             String repositoryName = selectedRepositoryName();
             if (profileName == null) {
@@ -460,6 +475,19 @@ public final class InteractiveApp extends ToolkitApp {
             return EventResult.HANDLED;
         }
         if (event.isChar('n')) {
+            if (selectedNode != null && selectedNode.kind() != NodeKind.REPOSITORY) {
+                String profileName = selectedProfileName();
+                if (profileName == null) {
+                    status = STATUS_SELECT_NODE_FIRST;
+                    return EventResult.HANDLED;
+                }
+                prompt = PromptState.single(
+                    PromptAction.CREATE_FILE,
+                    "Create file",
+                    "File name"
+                );
+                return EventResult.HANDLED;
+            }
             prompt = PromptState.multi(
                 PromptAction.CREATE_REPOSITORY,
                 "Create repository",
@@ -503,13 +531,7 @@ public final class InteractiveApp extends ToolkitApp {
                     status = STATUS_INHERITED_FILE_READ_ONLY;
                     return EventResult.HANDLED;
                 }
-                editMode = true;
-                resetEditorCursorToTop();
-                if (runner() != null) {
-                    runner().focusManager().setFocus(EDITOR_ID);
-                    activePane = Pane.DETAIL;
-                }
-                status = "Editing `" + selectedNode.path().getFileName() + "`. Ctrl+S to save, Esc to cancel.";
+                startEditingSelectedFile();
             }
             return EventResult.HANDLED;
         }
@@ -647,6 +669,32 @@ public final class InteractiveApp extends ToolkitApp {
                             + "`.";
                     }
                 }
+                case CREATE_FILE -> {
+                    String repositoryName = selectedRepositoryName();
+                    String profileName = selectedProfileName();
+                    if (repositoryName == null || profileName == null) {
+                        throw new IllegalStateException(STATUS_SELECT_NODE_FIRST);
+                    }
+                    Path relativeDirectory = selectedFileCreationRelativeDirectory();
+                    String fileName = PathSegmentValidator.requireSinglePathSegment(currentPrompt.values.getFirst(), "File name");
+                    Path createdFile = profileService.createFile(profileName, repositoryName, relativeDirectory, fileName);
+                    String fileLabel = createdFile.getFileName().toString();
+                    runBusyOperation(
+                        "Preparing `" + fileLabel + "`...",
+                        () -> "Created `" + fileLabel + "` in profile `" + profileName + "`.",
+                        () -> {
+                            if (runner() == null) {
+                                selectedNode = NodeRef.file(repositoryName, profileName, createdFile);
+                                refreshSelectedFilePreview();
+                            } else {
+                                selectFileNode(repositoryName, profileName, createdFile);
+                                syncSelectionAndPreview();
+                            }
+                            startEditingSelectedFile();
+                        }
+                    );
+                    return;
+                }
                 case ADD_REPOSITORY -> {
                     RepositoryEntry addedRepository = repositoryService.add(currentPrompt.values.getFirst(), currentPrompt.values.get(1));
                     if (addedRepository.uri() == null) {
@@ -730,6 +778,30 @@ public final class InteractiveApp extends ToolkitApp {
                     }
                     profileService.deleteProfile(profileName, repositoryName);
                     statusMessage = "Deleted profile `" + profileName + "` from repository `" + repositoryName + "`.";
+                }
+                case DELETE_FILE -> {
+                    if (selectedNode == null || selectedNode.kind() != NodeKind.FILE || selectedNode.path() == null) {
+                        throw new IllegalStateException("Select a file first.");
+                    }
+                    String confirmation = currentPrompt.values.getFirst();
+                    String fileName = currentPrompt.expectedConfirmation;
+                    if (!confirmation.equals(fileName)) {
+                        statusMessage = STATUS_DELETE_CANCELLED_FILE_MISMATCH;
+                        reloadState();
+                        status = statusMessage;
+                        return;
+                    }
+                    if (selectedNode.inherited()) {
+                        throw new IllegalStateException(STATUS_INHERITED_FILE_DELETE_FORBIDDEN);
+                    }
+                    String repositoryName = selectedRepositoryName();
+                    String profileName = selectedProfileName();
+                    if (repositoryName == null || profileName == null) {
+                        throw new IllegalStateException(STATUS_SELECT_NODE_FIRST);
+                    }
+                    Path relativeFilePath = selectedFileRelativePath();
+                    profileService.deleteFile(profileName, repositoryName, relativeFilePath);
+                    statusMessage = "Deleted `" + fileName + "` from profile `" + profileName + "`.";
                 }
                 case CREATE_REPOSITORY -> {
                     String repositoryName = currentPrompt.values.getFirst();
@@ -1468,6 +1540,21 @@ public final class InteractiveApp extends ToolkitApp {
         editorState.ensureCursorVisible(0, 0);
     }
 
+    private void startEditingSelectedFile() {
+        if (selectedNode == null || selectedNode.kind() != NodeKind.FILE || selectedNode.path() == null) {
+            return;
+        }
+        editMode = true;
+        resetEditorCursorToTop();
+        if (runner() != null) {
+            runner().focusManager().setFocus(EDITOR_ID);
+            activePane = Pane.DETAIL;
+        } else {
+            activePane = Pane.DETAIL;
+        }
+        status = "Editing `" + selectedNode.path().getFileName() + "`. Ctrl+S to save, Esc to cancel.";
+    }
+
     private String selectedRepositoryName() {
         if (selectedNode != null && selectedNode.repositoryName() != null) {
             return selectedNode.repositoryName();
@@ -1549,6 +1636,61 @@ public final class InteractiveApp extends ToolkitApp {
         }
         hierarchyTree.selected(originalSelection);
         return false;
+    }
+
+    private boolean selectFileNode(String repositoryName, String profileName, Path filePath) {
+        int originalSelection = hierarchyTree.selected();
+        Path normalizedFilePath = filePath.toAbsolutePath().normalize();
+        int maxNodes = Math.max(1, countTreeNodes(hierarchyRoots));
+        for (int index = 0; index < maxNodes; index++) {
+            hierarchyTree.selected(index);
+            TreeNode<NodeRef> selectedTreeNode = hierarchyTree.selectedNode();
+            if (selectedTreeNode == null || selectedTreeNode.data() == null) {
+                continue;
+            }
+            NodeRef selectedNodeRef = selectedTreeNode.data();
+            if (selectedNodeRef.kind() != NodeKind.FILE || selectedNodeRef.path() == null) {
+                continue;
+            }
+            if (repositoryName.equals(selectedNodeRef.repositoryName())
+                && profileName.equals(selectedNodeRef.profileName())
+                && normalizedFilePath.equals(selectedNodeRef.path().toAbsolutePath().normalize())) {
+                return true;
+            }
+        }
+        hierarchyTree.selected(originalSelection);
+        return false;
+    }
+
+    private Path selectedFileCreationRelativeDirectory() {
+        if (selectedNode == null) {
+            throw new IllegalStateException(STATUS_SELECT_NODE_FIRST);
+        }
+        return switch (selectedNode.kind()) {
+            case PROFILE -> Path.of("");
+            case DIRECTORY -> selectedProfileRootPath().relativize(selectedNode.path().toAbsolutePath().normalize());
+            case FILE -> {
+                Path parent = selectedFileRelativePath().getParent();
+                yield parent == null ? Path.of("") : parent;
+            }
+            case REPOSITORY -> throw new IllegalStateException("Select a profile, directory, or file first.");
+        };
+    }
+
+    private Path selectedFileRelativePath() {
+        if (selectedNode == null || selectedNode.kind() != NodeKind.FILE || selectedNode.path() == null) {
+            throw new IllegalStateException("Select a file first.");
+        }
+        return profileService.resolvedFilePreview(selectedNode.profileName(), selectedNode.path()).relativePath();
+    }
+
+    private Path selectedProfileRootPath() {
+        String profileName = selectedProfileName();
+        ConfiguredRepository repository = selectedConfiguredRepository();
+        if (profileName == null || repository == null) {
+            throw new IllegalStateException(STATUS_SELECT_NODE_FIRST);
+        }
+        return Path.of(repository.localPath()).resolve(profileName).toAbsolutePath().normalize();
     }
 
     private String repositoryNameForProfile(String profileName) {

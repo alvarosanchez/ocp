@@ -19,7 +19,7 @@ class TreeShortcutHintsTest {
             ),
             hints.navigation()
         );
-        assertEquals(List.of(), hints.actions());
+        assertEquals(List.of(new TreeShortcutHints.Shortcut("n", "create new repo")), hints.actions());
     }
 
     @Test
@@ -34,6 +34,7 @@ class TreeShortcutHintsTest {
 
         assertEquals(
             List.of(
+                new TreeShortcutHints.Shortcut("n", "create new repo"),
                 new TreeShortcutHints.Shortcut("c", "create profile"),
                 new TreeShortcutHints.Shortcut("m", "migrate to git/github"),
                 new TreeShortcutHints.Shortcut("d", "delete repo"),
@@ -55,6 +56,7 @@ class TreeShortcutHintsTest {
 
         assertEquals(
             List.of(
+                new TreeShortcutHints.Shortcut("n", "create new repo"),
                 new TreeShortcutHints.Shortcut("c", "create profile"),
                 new TreeShortcutHints.Shortcut("d", "delete repo")
             ),
@@ -74,6 +76,7 @@ class TreeShortcutHintsTest {
 
         assertEquals(
             List.of(
+                new TreeShortcutHints.Shortcut("n", "create file"),
                 new TreeShortcutHints.Shortcut("u", "use profile"),
                 new TreeShortcutHints.Shortcut("c", "create profile"),
                 new TreeShortcutHints.Shortcut("d", "delete profile"),
@@ -97,6 +100,7 @@ class TreeShortcutHintsTest {
 
         assertEquals(
             List.of(
+                new TreeShortcutHints.Shortcut("n", "create file"),
                 new TreeShortcutHints.Shortcut("u", "use profile"),
                 new TreeShortcutHints.Shortcut("c", "create profile"),
                 new TreeShortcutHints.Shortcut("d", "delete profile"),
@@ -119,9 +123,10 @@ class TreeShortcutHintsTest {
 
         assertEquals(
             List.of(
+                new TreeShortcutHints.Shortcut("n", "create file"),
                 new TreeShortcutHints.Shortcut("e", "edit file"),
+                new TreeShortcutHints.Shortcut("d", "delete file"),
                 new TreeShortcutHints.Shortcut("u", "use profile"),
-                new TreeShortcutHints.Shortcut("d", "delete profile"),
                 new TreeShortcutHints.Shortcut("g", "commit and push"),
                 new TreeShortcutHints.Shortcut("r", "refresh repository")
             ),
@@ -141,8 +146,8 @@ class TreeShortcutHintsTest {
 
         assertEquals(
             List.of(
+                new TreeShortcutHints.Shortcut("n", "create file"),
                 new TreeShortcutHints.Shortcut("u", "use profile"),
-                new TreeShortcutHints.Shortcut("d", "delete profile"),
                 new TreeShortcutHints.Shortcut("p", "go parent"),
                 new TreeShortcutHints.Shortcut("r", "refresh repository")
             ),
@@ -162,6 +167,7 @@ class TreeShortcutHintsTest {
 
         assertEquals(
             List.of(
+                new TreeShortcutHints.Shortcut("n", "create new repo"),
                 new TreeShortcutHints.Shortcut("c", "create profile"),
                 new TreeShortcutHints.Shortcut("d", "delete repo"),
                 new TreeShortcutHints.Shortcut("r", "refresh repository")
@@ -182,6 +188,7 @@ class TreeShortcutHintsTest {
 
         assertEquals(
             List.of(
+                new TreeShortcutHints.Shortcut("n", "create new repo"),
                 new TreeShortcutHints.Shortcut("c", "create profile"),
                 new TreeShortcutHints.Shortcut("g", "commit and push"),
                 new TreeShortcutHints.Shortcut("d", "delete repo"),

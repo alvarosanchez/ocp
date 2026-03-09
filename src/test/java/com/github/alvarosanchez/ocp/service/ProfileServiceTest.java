@@ -324,6 +324,43 @@ class ProfileServiceTest {
     }
 
     @Test
+    void createFileCreatesNestedFileInConfiguredProfile() throws IOException {
+        Path selectedRepository = tempDir.resolve("selected-repository");
+        Path profilePath = selectedRepository.resolve("selected");
+        Files.createDirectories(profilePath);
+        Files.writeString(
+            selectedRepository.resolve("repository.json"),
+            objectMapper.writeValueAsString(new RepositoryConfigFile(List.of(new ProfileEntry("selected"))))
+        );
+        writeConfig(List.of(new RepositoryEntry("selected-repository", null, selectedRepository.toString())));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        Path createdFile = profileService.createFile("selected", "selected-repository", Path.of("nested"), "opencode.json");
+
+        assertEquals(profilePath.resolve("nested").resolve("opencode.json"), createdFile);
+        assertTrue(Files.isRegularFile(createdFile));
+        assertEquals("", Files.readString(createdFile));
+    }
+
+    @Test
+    void deleteFileRemovesConfiguredProfileFile() throws IOException {
+        Path selectedRepository = tempDir.resolve("selected-repository");
+        Path profilePath = selectedRepository.resolve("selected");
+        Path filePath = profilePath.resolve("opencode.json");
+        Files.createDirectories(profilePath);
+        Files.writeString(
+            selectedRepository.resolve("repository.json"),
+            objectMapper.writeValueAsString(new RepositoryConfigFile(List.of(new ProfileEntry("selected"))))
+        );
+        Files.writeString(filePath, "{}");
+        writeConfig(List.of(new RepositoryEntry("selected-repository", null, selectedRepository.toString())));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        assertTrue(profileService.deleteFile("selected", "selected-repository", Path.of("opencode.json")));
+        assertTrue(Files.notExists(filePath));
+    }
+
+    @Test
     void deleteProfileRemovesProfileDirectoryAndMetadataInConfiguredRepository() throws IOException {
         Path selectedRepository = tempDir.resolve("selected-repository");
         Files.createDirectories(selectedRepository);

@@ -195,11 +195,12 @@ oss/opencode.json
 
 - Running `ocp` without a subcommand starts an interactive full-screen terminal UI when `System.console()` is available and `TERM` is not `dumb`.
 - Interactive mode exposes profile and repository operations (`use`, `create`, `add`, `delete`, and refresh actions) and uses the same service layer semantics as subcommands.
-- In interactive mode, `d` (delete) is context-sensitive: on repository nodes it deletes the repository, and on profile/file/directory nodes it deletes the selected profile.
+- In interactive mode, `d` (delete) is context-sensitive: on repository nodes it deletes the repository, on profile/directory nodes it deletes the selected profile, and on editable file nodes it deletes the selected file after confirmation.
 - In interactive mode, repository deletion prompts are context-aware:
   - Git-backed repos with local changes show a warning and require explicit force confirmation.
   - File-based repos ask whether to also delete the local folder.
 - In interactive mode, `c` (create profile) creates the profile inside the currently selected repository context (repository, profile, or file node), and prompts for optional inheritance using a selectable list of all resolvable profile names across configured repositories.
+- In interactive mode, `n` creates a new file inside the selected profile context (profile root, selected directory, or alongside the selected file) and immediately opens the empty file in the editor pane.
 - In interactive mode, action keys are explicit: `r` refresh selected repository, `R` refresh all repositories, `u` use selected profile, `e` edit selected file, and `p` jump to the selected profile's parent; `Enter` does not trigger these actions.
 - In interactive mode, selecting a file-based repository node also exposes `m` to migrate that repository into the shared Git/GitHub post-creation flow.
 - In interactive mode, selecting a git-backed repository node with local uncommitted changes also exposes `g` to prompt for a commit message, commit all local changes, and push them to the tracked remote branch.
