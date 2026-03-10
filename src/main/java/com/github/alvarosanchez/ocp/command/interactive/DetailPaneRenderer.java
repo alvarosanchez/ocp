@@ -113,7 +113,7 @@ final class DetailPaneRenderer {
                 .onKeyEvent(handleKeyEvent);
         }
 
-        if (editMode) {
+        if (selectedNode.kind() == NodeKind.FILE && editMode) {
             return textArea(editorState)
                 .title("Editing: " + selectedNode.path().getFileName())
                 .rounded()

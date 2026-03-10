@@ -23,6 +23,14 @@ class TreeShortcutHintsTest {
     }
 
     @Test
+    void globalShortcutListIncludesEditOcpConfigAction() {
+        assertEquals(
+            new TreeShortcutHints.Shortcut("o", "edit OCP config"),
+            TreeShortcutHints.Shortcut.EDIT_OCP_CONFIG
+        );
+    }
+
+    @Test
     void returnsRepositorySpecificHints() {
         TreeShortcutHints.ShortcutHints hints = TreeShortcutHints.forSelection(
             NodeRef.repository("repo", Path.of("/tmp/repo")),

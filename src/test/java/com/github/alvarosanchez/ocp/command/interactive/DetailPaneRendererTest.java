@@ -125,6 +125,32 @@ class DetailPaneRendererTest {
         assertTrue(rendered.lines().getFirst().spans().getFirst().style().effectiveModifiers().contains(dev.tamboui.style.Modifier.BOLD));
     }
 
+
+    @Test
+    void renderDetailPaneShowsEditorForFileNodesWithoutRepositoryContext() {
+        Element element = DetailPaneRenderer.renderDetailPane(
+            NodeRef.file(null, null, Path.of("config.json")),
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            Map.of(),
+            Map.of(),
+            DetailPaneRenderer.plainText("{}"),
+            0,
+            new TextAreaState(),
+            "detail",
+            "editor",
+            event -> null,
+            event -> null
+        );
+
+        assertEquals("TextAreaElement", element.getClass().getSimpleName());
+    }
+
     private static Text richTextAreaText(RichTextAreaElement richTextArea) {
         try {
             Field textField = RichTextAreaElement.class.getDeclaredField("text");

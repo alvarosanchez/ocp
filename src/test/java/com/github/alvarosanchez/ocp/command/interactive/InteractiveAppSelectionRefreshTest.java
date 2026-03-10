@@ -262,6 +262,41 @@ class InteractiveAppSelectionRefreshTest {
         assertEquals(Color.indexed(1), preview.lines().getFirst().spans().getFirst().style().fg().orElseThrow());
     }
 
+    @Test
+    void restoringFileAfterOcpConfigEditReusesCachedStyledPreview() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path profilePath = repositoryPath.resolve("default");
+        Path filePath = profilePath.resolve("opencode.json");
+        Files.createDirectories(profilePath);
+        Files.writeString(repositoryPath.resolve("repository.json"), "{\"profiles\":[{\"name\":\"default\"}]}");
+        Files.writeString(filePath, "plain");
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        CountingBatPreviewRenderer renderer = new CountingBatPreviewRenderer(new AnsiTextParser().parse("[31mcached[0m"));
+        InteractiveApp app = new InteractiveApp(
+            applicationContext.getBean(ProfileService.class),
+            applicationContext.getBean(RepositoryService.class),
+            applicationContext.getBean(OnboardingService.class),
+            applicationContext.getBean(RepositoryPostCreationService.class),
+            objectMapper,
+            renderer
+        );
+        invokeReloadState(app);
+        setBatAvailable(app, true);
+
+        selectTreeNode(app, node -> node.kind() == NodeKind.FILE && filePath.equals(node.path()));
+        invokeSyncSelectionAndPreview(app);
+        assertEquals(1, renderer.highlightInvocations());
+
+        setSelectedNode(app, NodeRef.file(null, null, configFilePath()));
+        invokeRestoreConfigEditReturnSelection(app, NodeRef.file("repo-a", "default", filePath));
+
+        assertEquals(1, renderer.highlightInvocations());
+        Text preview = readSelectedFilePreview(app);
+        assertEquals("cached", preview.lines().getFirst().spans().getFirst().content());
+        assertEquals(Color.indexed(1), preview.lines().getFirst().spans().getFirst().style().fg().orElseThrow());
+    }
+
     private InteractiveApp createApp() {
         return new InteractiveApp(
             applicationContext.getBean(ProfileService.class),
@@ -377,6 +412,12 @@ class InteractiveAppSelectionRefreshTest {
         method.invoke(app);
     }
 
+    private static void invokeRestoreConfigEditReturnSelection(InteractiveApp app, NodeRef nodeRef) throws Exception {
+        Method method = InteractiveApp.class.getDeclaredMethod("restoreConfigEditReturnSelection", NodeRef.class);
+        method.setAccessible(true);
+        method.invoke(app, nodeRef);
+    }
+
     private static String readSelectedFileContent(InteractiveApp app) throws Exception {
         Field field = InteractiveApp.class.getDeclaredField("selectedFileContent");
         field.setAccessible(true);
@@ -422,6 +463,16 @@ class InteractiveAppSelectionRefreshTest {
         Field field = InteractiveApp.class.getDeclaredField("batAvailable");
         field.setAccessible(true);
         field.setBoolean(app, value);
+    }
+
+    private static void setSelectedNode(InteractiveApp app, NodeRef nodeRef) throws Exception {
+        Field field = InteractiveApp.class.getDeclaredField("selectedNode");
+        field.setAccessible(true);
+        field.set(app, nodeRef);
+    }
+
+    private Path configFilePath() {
+        return Path.of(System.getProperty("ocp.config.dir")).resolve("config.json");
     }
 
     private static final class FakeBatPreviewRenderer extends BatPreviewRenderer {
