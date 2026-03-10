@@ -37,6 +37,10 @@ jobs:
     container: container-registry.oracle.com/graalvm/native-image:25-ol8
 
     steps:
+      - name: Install container prerequisites
+        shell: bash
+        run: microdnf install -y gzip tar
+
       - name: Checkout source
         uses: actions/checkout@v6
 

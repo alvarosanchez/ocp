@@ -39,6 +39,11 @@ jobs:
             container_image: ""
 
     steps:
+      - name: Install container prerequisites
+        if: ${{ matrix.container_image != '' }}
+        shell: bash
+        run: microdnf install -y gzip tar
+
       - name: Checkout source
         uses: actions/checkout@v6
 
