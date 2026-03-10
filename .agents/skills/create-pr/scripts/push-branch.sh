@@ -19,8 +19,6 @@ elif [[ -z "$upstream" ]]; then
   printf 'refspec=%s:%s\n' "$branch" "$branch"
   git push -u "$remote" "$branch"
 else
-  printf 'refspec=%s
-' "$upstream"
   git push
 fi
 printf 'head_sha=%s\n' "$(git rev-parse HEAD)"

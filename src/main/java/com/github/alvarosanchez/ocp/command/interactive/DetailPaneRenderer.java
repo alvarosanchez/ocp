@@ -60,16 +60,6 @@ final class DetailPaneRenderer {
             repositoryElements.add(detailField("Name", selectedNode.repositoryName()));
             repositoryElements.add(detailField("Path", String.valueOf(selectedNode.path())));
             repositoryElements.add(detailField("Indicators", statusDescription(selectedNode, selectedRepositoryHasLocalChanges, selectedRepositoryInspectionFailed)));
-            List<TreeShortcutHints.Shortcut> repositoryShortcuts = new ArrayList<>();
-            if (repositoryCommitPushAvailable) {
-                repositoryShortcuts.add(TreeShortcutHints.Shortcut.COMMIT_AND_PUSH_REPOSITORY);
-            }
-            if (repositoryMigratable) {
-                repositoryShortcuts.add(TreeShortcutHints.Shortcut.MIGRATE_REPOSITORY);
-            }
-            if (repositoryRefreshable) {
-                repositoryShortcuts.add(TreeShortcutHints.Shortcut.REFRESH_REPOSITORY);
-            }
             return column(
                 repositoryElements.toArray(Element[]::new)
             )
@@ -103,14 +93,6 @@ final class DetailPaneRenderer {
             }
             if (profile != null && profile.message() != null && !profile.message().isBlank()) {
                 profileElements.add(detailField("Message", profile.message()));
-            }
-            List<TreeShortcutHints.Shortcut> profileShortcuts = new ArrayList<>();
-            profileShortcuts.add(TreeShortcutHints.Shortcut.USE_PROFILE);
-            if (selectedProfileHasParent) {
-                profileShortcuts.add(TreeShortcutHints.Shortcut.GO_PARENT);
-            }
-            if (repositoryRefreshable) {
-                profileShortcuts.add(TreeShortcutHints.Shortcut.REFRESH_REPOSITORY);
             }
             return column(
                 profileElements.toArray(Element[]::new)

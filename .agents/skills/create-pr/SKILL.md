@@ -206,9 +206,15 @@ If either Copilot or CI remediation changes code, validate locally and then comm
 
 If autonomous commits are not allowed by the runtime, stop and report that the loop is blocked on user-authorized commit/push.
 
-### 9. Re-request Copilot review after each follow-up push
+### 9. After each follow-up push, first check whether Copilot is already reviewing the new head
 
-After a follow-up push, re-request Copilot review using the remove/add workaround:
+Immediately after every follow-up push:
+
+1. record the new PR `headRefOid`
+2. run `./.agents/skills/create-pr/scripts/copilot-review-state.sh <owner> <repo> <pr-number>`
+3. inspect whether there is already observable Copilot activity for that exact head (review, thread, or comment)
+4. if Copilot is already reviewing or has already reviewed that exact head, do not treat the push as needing another blind re-request yet; continue into the wait cycle for that same head
+5. if there is no observable Copilot activity for the new head, re-request Copilot review using the remove/add workaround:
 
 ```bash
 gh pr edit <pr-number> --remove-reviewer @copilot || true
@@ -221,13 +227,17 @@ Use the skill script wrapper so repository scoping and result validation are con
 ./.agents/skills/create-pr/scripts/request-copilot-review.sh <owner> <repo> <pr-number>
 ```
 
-This is a required step after every remediation push, not an optional best-effort extra. Do not continue to the next wait cycle until you have attempted the re-request and recorded the concrete result.
+This is a required post-push decision point, not an optional best-effort extra. Do not continue to the next wait cycle until you have either:
+
+- confirmed that Copilot is already reviewing or has already reviewed the new head, or
+- attempted the re-request and recorded the concrete result
 
 Validation rule for execution:
 
-- A follow-up push is incomplete until `request-copilot-review.sh` has been run for that PR.
+- A follow-up push is incomplete until you have checked Copilot state for the new `headRefOid`.
+- If there is no observable Copilot activity for the new head, the push is incomplete until `request-copilot-review.sh` has been run for that PR.
 - Treat a successful re-request as grounded only when command output confirms which reviewer slug was accepted.
-- Record the PR head SHA at re-request time and use it as the review-completion target for the next Copilot wait cycle.
+- Record the PR head SHA at check/re-request time and use it as the review-completion target for the next Copilot wait cycle.
 - If all reviewer-request attempts fail because the repository does not support it, report that limitation explicitly and only continue if automatic Copilot review still appears on subsequent pushes.
 
 If all reviewer-request attempts fail because the repository does not support it, report that limitation and continue waiting only if automatic review still appears on new pushes.
@@ -241,20 +251,22 @@ Run this combined cycle until terminal success or a documented blocker:
 3. fix code when needed
 4. verify locally
 5. commit and push when allowed
-6. re-request Copilot review after pushes
-7. wait for Copilot review completion for the re-requested latest green head
-8. confirm Copilot has either posted review activity for that head or hit a clearly reported timeout/limitation
-9. process new Copilot comments
-10. fix code when needed
-11. verify locally
-12. commit and push when allowed
-13. re-request Copilot review after pushes
-14. wait again for CI first, then Copilot
+6. after each push, check whether Copilot is already reviewing or has already reviewed the new head
+7. if not, re-request Copilot review for that head
+8. wait for Copilot review completion for the latest green head
+9. confirm Copilot has either posted review activity for that head or hit a clearly reported timeout/limitation
+10. process new Copilot comments
+11. fix code when needed
+12. verify locally
+13. commit and push when allowed
+14. after each new push, repeat the same post-push Copilot check/re-request decision
+15. wait again for CI first, then Copilot
 
 Copilot review completion rule:
 
 - Do not treat `zero unresolved threads` alone as proof that Copilot is finished for the latest green head.
-- After a re-request, wait until Copilot has produced observable review activity for that head (review, thread, or comment) or until the bounded wait policy expires and you report the timeout/limitation explicitly.
+- After each push, first check whether Copilot is already reviewing or has already reviewed that head before deciding whether another re-request is needed.
+- If no latest-head Copilot activity is visible after that check, re-request review and then wait until Copilot has produced observable review activity for that head (review, thread, or comment) or until the bounded wait policy expires and you report the timeout/limitation explicitly.
 - Treat Copilot review completion for terminal-state purposes as valid only when the newest relevant Copilot review is tied to the current PR head SHA, not an older push.
 - Always re-fetch the current PR head SHA after every push and compare it to the commit OID of the latest Copilot review before concluding that the latest head has been reviewed.
 - Operationally, do not rely on human inspection alone: `copilot-review-state.sh` must surface the current `headRefOid`, the newest Copilot review `commit.oid`, and enough thread state to decide whether the latest head has actually been reviewed.
