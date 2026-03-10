@@ -272,7 +272,7 @@ class InteractiveAppSelectionRefreshTest {
         Files.writeString(filePath, "plain");
         writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
 
-        CountingBatPreviewRenderer renderer = new CountingBatPreviewRenderer(new AnsiTextParser().parse("[31mcached[0m"));
+        CountingBatPreviewRenderer renderer = new CountingBatPreviewRenderer(new AnsiTextParser().parse("\u001B[31mcached\u001B[0m"));
         InteractiveApp app = new InteractiveApp(
             applicationContext.getBean(ProfileService.class),
             applicationContext.getBean(RepositoryService.class),

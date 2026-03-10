@@ -23,7 +23,7 @@ class TreeShortcutHintsTest {
     }
 
     @Test
-    void globalShortcutListIncludesEditOcpConfigAction() {
+    void editOcpConfigShortcutConstantMatchesAdvertisedAction() {
         assertEquals(
             new TreeShortcutHints.Shortcut("o", "edit OCP config"),
             TreeShortcutHints.Shortcut.EDIT_OCP_CONFIG

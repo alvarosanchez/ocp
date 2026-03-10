@@ -1477,7 +1477,6 @@ public final class InteractiveApp extends ToolkitApp {
             () -> {
                 editMode = false;
                 if (reloadAfterSave) {
-                    reloadState();
                     restoreConfigEditReturnSelection(returnSelection);
                 } else if (runner() == null && savedSelection != null && savedSelection.kind() == NodeKind.FILE) {
                     selectedNode = savedSelection;
