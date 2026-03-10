@@ -1555,7 +1555,7 @@ public final class InteractiveApp extends ToolkitApp {
             }
             status = "Editing config.json. Ctrl+S to save, Esc to cancel.";
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to read OCP config file " + configFile + ".", e);
+            status = "Failed to read OCP config file " + configFile + ": " + e.getMessage();
         }
     }
 
