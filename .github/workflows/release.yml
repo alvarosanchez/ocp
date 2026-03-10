@@ -47,6 +47,17 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v6
 
+      - name: Cache Gradle dependencies
+        if: ${{ matrix.container_image != '' }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
       - name: Set up Oracle GraalVM for JDK 25
         if: ${{ matrix.container_image == '' }}
         uses: graalvm/setup-graalvm@v1

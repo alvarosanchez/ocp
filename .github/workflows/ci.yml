@@ -44,6 +44,16 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v6
 
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
       - name: Run native compile smoke test
         shell: bash
         run: ./gradlew --no-daemon nativeCompile
