@@ -47,7 +47,7 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v6
 
-      - name: Cache Gradle dependencies
+      - name: Cache Gradle dependencies for Linux container build
         if: ${{ matrix.container_image != '' }}
         uses: actions/cache@v4
         with:

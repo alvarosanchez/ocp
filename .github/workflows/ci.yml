@@ -44,7 +44,7 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v6
 
-      - name: Cache Gradle dependencies
+      - name: Cache Gradle dependencies for smoke job
         uses: actions/cache@v4
         with:
           path: |
