@@ -275,12 +275,6 @@ class InteractiveAppSaveFocusTest {
         field.setBoolean(app, value);
     }
 
-    private static void setConfigEditReturnSelection(InteractiveApp app, NodeRef nodeRef) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("configEditReturnSelection");
-        field.setAccessible(true);
-        field.set(app, nodeRef);
-    }
-
     private static boolean readEditMode(InteractiveApp app) throws Exception {
         Field field = InteractiveApp.class.getDeclaredField("editMode");
         field.setAccessible(true);
