@@ -12,6 +12,7 @@ jobs:
   build-native:
     name: Build (${{ matrix.artifact_suffix }})
     runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.container_image || null }}
     strategy:
       fail-fast: false
       matrix:
@@ -20,24 +21,34 @@ jobs:
             artifact_suffix: linux-x86_64
             extension: ""
             run_verification: true
+            container_image: container-registry.oracle.com/graalvm/native-image:25-ol8
           - runner: windows-latest
             artifact_suffix: windows-x86_64
             extension: ".exe"
             run_verification: false
+            container_image: ""
           - runner: macos-15-intel
             artifact_suffix: macos-x86_64
             extension: ""
             run_verification: false
+            container_image: ""
           - runner: macos-latest
             artifact_suffix: macos-aarch64
             extension: ""
             run_verification: false
+            container_image: ""
 
     steps:
+      - name: Install container prerequisites
+        if: ${{ matrix.container_image != '' }}
+        shell: bash
+        run: microdnf install -y findutils git gzip tar
+
       - name: Checkout source
         uses: actions/checkout@v6
 
       - name: Set up Oracle GraalVM for JDK 25
+        if: ${{ matrix.container_image == '' }}
         uses: graalvm/setup-graalvm@v1
         with:
           java-version: "25"
