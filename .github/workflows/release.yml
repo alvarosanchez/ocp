@@ -42,7 +42,7 @@ jobs:
       - name: Install container prerequisites
         if: ${{ matrix.container_image != '' }}
         shell: bash
-        run: microdnf install -y gzip tar
+        run: microdnf install -y git gzip tar
 
       - name: Checkout source
         uses: actions/checkout@v6
