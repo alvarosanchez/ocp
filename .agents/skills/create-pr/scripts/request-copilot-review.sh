@@ -12,8 +12,31 @@ fi
 owner="$1"
 repo="$2"
 pr_number="$3"
-
 repo_ref="$owner/$repo"
+head_sha="$(gh pr view -R "$repo_ref" "$pr_number" --json headRefOid --jq '.headRefOid')"
+
+confirm_requested_reviewer() {
+  local reviewer="${1#@}"
+  local requests
+  requests="$(gh pr view -R "$repo_ref" "$pr_number" --json reviewRequests --jq '.reviewRequests[].login' 2>/dev/null || true)"
+  printf '%s\n' "$requests" | grep -Fxq "$reviewer"
+}
+
+report_success() {
+  local reviewer="${1#@}"
+  printf 'requested_reviewer=%s\n' "$reviewer"
+  printf 'pr_number=%s\n' "$pr_number"
+  printf 'head_sha=%s\n' "$head_sha"
+}
+
+# remove/add workaround first
+gh pr edit -R "$repo_ref" "$pr_number" --remove-reviewer "@copilot" >/dev/null 2>&1 || true
+if gh pr edit -R "$repo_ref" "$pr_number" --add-reviewer "@copilot" >/dev/null 2>&1; then
+  if confirm_requested_reviewer '@copilot'; then
+    report_success '@copilot'
+    exit 0
+  fi
+fi
 
 reviewers=(
   'Copilot'
@@ -22,58 +45,16 @@ reviewers=(
   'github-copilot'
 )
 
-is_review_active() {
-  local reviewer="$1"
-  local review_requests reviews review_author
-
-  review_requests="$(gh pr view -R "$repo_ref" "$pr_number" --json reviewRequests --jq '.reviewRequests[].login' 2>/dev/null || true)"
-  if printf '%s\n' "$review_requests" | grep -Fxq "$reviewer"; then
-    return 0
-  fi
-
-  reviews="$(gh pr view -R "$repo_ref" "$pr_number" --json reviews --jq '.reviews[].author.login' 2>/dev/null || true)"
-  while IFS= read -r review_author; do
-    if [[ "$review_author" == "$reviewer" ]]; then
-      return 0
-    fi
-  done <<< "$reviews"
-
-  return 1
-}
-
-copilot_rerequest_workaround() {
-  gh pr edit -R "$repo_ref" "$pr_number" --remove-reviewer "@copilot" >/dev/null 2>&1 || true
-  gh pr edit -R "$repo_ref" "$pr_number" --add-reviewer "@copilot" >/dev/null 2>&1 || return 1
-  for reviewer in "${reviewers[@]}"; do
-    if is_review_active "$reviewer"; then
-      printf 'requested_reviewer=%s\n' "$reviewer"
-      printf 'pr_number=%s\n' "$pr_number"
-      printf 'head_sha=%s\n' "$(gh pr view -R "$repo_ref" "$pr_number" --json headRefOid --jq '.headRefOid')"
-      return 0
-    fi
-  done
-  return 1
-}
-
-if copilot_rerequest_workaround; then
-  exit 0
-fi
-
 for reviewer in "${reviewers[@]}"; do
-  if is_review_active "$reviewer"; then
-    printf 'requested_reviewer=%s\n' "$reviewer"
-    printf 'pr_number=%s\n' "$pr_number"
-    printf 'head_sha=%s\n' "$(gh pr view -R "$repo_ref" "$pr_number" --json headRefOid --jq '.headRefOid')"
-    exit 0
-  fi
-
-  if gh api --method POST -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "repos/$owner/$repo/pulls/$pr_number/requested_reviewers" -F "reviewers[]=$reviewer" >/dev/null 2>&1 && is_review_active "$reviewer"; then
-    printf 'requested_reviewer=%s\n' "$reviewer"
-    printf 'pr_number=%s\n' "$pr_number"
-    printf 'head_sha=%s\n' "$(gh pr view -R "$repo_ref" "$pr_number" --json headRefOid --jq '.headRefOid')"
-    exit 0
+  if gh api --method POST -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "repos/$owner/$repo/pulls/$pr_number/requested_reviewers" -F "reviewers[]=$reviewer" >/dev/null 2>&1; then
+    if confirm_requested_reviewer "$reviewer"; then
+      report_success "$reviewer"
+      exit 0
+    fi
   fi
 done
 
-echo "ERROR: unable to confirm active Copilot reviewer on PR after request attempt" >&2
+echo "ERROR: unable to confirm accepted Copilot reviewer request on PR after request attempt" >&2
+printf 'pr_number=%s\n' "$pr_number" >&2
+printf 'head_sha=%s\n' "$head_sha" >&2
 exit 1

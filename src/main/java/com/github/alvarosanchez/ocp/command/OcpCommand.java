@@ -174,4 +174,5 @@ public class OcpCommand implements Runnable {
     InteractiveApp createInteractiveApp() {
         return new InteractiveApp(profileService, repositoryService, onboardingService, repositoryPostCreationService, objectMapper);
     }
+
 }

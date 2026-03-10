@@ -23,7 +23,7 @@ final class RefreshConflictDialogRenderer {
         if (refreshConflict.kind() == RefreshConflictKind.REPOSITORY) {
             var conflict = refreshConflict.repositoryConflict();
             List<Element> content = new ArrayList<>();
-            content.add(text("Local uncommitted changes detected in repository `" + conflict.repositoryName() + "`.").fg(Color.YELLOW));
+            content.add(text("Local uncommitted changes detected in repository " + conflict.repositoryName() + ".").fg(Color.YELLOW));
             content.add(text("Diff:").bold().fg(Color.CYAN));
             content.addAll(buildColoredDiffPreview(conflict.diff()));
             content.add(text("Choose how to proceed:").bold());
@@ -44,10 +44,10 @@ final class RefreshConflictDialogRenderer {
         var conflict = refreshConflict.mergedFilesConflict();
         List<Element> content = new ArrayList<>();
         content.add(
-            text("Local changes detected in merged active profile files for profile `" + conflict.profileName() + "`.")
+            text("Local changes detected in merged active profile files for profile " + conflict.profileName() + ".")
                 .fg(Color.YELLOW)
         );
-        content.add(text("Modified files in `" + conflict.targetDirectory() + "`: ").fg(Color.CYAN));
+        content.add(text("Modified files in " + conflict.targetDirectory() + ": ").fg(Color.CYAN));
         int displayed = 0;
         for (Path driftedFile : conflict.driftedFiles()) {
             if (displayed >= CONFLICT_FILES_PREVIEW_LINES) {

@@ -14,7 +14,7 @@ import static dev.tamboui.toolkit.Toolkit.richText;
 
 final class ShortcutHintRenderer {
 
-    private static final Style PREFIX_STYLE = Style.EMPTY.fg(Color.GRAY);
+    private static final Style PREFIX_STYLE = Style.EMPTY.bold().fg(Color.LIGHT_YELLOW);
     private static final Style KEY_STYLE = Style.EMPTY.bold().fg(Color.CYAN);
     private static final Style DESCRIPTION_STYLE = Style.EMPTY.fg(Color.BRIGHT_WHITE);
     private static final Style SEPARATOR_STYLE = Style.EMPTY.fg(Color.GRAY);
@@ -27,9 +27,13 @@ final class ShortcutHintRenderer {
     }
 
     static Element line(String prefix, List<TreeShortcutHints.Shortcut> shortcuts) {
+        return line(prefix, shortcuts, PREFIX_STYLE);
+    }
+
+    static Element line(String prefix, List<TreeShortcutHints.Shortcut> shortcuts, Style prefixStyle) {
         List<Span> spans = new ArrayList<>();
         if (prefix != null && !prefix.isBlank()) {
-            spans.add(Span.styled(prefix + " ", PREFIX_STYLE));
+            spans.add(Span.styled(prefix + " ", prefixStyle));
         }
 
         for (int i = 0; i < shortcuts.size(); i++) {
@@ -69,5 +73,9 @@ final class ShortcutHintRenderer {
             }
         }
         return builder.toString();
+    }
+
+    static Style emphasizedPrefixStyle() {
+        return PREFIX_STYLE;
     }
 }

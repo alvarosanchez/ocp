@@ -91,7 +91,7 @@ class InteractiveAppOnboardingTest {
         assertNotNull(prompt);
         assertEquals(PromptAction.ONBOARD_EXISTING_CONFIG_CONFIRM, prompt.action);
         assertEquals("Import existing OpenCode config files into OCP?", prompt.title);
-        assertEquals("- `opencode.json`\n- `tui.json`", prompt.labels.getFirst());
+        assertEquals("- opencode.json\n- tui.json", prompt.labels.getFirst());
         assertEquals(java.util.List.of("yes", "no"), prompt.options.getFirst());
         assertEquals("yes", prompt.values.getFirst());
     }

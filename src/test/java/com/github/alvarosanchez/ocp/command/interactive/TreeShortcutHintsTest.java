@@ -10,7 +10,7 @@ class TreeShortcutHintsTest {
 
     @Test
     void returnsGlobalHintsWhenSelectionIsNull() {
-        TreeShortcutHints.ShortcutHints hints = TreeShortcutHints.forSelection(null, false, false, false, false);
+        TreeShortcutHints.ShortcutHints hints = TreeShortcutHints.forSelection(null, false, false, false, false, false);
 
         assertEquals(
             List.of(
@@ -29,6 +29,7 @@ class TreeShortcutHintsTest {
             true,
             false,
             true,
+            false,
             false
         );
 
@@ -36,8 +37,8 @@ class TreeShortcutHintsTest {
             List.of(
                 new TreeShortcutHints.Shortcut("c", "create profile"),
                 new TreeShortcutHints.Shortcut("m", "migrate to git/github"),
-                new TreeShortcutHints.Shortcut("d", "delete repo"),
-                new TreeShortcutHints.Shortcut("r", "refresh repository")
+                new TreeShortcutHints.Shortcut("r", "refresh repository"),
+                new TreeShortcutHints.Shortcut("d", "delete repo")
             ),
             hints.actions()
         );
@@ -47,6 +48,7 @@ class TreeShortcutHintsTest {
     void omitsRefreshHintWhenRepositoryIsNotRefreshable() {
         TreeShortcutHints.ShortcutHints hints = TreeShortcutHints.forSelection(
             NodeRef.repository("repo", Path.of("/tmp/repo")),
+            false,
             false,
             false,
             false,
@@ -69,17 +71,18 @@ class TreeShortcutHintsTest {
             true,
             true,
             false,
-            true
+            true,
+            false
         );
 
         assertEquals(
             List.of(
                 new TreeShortcutHints.Shortcut("u", "use profile"),
                 new TreeShortcutHints.Shortcut("c", "create profile"),
-                new TreeShortcutHints.Shortcut("d", "delete profile"),
                 new TreeShortcutHints.Shortcut("p", "go parent"),
                 new TreeShortcutHints.Shortcut("g", "commit and push"),
-                new TreeShortcutHints.Shortcut("r", "refresh repository")
+                new TreeShortcutHints.Shortcut("r", "refresh repository"),
+                new TreeShortcutHints.Shortcut("d", "delete profile")
             ),
             hints.actions()
         );
@@ -92,6 +95,7 @@ class TreeShortcutHintsTest {
             true,
             true,
             false,
+            false,
             false
         );
 
@@ -99,9 +103,9 @@ class TreeShortcutHintsTest {
             List.of(
                 new TreeShortcutHints.Shortcut("u", "use profile"),
                 new TreeShortcutHints.Shortcut("c", "create profile"),
-                new TreeShortcutHints.Shortcut("d", "delete profile"),
                 new TreeShortcutHints.Shortcut("p", "go parent"),
-                new TreeShortcutHints.Shortcut("r", "refresh repository")
+                new TreeShortcutHints.Shortcut("r", "refresh repository"),
+                new TreeShortcutHints.Shortcut("d", "delete profile")
             ),
             hints.actions()
         );
@@ -114,16 +118,18 @@ class TreeShortcutHintsTest {
             true,
             false,
             false,
-            true
+            true,
+            false
         );
 
         assertEquals(
             List.of(
                 new TreeShortcutHints.Shortcut("e", "edit file"),
+                new TreeShortcutHints.Shortcut("y", "copy path"),
                 new TreeShortcutHints.Shortcut("u", "use profile"),
-                new TreeShortcutHints.Shortcut("d", "delete profile"),
                 new TreeShortcutHints.Shortcut("g", "commit and push"),
-                new TreeShortcutHints.Shortcut("r", "refresh repository")
+                new TreeShortcutHints.Shortcut("r", "refresh repository"),
+                new TreeShortcutHints.Shortcut("d", "delete profile")
             ),
             hints.actions()
         );
@@ -136,15 +142,17 @@ class TreeShortcutHintsTest {
             true,
             true,
             false,
+            false,
             false
         );
 
         assertEquals(
             List.of(
+                new TreeShortcutHints.Shortcut("y", "copy path"),
                 new TreeShortcutHints.Shortcut("u", "use profile"),
-                new TreeShortcutHints.Shortcut("d", "delete profile"),
                 new TreeShortcutHints.Shortcut("p", "go parent"),
-                new TreeShortcutHints.Shortcut("r", "refresh repository")
+                new TreeShortcutHints.Shortcut("r", "refresh repository"),
+                new TreeShortcutHints.Shortcut("d", "delete profile")
             ),
             hints.actions()
         );
@@ -157,14 +165,15 @@ class TreeShortcutHintsTest {
             true,
             false,
             false,
+            false,
             false
         );
 
         assertEquals(
             List.of(
                 new TreeShortcutHints.Shortcut("c", "create profile"),
-                new TreeShortcutHints.Shortcut("d", "delete repo"),
-                new TreeShortcutHints.Shortcut("r", "refresh repository")
+                new TreeShortcutHints.Shortcut("r", "refresh repository"),
+                new TreeShortcutHints.Shortcut("d", "delete repo")
             ),
             hints.actions()
         );
@@ -177,17 +186,46 @@ class TreeShortcutHintsTest {
             true,
             false,
             false,
-            true
+            true,
+            false
         );
 
         assertEquals(
             List.of(
                 new TreeShortcutHints.Shortcut("c", "create profile"),
                 new TreeShortcutHints.Shortcut("g", "commit and push"),
-                new TreeShortcutHints.Shortcut("d", "delete repo"),
-                new TreeShortcutHints.Shortcut("r", "refresh repository")
+                new TreeShortcutHints.Shortcut("r", "refresh repository"),
+                new TreeShortcutHints.Shortcut("d", "delete repo")
             ),
             hints.actions()
         );
     }
+
+    @Test
+    void returnsEditModeShortcutsForEditableFile() {
+        TreeShortcutHints.ShortcutHints hints = TreeShortcutHints.forSelection(
+            NodeRef.file("repo", "profile", Path.of("/tmp/repo/profile/file.json")),
+            true,
+            false,
+            false,
+            true,
+            true
+        );
+
+        assertEquals(
+            List.of(
+                new TreeShortcutHints.Shortcut("Up/Down", "select"),
+                new TreeShortcutHints.Shortcut("Left/Right", "collapse/expand")
+            ),
+            hints.navigation()
+        );
+        assertEquals(
+            List.of(
+                new TreeShortcutHints.Shortcut("Ctrl+S", "save file"),
+                new TreeShortcutHints.Shortcut("Esc", "exit edit mode")
+            ),
+            hints.actions()
+        );
+    }
+
 }

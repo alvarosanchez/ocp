@@ -176,7 +176,7 @@ class InteractiveAppPostCreationFlowTest {
         invokeMigrateSelectedRepository(app);
 
         assertNull(readPrompt(app));
-        assertTrue(readStatus(app).contains("Saved origin URI `git@github.com:acme/existing-origin-repository.git`"));
+        assertTrue(readStatus(app).contains("Saved origin URI git@github.com:acme/existing-origin-repository.git"));
         RepositoryEntry repositoryEntry = repositoryService.load().getFirst();
         assertEquals("git@github.com:acme/existing-origin-repository.git", repositoryEntry.uri());
         assertEquals(localRepository.toAbsolutePath().normalize().toString(), repositoryEntry.localPath());
@@ -231,7 +231,7 @@ class InteractiveAppPostCreationFlowTest {
         }
 
         String finalStatus = readStatus(app);
-        assertTrue(finalStatus.contains("Created and added repository `test-repo`"));
+        assertTrue(finalStatus.contains("Created and added repository test-repo"));
         assertTrue(finalStatus.contains("Initialized git repository."));
         assertTrue(finalStatus.contains("Created an initial commit."));
     }

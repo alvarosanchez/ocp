@@ -46,7 +46,7 @@ class RefreshConflictDialogRendererTest {
         List<TextElement> textChildren = textChildren(dialog);
         List<String> contents = textChildren.stream().map(TextElement::content).toList();
 
-        assertTrue(contents.contains("Local uncommitted changes detected in repository `repo-a`."));
+        assertTrue(contents.contains("Local uncommitted changes detected in repository repo-a."));
         assertTrue(contents.contains("Diff:"));
         assertTrue(contents.contains("--- a/file.txt"));
         assertTrue(contents.contains("+++ b/file.txt"));
@@ -87,8 +87,8 @@ class RefreshConflictDialogRendererTest {
         assertSame(keyHandler, dialog.keyEventHandler());
 
         List<String> contents = textChildren(dialog).stream().map(TextElement::content).toList();
-        assertTrue(contents.contains("Local changes detected in merged active profile files for profile `work`."));
-        assertTrue(contents.contains("Modified files in `/tmp/opencode`: "));
+        assertTrue(contents.contains("Local changes detected in merged active profile files for profile work."));
+        assertTrue(contents.contains("Modified files in /tmp/opencode: "));
         assertTrue(contents.contains("- config-0.json"));
         assertTrue(contents.contains("- config-11.json"));
         assertTrue(contents.contains("... and 3 more files"));
