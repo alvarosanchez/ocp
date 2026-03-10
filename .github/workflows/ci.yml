@@ -31,3 +31,15 @@ jobs:
 
       - name: Run native tests
         run: ./gradlew --no-daemon nativeTest
+
+  native-container-smoke:
+    runs-on: ubuntu-latest
+    container: container-registry.oracle.com/graalvm/native-image:25-ol8
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+
+      - name: Run native compile smoke test
+        shell: bash
+        run: ./gradlew --no-daemon nativeCompile
