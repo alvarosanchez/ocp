@@ -153,13 +153,13 @@ For each new unresolved Copilot comment:
 1. inspect the requested change
 2. apply the smallest correct fix when necessary
 3. reply on the thread even if no code change is needed
-4. confirm the reply command actually succeeded from command output; if the primary reply path fails, try the skill's fallback reply mechanism before giving up
+4. confirm the reply command actually succeeded from command output
 5. resolve the thread immediately after a confirmed reply when no human discussion remains open
 
 Use:
 
 ```bash
-./.agents/skills/create-pr/scripts/reply-to-review-comment.sh <owner> <repo> <comment-id> <reply-body>
+./.agents/skills/create-pr/scripts/reply-to-review-comment.sh <owner> <repo> <pr-number> <comment-id> <reply-body>
 ./.agents/skills/create-pr/scripts/resolve-review-thread.sh <thread-id>
 ```
 
@@ -168,7 +168,7 @@ If reply or resolve fails, report the concrete limitation instead of claiming su
 Thread-resolution enforcement rule:
 
 - Replying is not enough. After a confirmed reply, you MUST attempt `resolve-review-thread.sh` for that thread.
-- Do not resolve a Copilot-owned thread unless reply creation has been confirmed, or you explicitly report that all supported reply mechanisms failed for that exact thread due to a permissions/platform limitation.
+- Do not resolve a Copilot-owned thread unless reply creation has been confirmed, or you explicitly report that the supported reply mechanism failed for that exact thread due to a permissions/platform limitation.
 - Treat any unresolved Copilot-owned thread as actionable until resolution is confirmed in the latest fetched review-thread set.
 - Do not declare Copilot remediation complete while Copilot-owned threads remain unresolved unless you explicitly report a permissions/platform limitation.
 
@@ -176,6 +176,7 @@ Operational rule for completion checks:
 
 - Never infer Copilot completion from previously handled comment IDs alone.
 - After every push, re-fetch the full current review-thread set and treat any unresolved Copilot-owned thread as actionable, even if earlier Copilot threads were already resolved.
+- Outdated Copilot-owned threads that remain unresolved are still actionable until resolution is confirmed in the latest fetched thread set.
 - A top-level Copilot review summary in `COMMENTED` state is not actionable by itself, but it must trigger a fresh full sweep of review threads because it may accompany newly opened inline comments.
 
 ### 7. Wait for CI and remediate failures
@@ -278,6 +279,7 @@ Stop only when all of these are true:
 - the latest Copilot review used for completion corresponds to the current PR head SHA
 - no new actionable Copilot comments remain after the latest green CI head has been reviewed
 - zero unresolved Copilot-owned review threads remain in the latest fetched review-thread set
+- after the last thread resolution, the full review-thread set has been re-fetched once more and still shows zero unresolved Copilot-owned threads
 - the branch reflects all fixes already pushed to the PR
 
 Do not merge the PR as part of this skill unless a higher-priority instruction explicitly expands scope.
@@ -292,8 +294,7 @@ Do not merge the PR as part of this skill unless a higher-priority instruction e
 - If CI is pending for too long, report the exact run IDs and statuses instead of saying only that it is "still running."
 - If CI fails repeatedly for the same reason after fixes, stop at the cycle cap and summarize the repeated failure.
 - If reply creation succeeds but thread resolution fails, keep the reply and record the limitation.
-- If the primary REST reply path fails, `reply-to-review-comment.sh` must try the supported fallback reply mechanism before the thread is treated as blocked.
-- If every supported reply mechanism fails, report that exact per-thread limitation and do not claim that the thread was commented on.
+- If the supported REST reply path fails, report that exact per-thread limitation and do not claim that the thread was commented on.
 - If a thread contains unresolved human discussion, do not auto-resolve it unless your reply closes the remaining context too.
 
 ## Safety Rules

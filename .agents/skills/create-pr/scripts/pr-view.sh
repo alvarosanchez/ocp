@@ -4,4 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-gh pr view --json number,url,headRefName,baseRefName,state,statusCheckRollup 2>/dev/null || true
+if gh pr view --json number,url,headRefName,headRefOid,headRepositoryOwner,baseRefName,state,statusCheckRollup,reviews 2>/dev/null; then
+  exit 0
+fi
+
+echo '{"exists":false}'
