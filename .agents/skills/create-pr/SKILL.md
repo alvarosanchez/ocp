@@ -48,20 +48,20 @@ Do not use this skill when the user asks only to:
 
 ## Skill Layout
 
-This skill uses deterministic shell scripts in `scripts/` for repeated operations:
+This skill uses deterministic shell scripts in `.agents/skills/create-pr/scripts/` for repeated operations:
 
-- `scripts/preflight.sh`
-- `scripts/inspect-worktree.sh`
-- `scripts/commit-if-dirty.sh`
-- `scripts/push-branch.sh`
-- `scripts/pr-view.sh`
-- `scripts/pr-create.sh`
-- `scripts/copilot-review-state.sh`
-- `scripts/reply-to-review-comment.sh`
-- `scripts/resolve-review-thread.sh`
-- `scripts/ci-status.sh`
-- `scripts/ci-run-log.sh`
-- `scripts/request-copilot-review.sh`
+- `.agents/skills/create-pr/scripts/preflight.sh`
+- `.agents/skills/create-pr/scripts/inspect-worktree.sh`
+- `.agents/skills/create-pr/scripts/commit-if-dirty.sh`
+- `.agents/skills/create-pr/scripts/push-branch.sh`
+- `.agents/skills/create-pr/scripts/pr-view.sh`
+- `.agents/skills/create-pr/scripts/pr-create.sh`
+- `.agents/skills/create-pr/scripts/copilot-review-state.sh`
+- `.agents/skills/create-pr/scripts/reply-to-review-comment.sh`
+- `.agents/skills/create-pr/scripts/resolve-review-thread.sh`
+- `.agents/skills/create-pr/scripts/ci-status.sh`
+- `.agents/skills/create-pr/scripts/ci-run-log.sh`
+- `.agents/skills/create-pr/scripts/request-copilot-review.sh`
 
 ## Operating Procedure
 
@@ -70,7 +70,7 @@ This skill uses deterministic shell scripts in `scripts/` for repeated operation
 Run:
 
 ```bash
-./scripts/preflight.sh
+./.agents/skills/create-pr/scripts/preflight.sh
 ```
 
 Stop and report a blocker if authentication fails, the branch is detached, or the current branch matches the repository default branch.
@@ -80,13 +80,13 @@ Stop and report a blocker if authentication fails, the branch is detached, or th
 Run:
 
 ```bash
-./scripts/inspect-worktree.sh
+./.agents/skills/create-pr/scripts/inspect-worktree.sh
 ```
 
 If the worktree is dirty and commits are allowed by higher-priority runtime rules, create the initial commit before any push or PR creation:
 
 ```bash
-./scripts/commit-if-dirty.sh "<commit-message>" <relevant-files...>
+./.agents/skills/create-pr/scripts/commit-if-dirty.sh "<commit-message>" <relevant-files...>
 ```
 
 If commits are not allowed in the surrounding runtime, stop and report that PR creation is blocked on user-authorized commit/push.
@@ -96,7 +96,7 @@ If commits are not allowed in the surrounding runtime, stop and report that PR c
 Run:
 
 ```bash
-./scripts/push-branch.sh [remote]
+./.agents/skills/create-pr/scripts/push-branch.sh [remote]
 ```
 
 Default remote is `origin`.
@@ -106,7 +106,7 @@ Default remote is `origin`.
 First inspect current PR state:
 
 ```bash
-./scripts/pr-view.sh
+./.agents/skills/create-pr/scripts/pr-view.sh
 ```
 
 If a PR already exists for the branch, reuse it.
@@ -114,10 +114,10 @@ If a PR already exists for the branch, reuse it.
 If no PR exists, create one with a prepared title/body:
 
 ```bash
-./scripts/pr-create.sh <base-branch> <title> <body-file> [--draft]
+./.agents/skills/create-pr/scripts/pr-create.sh <base-branch> <title> <body-file> [--draft]
 ```
 
-Then run `./scripts/pr-view.sh` again and record the PR number and URL.
+Then run `./.agents/skills/create-pr/scripts/pr-view.sh` again and record the PR number and URL.
 
 ### 5. Wait for CI first, then Copilot review
 
@@ -126,8 +126,8 @@ CI and Copilot review are both required, but the default loop order is CI first,
 Run:
 
 ```bash
-./scripts/ci-status.sh <pr-number>
-./scripts/copilot-review-state.sh <owner> <repo> <pr-number>
+./.agents/skills/create-pr/scripts/ci-status.sh <pr-number>
+./.agents/skills/create-pr/scripts/copilot-review-state.sh <owner> <repo> <pr-number>
 ```
 
 Default bounded waiting policy:
@@ -153,20 +153,22 @@ For each new unresolved Copilot comment:
 1. inspect the requested change
 2. apply the smallest correct fix when necessary
 3. reply on the thread even if no code change is needed
-4. resolve the thread immediately after replying when no human discussion remains open
+4. confirm the reply command actually succeeded from command output
+5. resolve the thread immediately after a confirmed reply when no human discussion remains open
 
 Use:
 
 ```bash
-./scripts/reply-to-review-comment.sh <owner> <repo> <comment-id> <reply-body>
-./scripts/resolve-review-thread.sh <thread-id>
+./.agents/skills/create-pr/scripts/reply-to-review-comment.sh <owner> <repo> <pr-number> <comment-id> <reply-body>
+./.agents/skills/create-pr/scripts/resolve-review-thread.sh <thread-id>
 ```
 
 If reply or resolve fails, report the concrete limitation instead of claiming success.
 
 Thread-resolution enforcement rule:
 
-- Replying is not enough. After replying, you MUST attempt `resolve-review-thread.sh` for that thread.
+- Replying is not enough. After a confirmed reply, you MUST attempt `resolve-review-thread.sh` for that thread.
+- Do not resolve a Copilot-owned thread unless reply creation has been confirmed, or you explicitly report that the supported reply mechanism failed for that exact thread due to a permissions/platform limitation.
 - Treat any unresolved Copilot-owned thread as actionable until resolution is confirmed in the latest fetched review-thread set.
 - Do not declare Copilot remediation complete while Copilot-owned threads remain unresolved unless you explicitly report a permissions/platform limitation.
 
@@ -174,6 +176,7 @@ Operational rule for completion checks:
 
 - Never infer Copilot completion from previously handled comment IDs alone.
 - After every push, re-fetch the full current review-thread set and treat any unresolved Copilot-owned thread as actionable, even if earlier Copilot threads were already resolved.
+- Outdated Copilot-owned threads that remain unresolved are still actionable until resolution is confirmed in the latest fetched thread set.
 - A top-level Copilot review summary in `COMMENTED` state is not actionable by itself, but it must trigger a fresh full sweep of review threads because it may accompany newly opened inline comments.
 
 ### 7. Wait for CI and remediate failures
@@ -182,12 +185,12 @@ CI is part of the loop, not an optional side check.
 
 After PR creation and after every push:
 
-1. run `./scripts/ci-status.sh <pr-number>`
+1. run `./.agents/skills/create-pr/scripts/ci-status.sh <pr-number>`
 2. if required checks are pending, keep waiting
 3. if a required check fails, inspect the failing run with:
 
 ```bash
-./scripts/ci-run-log.sh <run-id>
+./.agents/skills/create-pr/scripts/ci-run-log.sh <run-id>
 ```
 
 Then fix only the root cause, run the closest local verification, and continue the loop.
@@ -197,15 +200,21 @@ Then fix only the root cause, run the closest local verification, and continue t
 If either Copilot or CI remediation changes code, validate locally and then commit/push under the same rules used earlier:
 
 ```bash
-./scripts/commit-if-dirty.sh "<commit-message>" <relevant-files...>
-./scripts/push-branch.sh [remote]
+./.agents/skills/create-pr/scripts/commit-if-dirty.sh "<commit-message>" <relevant-files...>
+./.agents/skills/create-pr/scripts/push-branch.sh [remote]
 ```
 
 If autonomous commits are not allowed by the runtime, stop and report that the loop is blocked on user-authorized commit/push.
 
-### 9. Re-request Copilot review after each follow-up push
+### 9. After each follow-up push, first check whether Copilot is already reviewing the new head
 
-After a follow-up push, re-request Copilot review using the remove/add workaround:
+Immediately after every follow-up push:
+
+1. record the new PR `headRefOid`
+2. run `./.agents/skills/create-pr/scripts/copilot-review-state.sh <owner> <repo> <pr-number>`
+3. inspect whether there is already observable Copilot activity for that exact head (review, thread, or comment)
+4. if Copilot is already reviewing or has already reviewed that exact head, do not treat the push as needing another blind re-request yet; continue into the wait cycle for that same head
+5. if there is no observable Copilot activity for the new head, re-request Copilot review using the remove/add workaround:
 
 ```bash
 gh pr edit <pr-number> --remove-reviewer @copilot || true
@@ -215,16 +224,20 @@ gh pr edit <pr-number> --add-reviewer @copilot
 Use the skill script wrapper so repository scoping and result validation are consistent:
 
 ```bash
-./scripts/request-copilot-review.sh <owner> <repo> <pr-number>
+./.agents/skills/create-pr/scripts/request-copilot-review.sh <owner> <repo> <pr-number>
 ```
 
-This is a required step after every remediation push, not an optional best-effort extra. Do not continue to the next wait cycle until you have attempted the re-request and recorded the concrete result.
+This is a required post-push decision point, not an optional best-effort extra. Do not continue to the next wait cycle until you have either:
+
+- confirmed that Copilot is already reviewing or has already reviewed the new head, or
+- attempted the re-request and recorded the concrete result
 
 Validation rule for execution:
 
-- A follow-up push is incomplete until `request-copilot-review.sh` has been run for that PR.
+- A follow-up push is incomplete until you have checked Copilot state for the new `headRefOid`.
+- If there is no observable Copilot activity for the new head, the push is incomplete until `request-copilot-review.sh` has been run for that PR.
 - Treat a successful re-request as grounded only when command output confirms which reviewer slug was accepted.
-- Record the PR head SHA at re-request time and use it as the review-completion target for the next Copilot wait cycle.
+- Record the PR head SHA at check/re-request time and use it as the review-completion target for the next Copilot wait cycle.
 - If all reviewer-request attempts fail because the repository does not support it, report that limitation explicitly and only continue if automatic Copilot review still appears on subsequent pushes.
 
 If all reviewer-request attempts fail because the repository does not support it, report that limitation and continue waiting only if automatic review still appears on new pushes.
@@ -238,22 +251,26 @@ Run this combined cycle until terminal success or a documented blocker:
 3. fix code when needed
 4. verify locally
 5. commit and push when allowed
-6. re-request Copilot review after pushes
-7. wait for Copilot review completion for the re-requested latest green head
-8. confirm Copilot has either posted review activity for that head or hit a clearly reported timeout/limitation
-9. process new Copilot comments
-10. fix code when needed
-11. verify locally
-12. commit and push when allowed
-13. re-request Copilot review after pushes
-14. wait again for CI first, then Copilot
+6. after each push, check whether Copilot is already reviewing or has already reviewed the new head
+7. if not, re-request Copilot review for that head
+8. wait for Copilot review completion for the latest green head
+9. confirm Copilot has either posted review activity for that head or hit a clearly reported timeout/limitation
+10. process new Copilot comments
+11. fix code when needed
+12. verify locally
+13. commit and push when allowed
+14. after each new push, repeat the same post-push Copilot check/re-request decision
+15. wait again for CI first, then Copilot
 
 Copilot review completion rule:
 
 - Do not treat `zero unresolved threads` alone as proof that Copilot is finished for the latest green head.
-- After a re-request, wait until Copilot has produced observable review activity for that head (review, thread, or comment) or until the bounded wait policy expires and you report the timeout/limitation explicitly.
+- After each push, first check whether Copilot is already reviewing or has already reviewed that head before deciding whether another re-request is needed.
+- If no latest-head Copilot activity is visible after that check, re-request review and then wait until Copilot has produced observable review activity for that head (review, thread, or comment) or until the bounded wait policy expires and you report the timeout/limitation explicitly.
 - Treat Copilot review completion for terminal-state purposes as valid only when the newest relevant Copilot review is tied to the current PR head SHA, not an older push.
 - Always re-fetch the current PR head SHA after every push and compare it to the commit OID of the latest Copilot review before concluding that the latest head has been reviewed.
+- Operationally, do not rely on human inspection alone: `copilot-review-state.sh` must surface the current `headRefOid`, the newest Copilot review `commit.oid`, and enough thread state to decide whether the latest head has actually been reviewed.
+- After CI turns green for a pushed head, you MUST run `copilot-review-state.sh` again and treat the loop as incomplete unless the newest Copilot review commit matches the current head SHA or the bounded wait timeout has been reached and reported explicitly.
 - Only after that completion check may you decide that there are no actionable Copilot comments remaining.
 
 Default caps:
@@ -274,6 +291,7 @@ Stop only when all of these are true:
 - the latest Copilot review used for completion corresponds to the current PR head SHA
 - no new actionable Copilot comments remain after the latest green CI head has been reviewed
 - zero unresolved Copilot-owned review threads remain in the latest fetched review-thread set
+- after the last thread resolution, the full review-thread set has been re-fetched once more and still shows zero unresolved Copilot-owned threads
 - the branch reflects all fixes already pushed to the PR
 
 Do not merge the PR as part of this skill unless a higher-priority instruction explicitly expands scope.
@@ -288,6 +306,7 @@ Do not merge the PR as part of this skill unless a higher-priority instruction e
 - If CI is pending for too long, report the exact run IDs and statuses instead of saying only that it is "still running."
 - If CI fails repeatedly for the same reason after fixes, stop at the cycle cap and summarize the repeated failure.
 - If reply creation succeeds but thread resolution fails, keep the reply and record the limitation.
+- If the supported REST reply path fails, report that exact per-thread limitation and do not claim that the thread was commented on.
 - If a thread contains unresolved human discussion, do not auto-resolve it unless your reply closes the remaining context too.
 
 ## Safety Rules
@@ -306,7 +325,7 @@ Do not merge the PR as part of this skill unless a higher-priority instruction e
 - [ ] `description` includes PR creation, dirty-worktree commit handling, Copilot review, and CI loop triggers.
 - [ ] The workflow includes an initial commit step for dirty worktrees when commits are allowed.
 - [ ] The workflow treats CI as a required wait-and-remediate loop, not just Copilot review.
-- [ ] Repeated shell operations live under `scripts/`.
+- [ ] Repeated shell operations live under `.agents/skills/create-pr/scripts/`.
 - [ ] Trigger phrases are broad enough to catch plain "create a PR" requests.
 - [ ] The skill does not instruct the agent to mention `@copilot`.
 - [ ] The loop has bounded wait policies and bounded remediation caps.

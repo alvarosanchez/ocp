@@ -119,6 +119,39 @@ class InteractiveAppSelectionRefreshTest {
     }
 
     @Test
+    void navigateToParentFromInheritedFileSelectsParentFileNode() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path baseProfilePath = repositoryPath.resolve("base");
+        Path childProfilePath = repositoryPath.resolve("child");
+        Path inheritedFilePath = baseProfilePath.resolve("opencode.json");
+        Files.createDirectories(baseProfilePath);
+        Files.createDirectories(childProfilePath);
+        Files.writeString(repositoryPath.resolve("repository.json"), "{\"profiles\":[{\"name\":\"base\"},{\"name\":\"child\",\"extends_from\":\"base\"}]}");
+        Files.writeString(inheritedFilePath, "{\"base\":true}");
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = createApp();
+        invokeReloadState(app);
+        selectTreeNode(app, node -> node.kind() == NodeKind.FILE && node.inherited() && inheritedFilePath.equals(node.path()));
+        invokeSyncSelectionAndPreview(app);
+
+        Method method = InteractiveApp.class.getDeclaredMethod("navigateToParentProfile");
+        method.setAccessible(true);
+        method.invoke(app);
+
+        Field selectedNodeField = InteractiveApp.class.getDeclaredField("selectedNode");
+        selectedNodeField.setAccessible(true);
+        NodeRef selectedNode = (NodeRef) selectedNodeField.get(app);
+        assertEquals(NodeKind.FILE, selectedNode.kind());
+        assertEquals("base", selectedNode.profileName());
+        assertEquals(inheritedFilePath, selectedNode.path());
+
+        Field statusField = InteractiveApp.class.getDeclaredField("status");
+        statusField.setAccessible(true);
+        assertEquals("Selected inherited parent file from profile base.", (String) statusField.get(app));
+    }
+
+    @Test
     void selectedFilePreviewCanHoldStyledText() throws Exception {
         InteractiveApp app = createApp();
         Text styledPreview = new AnsiTextParser().parse("\u001B[31mred\u001B[0m");
