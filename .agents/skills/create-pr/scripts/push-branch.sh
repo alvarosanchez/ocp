@@ -9,24 +9,18 @@ refspec="${2:-}"
 branch="$(git branch --show-current)"
 upstream="$(git rev-parse --abbrev-ref --symbolic-full-name @{upstream} 2>/dev/null || true)"
 
-printf 'branch=%s
-' "$branch"
-printf 'upstream=%s
-' "$upstream"
-printf 'remote=%s
-' "$remote"
+printf 'branch=%s\n' "$branch"
+printf 'upstream=%s\n' "$upstream"
+printf 'remote=%s\n' "$remote"
 if [[ -n "$refspec" ]]; then
-  printf 'refspec=%s
-' "$refspec"
+  printf 'refspec=%s\n' "$refspec"
   git push "$remote" "$refspec"
 elif [[ -z "$upstream" ]]; then
-  printf 'refspec=%s:%s
-' "$branch" "$branch"
+  printf 'refspec=%s:%s\n' "$branch" "$branch"
   git push -u "$remote" "$branch"
 else
   printf 'refspec=%s
 ' "$upstream"
   git push
 fi
-printf 'head_sha=%s
-' "$(git rev-parse HEAD)"
+printf 'head_sha=%s\n' "$(git rev-parse HEAD)"

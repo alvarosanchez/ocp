@@ -16,21 +16,17 @@ repo_ref="$owner/$repo"
 head_sha="$(gh pr view -R "$repo_ref" "$pr_number" --json headRefOid --jq '.headRefOid')"
 
 confirm_requested_reviewer() {
-  local reviewer="$1"
+  local reviewer="${1#@}"
   local requests
   requests="$(gh pr view -R "$repo_ref" "$pr_number" --json reviewRequests --jq '.reviewRequests[].login' 2>/dev/null || true)"
-  printf '%s
-' "$requests" | grep -Fxq "$reviewer"
+  printf '%s\n' "$requests" | grep -Fxq "$reviewer"
 }
 
 report_success() {
-  local reviewer="$1"
-  printf 'requested_reviewer=%s
-' "$reviewer"
-  printf 'pr_number=%s
-' "$pr_number"
-  printf 'head_sha=%s
-' "$head_sha"
+  local reviewer="${1#@}"
+  printf 'requested_reviewer=%s\n' "$reviewer"
+  printf 'pr_number=%s\n' "$pr_number"
+  printf 'head_sha=%s\n' "$head_sha"
 }
 
 # remove/add workaround first
@@ -59,8 +55,6 @@ for reviewer in "${reviewers[@]}"; do
 done
 
 echo "ERROR: unable to confirm accepted Copilot reviewer request on PR after request attempt" >&2
-printf 'pr_number=%s
-' "$pr_number" >&2
-printf 'head_sha=%s
-' "$head_sha" >&2
+printf 'pr_number=%s\n' "$pr_number" >&2
+printf 'head_sha=%s\n' "$head_sha" >&2
 exit 1
