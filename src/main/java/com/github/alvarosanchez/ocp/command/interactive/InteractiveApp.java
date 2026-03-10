@@ -76,6 +76,7 @@ public final class InteractiveApp extends ToolkitApp {
     private static final String REFRESH_CANCELLED_MESSAGE = "Refresh cancelled. Local changes were left untouched.";
     private static final String STATUS_SELECT_NODE_FIRST = "Select a repository, profile, or file first.";
     private static final String STATUS_INHERITED_FILE_READ_ONLY = "Inherited file is read-only and cannot be edited.";
+    private static final String STATUS_CONFIG_FILE_UNAVAILABLE = "OCP config file does not exist yet. Add or create a repository first.";
     private static final String ERROR_REPOSITORY_SELECTION_REQUIRED = "Repository selection is required.";
     private static final String STATUS_DELETE_CANCELLED_REPOSITORY_MISMATCH = "Delete cancelled: repository name mismatch.";
     private static final String STATUS_DELETE_CANCELLED_PROFILE_MISMATCH = "Delete cancelled: profile name mismatch.";
@@ -86,6 +87,7 @@ public final class InteractiveApp extends ToolkitApp {
         TreeShortcutHints.Shortcut.TAB_SWITCH_PANE,
         TreeShortcutHints.Shortcut.ADD_EXISTING_REPOSITORY,
         TreeShortcutHints.Shortcut.CREATE_NEW_REPOSITORY,
+        TreeShortcutHints.Shortcut.EDIT_OCP_CONFIG,
         TreeShortcutHints.Shortcut.REFRESH_ALL_REPOSITORIES,
         TreeShortcutHints.Shortcut.QUIT
     );
@@ -158,6 +160,7 @@ public final class InteractiveApp extends ToolkitApp {
     private String refreshAllCompletionMessage = "Refreshed all repositories.";
 
     private NodeRef selectedNode;
+    private NodeRef configEditReturnSelection;
     private RepositoryCommitPushPreview selectedRepositoryCommitPushPreview;
     private String selectedFileContent = "";
     private String selectedFilePreviewContent = "";
@@ -458,6 +461,10 @@ public final class InteractiveApp extends ToolkitApp {
                 "Create repository",
                 List.of("Repository name", "Repository location path", "Initial profile name (optional)")
             );
+            return EventResult.HANDLED;
+        }
+        if (event.isChar('o')) {
+            editOcpConfigFile();
             return EventResult.HANDLED;
         }
         if (event.isChar('c')) {
@@ -1185,6 +1192,12 @@ public final class InteractiveApp extends ToolkitApp {
         if (currentSelection == lastSyncedTreeSelection && isSameSelection(nextSelectedNode, selectedNode)) {
             return;
         }
+        if (currentSelection == lastSyncedTreeSelection
+            && selectedNode != null
+            && selectedNode.path() != null
+            && isOcpConfigFile(selectedNode.path())) {
+            return;
+        }
         lastSyncedTreeSelection = currentSelection;
 
         selectedNode = nextSelectedNode;
@@ -1448,7 +1461,9 @@ public final class InteractiveApp extends ToolkitApp {
             return;
         }
         NodeRef savedSelection = selectedNode;
+        NodeRef returnSelection = configEditReturnSelection;
         Path filePath = selectedNode.path();
+        boolean reloadAfterSave = isOcpConfigFile(filePath);
         runBusyOperation(
             "Saving " + filePath.getFileName() + "...",
             () -> {
@@ -1461,11 +1476,17 @@ public final class InteractiveApp extends ToolkitApp {
             "Saved " + filePath.getFileName() + ".",
             () -> {
                 editMode = false;
-                if (runner() == null && savedSelection != null && savedSelection.kind() == NodeKind.FILE) {
+                if (reloadAfterSave) {
+                    restoreConfigEditReturnSelection(returnSelection);
+                } else if (runner() == null && savedSelection != null && savedSelection.kind() == NodeKind.FILE) {
                     selectedNode = savedSelection;
                 }
                 selectedFileContent = editorState.text();
-                refreshSelectedFilePreview();
+                if (isOcpConfigFile(filePath)) {
+                    configEditReturnSelection = null;
+                } else {
+                    refreshSelectedFilePreview();
+                }
                 if (runner() != null) {
                     runner().focusManager().setFocus(TREE_ID);
                     activePane = Pane.TREE;
@@ -1476,8 +1497,85 @@ public final class InteractiveApp extends ToolkitApp {
         );
     }
 
+
+
+    private void restoreConfigEditReturnSelection(NodeRef returnSelection) {
+        if (returnSelection == null) {
+            selectedNode = null;
+            selectedFileContent = "";
+            selectedFilePreviewContent = "";
+            selectedFilePreview = DetailPaneRenderer.plainText("");
+            editorState.setText("");
+            previewScrollOffset = 0;
+            refreshSelectedRepositoryCommitPushPreview();
+            return;
+        }
+
+        selectNode(node -> isSameSelection(node, returnSelection));
+        if (!isSameSelection(selectedNode, returnSelection)) {
+            selectedNode = returnSelection;
+        }
+
+        previewScrollOffset = 0;
+        if (selectedNode.kind() == NodeKind.FILE && selectedNode.path() != null) {
+            lastRequestedPreviewKey = null;
+            refreshSelectedFilePreview();
+        } else {
+            selectedFileContent = "";
+            selectedFilePreviewContent = "";
+            selectedFilePreview = DetailPaneRenderer.plainText("");
+            editorState.setText("");
+            refreshSelectedRepositoryCommitPushPreview();
+        }
+    }
+
+    private void editOcpConfigFile() {
+        Path configFile = ocpConfigFilePath();
+        if (!Files.exists(configFile)) {
+            status = STATUS_CONFIG_FILE_UNAVAILABLE;
+            return;
+        }
+
+        try {
+            configEditReturnSelection = selectedNode;
+            selectedNode = NodeRef.file(null, null, configFile);
+            selectedFileContent = Files.readString(configFile);
+            selectedFilePreviewContent = selectedFileContent;
+            selectedFilePreview = DetailPaneRenderer.plainText(selectedFileContent);
+            previewScrollOffset = 0;
+            editorState.setText(selectedFileContent);
+            editMode = true;
+            resetEditorCursorToTop();
+            if (runner() != null) {
+                runner().focusManager().setFocus(EDITOR_ID);
+                activePane = Pane.DETAIL;
+            } else {
+                activePane = Pane.DETAIL;
+            }
+            status = "Editing config.json. Ctrl+S to save, Esc to cancel.";
+        } catch (IOException e) {
+            status = "Failed to read OCP config file " + configFile + ": " + e.getMessage();
+        }
+    }
+
+    private boolean isOcpConfigFile(Path filePath) {
+        return ocpConfigFilePath().equals(filePath);
+    }
+
+    private Path ocpConfigFilePath() {
+        String configuredPath = System.getProperty("ocp.config.dir");
+        if (configuredPath != null && !configuredPath.isBlank()) {
+            return Path.of(configuredPath).resolve("config.json");
+        }
+        return Path.of(System.getProperty("user.home"), ".config", "ocp", "config.json");
+    }
+
     private void exitEditModeToTree() {
         editMode = false;
+        if (selectedNode != null && selectedNode.path() != null && isOcpConfigFile(selectedNode.path())) {
+            restoreConfigEditReturnSelection(configEditReturnSelection);
+            configEditReturnSelection = null;
+        }
         if (runner() != null) {
             runner().focusManager().setFocus(TREE_ID);
             activePane = Pane.TREE;

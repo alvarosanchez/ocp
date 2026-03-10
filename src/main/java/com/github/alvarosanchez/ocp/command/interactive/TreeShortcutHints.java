@@ -128,6 +128,7 @@ final class TreeShortcutHints {
         static final Shortcut TAB_SWITCH_PANE = new Shortcut("Tab", "switch pane");
         static final Shortcut ADD_EXISTING_REPOSITORY = new Shortcut("a", "add existing repo");
         static final Shortcut CREATE_NEW_REPOSITORY = new Shortcut("n", "create new repo");
+        static final Shortcut EDIT_OCP_CONFIG = new Shortcut("o", "edit OCP config");
         static final Shortcut REFRESH_ALL_REPOSITORIES = new Shortcut("R", "refresh all");
         static final Shortcut QUIT = new Shortcut("q", "quit");
 
