@@ -13,27 +13,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@v6
-
-      - name: Set up Oracle GraalVM for JDK 25
-        uses: graalvm/setup-graalvm@v1
-        with:
-          distribution: "graalvm"
-          java-version: "25"
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          cache: gradle
-
-      - name: Run build
-        run: ./gradlew --no-daemon build
-
-      - name: Run native tests
-        run: ./gradlew --no-daemon nativeTest
-
-  native-container-smoke:
-    runs-on: ubuntu-latest
     container: container-registry.oracle.com/graalvm/native-image:25-ol8
 
     steps:
@@ -43,6 +22,12 @@ jobs:
 
       - name: Checkout source
         uses: actions/checkout@v6
+
+      - name: Run build
+        run: ./gradlew --no-daemon build
+
+      - name: Run native tests
+        run: ./gradlew --no-daemon nativeTest
 
       - name: Run native compile smoke test
         shell: bash
