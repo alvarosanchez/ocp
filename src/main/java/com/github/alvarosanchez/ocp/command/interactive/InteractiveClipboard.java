@@ -4,8 +4,11 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 final class InteractiveClipboard {
+
+    private static final long CLIPBOARD_COMMAND_TIMEOUT_SECONDS = 2L;
 
     private static final List<List<String>> MAC_COMMANDS = List.of(
         List.of("pbcopy")
@@ -62,8 +65,13 @@ final class InteractiveClipboard {
             return false;
         }
         try {
-            return process.waitFor() == 0;
+            if (!process.waitFor(CLIPBOARD_COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return false;
+            }
+            return process.exitValue() == 0;
         } catch (InterruptedException e) {
+            process.destroyForcibly();
             Thread.currentThread().interrupt();
             return false;
         }
