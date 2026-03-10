@@ -47,6 +47,19 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v6
 
+      - name: Compute Gradle inputs hash for Linux container build
+        if: ${{ matrix.container_image != '' }}
+        id: gradle-hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          hash=$(find . -type f \( -name '*.gradle' -o -name '*.gradle.kts' -o -name 'gradle-wrapper.properties' \) -print0 \
+            | sort -z \
+            | xargs -0 sha256sum \
+            | sha256sum \
+            | awk '{print $1}')
+          echo "hash=${hash}" >> "$GITHUB_OUTPUT"
+
       - name: Cache Gradle dependencies for Linux container build
         if: ${{ matrix.container_image != '' }}
         uses: actions/cache@v4
@@ -54,7 +67,7 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          key: ${{ runner.os }}-gradle-${{ steps.gradle-hash.outputs.hash }}
           restore-keys: |
             ${{ runner.os }}-gradle-
 
