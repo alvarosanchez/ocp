@@ -39,7 +39,7 @@ jobs:
     steps:
       - name: Install container prerequisites
         shell: bash
-        run: microdnf install -y git gzip tar
+        run: microdnf install -y findutils git gzip tar
 
       - name: Checkout source
         uses: actions/checkout@v6
