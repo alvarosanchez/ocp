@@ -1572,10 +1572,6 @@ public final class InteractiveApp extends ToolkitApp {
             lastSyncedTreeSelection = currentSelection;
             return;
         }
-        boolean preserveFileEditMode = editMode
-            && selectedNode != null
-            && selectedNode.kind() == NodeKind.FILE
-            && isSameSelection(nextSelectedNode, selectedNode);
         if (currentSelection == lastSyncedTreeSelection && isSameSelection(nextSelectedNode, selectedNode)) {
             return;
         }
@@ -1589,7 +1585,7 @@ public final class InteractiveApp extends ToolkitApp {
 
         selectedNode = nextSelectedNode;
         lastRequestedPreviewKey = null;
-        editMode = preserveFileEditMode;
+        editMode = false;
         previewScrollOffset = 0;
 
         if (selectedNode == null || selectedNode.kind() != NodeKind.FILE || selectedNode.path() == null) {
@@ -2109,9 +2105,11 @@ public final class InteractiveApp extends ToolkitApp {
                 return currentIndex[0];
             }
             currentIndex[0] += 1;
-            Integer childMatch = findVisibleTreeIndex(predicate, node.children(), currentIndex);
-            if (childMatch != null) {
-                return childMatch;
+            if (!node.isLeaf() && node.isExpanded()) {
+                Integer childMatch = findVisibleTreeIndex(predicate, node.children(), currentIndex);
+                if (childMatch != null) {
+                    return childMatch;
+                }
             }
         }
         return null;

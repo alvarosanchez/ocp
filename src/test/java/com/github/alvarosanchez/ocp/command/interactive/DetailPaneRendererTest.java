@@ -31,11 +31,11 @@ class DetailPaneRendererTest {
         NodeRef inheritedFile = NodeRef.inheritedFile("repo", "profile", Path.of("config.json"), "base");
 
         assertEquals(
-            "Press e to edit selected file | f creates a new file | x deletes this file | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview",
+            "Press e to edit selected file | f creates a new file | d deletes this file | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview",
             DetailPaneRenderer.detailHint(file, false)
         );
         assertEquals(
-            "Preview shows resolved deep-merged contents. Press e to edit the profile file | f creates a new file | x deletes this file | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview",
+            "Preview shows resolved deep-merged contents. Press e to edit the profile file | f creates a new file | d deletes this file | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview",
             DetailPaneRenderer.detailHint(deepMergedFile, false)
         );
         assertEquals(
