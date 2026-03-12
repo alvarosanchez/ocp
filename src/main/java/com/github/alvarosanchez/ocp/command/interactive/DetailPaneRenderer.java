@@ -169,12 +169,12 @@ final class DetailPaneRenderer {
                 return "Editing mode: Ctrl+S save, Esc exit";
             }
             if (selectedNode.inherited()) {
-                return "Inherited file (read-only). Press p to open the parent file | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview";
+                return "Inherited file (read-only). Press p to open the parent file | f creates a new file in this profile | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview";
             }
             if (selectedNode.deepMerged()) {
-                return "Preview shows resolved deep-merged contents. Press e to edit the profile file | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview";
+                return "Preview shows resolved deep-merged contents. Press e to edit the profile file | f creates a new file | x deletes this file | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview";
             }
-            return "Press e to edit selected file | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview";
+            return "Press e to edit selected file | f creates a new file | x deletes this file | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview";
         }
         return "Detail pane";
     }

@@ -52,6 +52,7 @@ final class TreeShortcutHints {
                 List.of(
                     Shortcut.USE_PROFILE,
                     Shortcut.CREATE_PROFILE,
+                    Shortcut.CREATE_FILE,
                     Shortcut.DELETE_PROFILE
                 ),
                 selectedProfileHasParent,
@@ -91,10 +92,11 @@ final class TreeShortcutHints {
         List<Shortcut> actions = new java.util.ArrayList<>();
         if (!selectedNode.inherited()) {
             actions.add(Shortcut.EDIT_FILE);
+            actions.add(Shortcut.CREATE_FILE);
+            actions.add(Shortcut.DELETE_FILE);
         }
         actions.add(Shortcut.COPY_PATH);
         actions.add(Shortcut.USE_PROFILE);
-        actions.add(Shortcut.DELETE_PROFILE);
         return List.copyOf(actions);
     }
 
@@ -143,12 +145,14 @@ final class TreeShortcutHints {
         static final Shortcut LEFT_RIGHT_COLLAPSE_EXPAND = new Shortcut("Left/Right", "collapse/expand");
         static final Shortcut REFRESH_REPOSITORY = new Shortcut("r", "refresh repository");
         static final Shortcut CREATE_PROFILE = new Shortcut("c", "create profile");
+        static final Shortcut CREATE_FILE = new Shortcut("f", "create file");
         static final Shortcut COMMIT_AND_PUSH_REPOSITORY = new Shortcut("g", "commit and push");
         static final Shortcut MIGRATE_REPOSITORY = new Shortcut("m", "migrate to git/github");
         static final Shortcut DELETE_REPOSITORY = new Shortcut("d", "delete repo");
         static final Shortcut USE_PROFILE = new Shortcut("u", "use profile");
         static final Shortcut DELETE_PROFILE = new Shortcut("d", "delete profile");
         static final Shortcut EDIT_FILE = new Shortcut("e", "edit file");
+        static final Shortcut DELETE_FILE = new Shortcut("d", "delete file");
         static final Shortcut COPY_PATH = new Shortcut("y", "copy path");
         static final Shortcut GO_PARENT = new Shortcut("p", "go parent");
     }
