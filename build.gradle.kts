@@ -107,6 +107,7 @@ graalvmNative {
         }
         named("test") {
             buildArgs.add("--initialize-at-build-time=org.junit.platform.commons.logging.LoggerFactory\$DelegatingLogger")
+            buildArgs.add("--enable-monitoring=jfr")
             buildArgs.add("-H:+UnlockExperimentalVMOptions")
             buildArgs.add("-H:+SharedArenaSupport")
             buildArgs.add("-H:IncludeResources=dev/tamboui/tui/bindings/.*\\.properties")
