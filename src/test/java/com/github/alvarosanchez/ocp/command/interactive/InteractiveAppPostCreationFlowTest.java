@@ -3,6 +3,7 @@ package com.github.alvarosanchez.ocp.command.interactive;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.alvarosanchez.ocp.command.Cli;
@@ -106,6 +107,36 @@ class InteractiveAppPostCreationFlowTest {
         prompt.values.set(2, "");
 
         setPrompt(app, prompt);
+        invokeApplyPrompt(app);
+
+        PromptState postCreationPrompt = readPrompt(app);
+        assertNotNull(postCreationPrompt);
+        assertEquals(PromptAction.POST_CREATION_GIT_INIT, postCreationPrompt.action);
+        assertEquals("yes", postCreationPrompt.values.getFirst());
+    }
+
+    @Test
+    void createRepositoryFromFileSelectionStillStartsPostCreationPrompt() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path profilePath = repositoryPath.resolve("default");
+        Path filePath = profilePath.resolve("opencode.json");
+        Files.createDirectories(profilePath);
+        Files.writeString(repositoryPath.resolve("repository.json"), "{\"profiles\":[{\"name\":\"default\"}]}");
+        Files.writeString(filePath, "{}");
+
+        RepositoryService repositoryService = applicationContext.getBean(RepositoryService.class);
+        repositoryService.add(repositoryPath.toString(), "repo-a");
+
+        InteractiveApp app = createApp();
+        invokeReloadState(app);
+        setSelectedNode(app, NodeRef.file("repo-a", "default", filePath));
+
+        PromptState prompt = PromptState.multi(PromptAction.CREATE_REPOSITORY, "Create repository", java.util.List.of("Repository name", "Repository location path", "Initial profile name (optional)"));
+        prompt.values.set(0, "team-repo");
+        prompt.values.set(1, "");
+        prompt.values.set(2, "");
+        setPrompt(app, prompt);
+
         invokeApplyPrompt(app);
 
         PromptState postCreationPrompt = readPrompt(app);
@@ -236,6 +267,62 @@ class InteractiveAppPostCreationFlowTest {
         assertTrue(finalStatus.contains("Created an initial commit."));
     }
 
+    @Test
+    void createRepositorySelectsCreatedRepositoryNode() throws Exception {
+        Path workspace = Path.of(System.getProperty("ocp.working.dir"));
+        Files.createDirectories(workspace);
+
+        InteractiveApp app = createApp();
+
+        PromptState prompt = PromptState.multi(PromptAction.CREATE_REPOSITORY, "Create repository", java.util.List.of("Repository name", "Repository location path", "Initial profile name (optional)"));
+        prompt.values.set(0, "selected-repo");
+        prompt.values.set(1, "");
+        prompt.values.set(2, "");
+        setPrompt(app, prompt);
+        invokeApplyPrompt(app);
+
+        PromptState postCreationPrompt = readPrompt(app);
+        assertNotNull(postCreationPrompt);
+        assertEquals(PromptAction.POST_CREATION_GIT_INIT, postCreationPrompt.action);
+        postCreationPrompt.values.set(0, "no");
+        setPrompt(app, postCreationPrompt);
+        invokeApplyPrompt(app);
+
+        NodeRef selectedNode = readSelectedNode(app);
+        assertNotNull(selectedNode);
+        assertEquals(NodeKind.REPOSITORY, selectedNode.kind());
+        assertEquals("selected-repo", selectedNode.repositoryName());
+    }
+
+    @Test
+    void deleteFileBasedRepositoryWithFolderDoesNotEndWithNotConfiguredError() throws Exception {
+        Path localRepository = tempDir.resolve("delete-me");
+        Files.createDirectories(localRepository);
+        Files.writeString(localRepository.resolve("repository.json"), "{\"profiles\":[]}");
+
+        RepositoryService repositoryService = applicationContext.getBean(RepositoryService.class);
+        repositoryService.add(localRepository.toString(), "delete-me");
+
+        InteractiveApp app = createApp();
+        invokeReloadState(app);
+        setSelectedNode(app, NodeRef.repository("delete-me", localRepository));
+
+        PromptState prompt = PromptState.multiWithOptions(
+            PromptAction.DELETE_REPOSITORY_FILE_BASED,
+            "Delete file-based repository",
+            List.of("Type repository name to confirm: delete-me", "Delete local folder as well?"),
+            List.of(List.of(), List.of("no", "yes"))
+        );
+        prompt.expectedConfirmation = "delete-me";
+        prompt.values.set(0, "delete-me");
+        prompt.values.set(1, "yes");
+        setPrompt(app, prompt);
+
+        invokeApplyPrompt(app);
+
+        assertEquals("Deleted repository delete-me and local folder.", readStatus(app));
+    }
+
     private InteractiveApp createApp() {
         return new InteractiveApp(
             applicationContext.getBean(ProfileService.class),
@@ -280,6 +367,12 @@ class InteractiveAppPostCreationFlowTest {
         Field selectedNodeField = InteractiveApp.class.getDeclaredField("selectedNode");
         selectedNodeField.setAccessible(true);
         selectedNodeField.set(app, nodeRef);
+    }
+
+    private static NodeRef readSelectedNode(InteractiveApp app) throws Exception {
+        Field selectedNodeField = InteractiveApp.class.getDeclaredField("selectedNode");
+        selectedNodeField.setAccessible(true);
+        return (NodeRef) selectedNodeField.get(app);
     }
 
     private static String readStatus(InteractiveApp app) throws Exception {
