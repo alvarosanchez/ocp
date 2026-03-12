@@ -46,6 +46,8 @@ dependencies {
     testImplementation(libs.testcontainers.junit.jupiter)
     testImplementation(libs.testcontainers.gitserver)
     testImplementation(libs.commons.codec)
+    testImplementation(testFixtures(libs.tamboui.toolkit.test.fixtures))
+    testImplementation(testFixtures(libs.tamboui.tui.test.fixtures))
 }
 
 application {

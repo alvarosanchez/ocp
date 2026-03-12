@@ -24,6 +24,8 @@ commons-codec = { module = "commons-codec:commons-codec", version.ref = "commons
 tamboui-bom = { module = "dev.tamboui:tamboui-bom", version.ref = "tamboui" }
 tamboui-toolkit = { module = "dev.tamboui:tamboui-toolkit" }
 tamboui-panama-backend = { module = "dev.tamboui:tamboui-panama-backend" }
+tamboui-toolkit-test-fixtures = { module = "dev.tamboui:tamboui-toolkit", version.ref = "tamboui" }
+tamboui-tui-test-fixtures = { module = "dev.tamboui:tamboui-tui", version.ref = "tamboui" }
 
 [plugins]
 micronaut-application = { id = "io.micronaut.application", version.ref = "micronaut-plugin" }
