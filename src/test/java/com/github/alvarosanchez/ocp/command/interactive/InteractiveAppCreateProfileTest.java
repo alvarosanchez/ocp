@@ -149,7 +149,7 @@ class InteractiveAppCreateProfileTest {
         InteractiveApp app = createApp();
         invokeReloadState(app);
         setSelectedNode(app, NodeRef.file("repo-a", "default", filePath));
-        app.openCreateProfilePromptForSelectedNodeForTest();
+        app.openCreateProfilePromptForSelectedNode();
 
         PromptState storedPrompt = readPrompt(app);
 

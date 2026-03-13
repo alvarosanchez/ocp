@@ -1454,7 +1454,7 @@ public final class InteractiveApp extends ToolkitApp {
         return prompt;
     }
 
-    void openCreateProfilePromptForSelectedNodeForTest() {
+    void openCreateProfilePromptForSelectedNode() {
         String repositoryName = selectedRepositoryName();
         if (repositoryName == null) {
             status = STATUS_SELECT_NODE_FIRST;
@@ -1463,7 +1463,7 @@ public final class InteractiveApp extends ToolkitApp {
         prompt = buildCreateProfilePrompt(repositoryName, profileService.listResolvableProfileNames());
     }
 
-    void openDeletePromptForSelectedNodeForTest() {
+    void openDeletePromptForSelectedNode() {
         if (selectedNode == null) {
             status = STATUS_SELECT_NODE_FIRST;
             return;

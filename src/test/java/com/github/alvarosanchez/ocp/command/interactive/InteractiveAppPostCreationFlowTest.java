@@ -332,13 +332,12 @@ class InteractiveAppPostCreationFlowTest {
         runCommand(List.of("git", "init", localRepository.toString()));
         Files.writeString(localRepository.resolve("dirty.txt"), "changes\n");
 
-        RepositoryService repositoryService = applicationContext.getBean(RepositoryService.class);
         writeConfig(new RepositoryEntry("dirty-repo", "git@github.com:acme/dirty-repo.git", localRepository.toString()));
 
         InteractiveApp app = createApp();
         invokeReloadState(app);
         setSelectedNode(app, NodeRef.repository("dirty-repo", localRepository));
-        app.openDeletePromptForSelectedNodeForTest();
+        app.openDeletePromptForSelectedNode();
 
         PromptState prompt = readPrompt(app);
 
@@ -354,13 +353,12 @@ class InteractiveAppPostCreationFlowTest {
         Files.createDirectories(localRepository);
         runCommand(List.of("git", "init", localRepository.toString()));
 
-        RepositoryService repositoryService = applicationContext.getBean(RepositoryService.class);
         writeConfig(new RepositoryEntry("clean-repo", "git@github.com:acme/clean-repo.git", localRepository.toString()));
 
         InteractiveApp app = createApp();
         invokeReloadState(app);
         setSelectedNode(app, NodeRef.repository("clean-repo", localRepository));
-        app.openDeletePromptForSelectedNodeForTest();
+        app.openDeletePromptForSelectedNode();
 
         PromptState prompt = readPrompt(app);
 
@@ -381,7 +379,7 @@ class InteractiveAppPostCreationFlowTest {
         InteractiveApp app = createApp();
         invokeReloadState(app);
         setSelectedNode(app, NodeRef.repository("file-based-repo", localRepository));
-        app.openDeletePromptForSelectedNodeForTest();
+        app.openDeletePromptForSelectedNode();
 
         PromptState prompt = readPrompt(app);
 
