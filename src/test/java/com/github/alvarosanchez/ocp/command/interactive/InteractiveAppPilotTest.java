@@ -229,6 +229,7 @@ class InteractiveAppPilotTest {
             NodeRef selectedNode = readSelectedNode(app);
             assertEquals(NodeKind.PROFILE, selectedNode.kind());
             assertEquals("default", selectedNode.profileName());
+            assertFalse(Files.exists(repositoryPath.resolve(selectedNode.profileName())));
         }
     }
 
