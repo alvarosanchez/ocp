@@ -336,16 +336,7 @@ class InteractiveAppPostCreationFlowTest {
         writeConfig(new RepositoryEntry("dirty-repo", "git@github.com:acme/dirty-repo.git", localRepository.toString()));
 
         RepositoryService.RepositoryDeletePreview deletePreview = repositoryService.inspectDelete("dirty-repo");
-
-        assertTrue(deletePreview.gitBacked());
-        assertTrue(deletePreview.hasLocalChanges());
-
-        PromptState prompt = PromptState.single(
-            PromptAction.DELETE_REPOSITORY_FORCE,
-            "Delete repository (local changes detected)",
-            "Type repository name to force delete: dirty-repo"
-        );
-        prompt.expectedConfirmation = "dirty-repo";
+        PromptState prompt = InteractiveApp.buildDeleteRepositoryPrompt("dirty-repo", deletePreview);
 
         assertEquals(PromptAction.DELETE_REPOSITORY_FORCE, prompt.action);
         assertEquals("dirty-repo", prompt.expectedConfirmation);
@@ -363,16 +354,7 @@ class InteractiveAppPostCreationFlowTest {
         writeConfig(new RepositoryEntry("clean-repo", "git@github.com:acme/clean-repo.git", localRepository.toString()));
 
         RepositoryService.RepositoryDeletePreview deletePreview = repositoryService.inspectDelete("clean-repo");
-
-        assertTrue(deletePreview.gitBacked());
-        assertFalse(deletePreview.hasLocalChanges());
-
-        PromptState prompt = PromptState.single(
-            PromptAction.DELETE_REPOSITORY,
-            "Delete repository",
-            "Type repository name to confirm: clean-repo"
-        );
-        prompt.expectedConfirmation = "clean-repo";
+        PromptState prompt = InteractiveApp.buildDeleteRepositoryPrompt("clean-repo", deletePreview);
 
         assertEquals(PromptAction.DELETE_REPOSITORY, prompt.action);
         assertEquals("clean-repo", prompt.expectedConfirmation);
@@ -389,17 +371,7 @@ class InteractiveAppPostCreationFlowTest {
         repositoryService.add(localRepository.toString(), "file-based-repo");
 
         RepositoryService.RepositoryDeletePreview deletePreview = repositoryService.inspectDelete("file-based-repo");
-
-        assertFalse(deletePreview.gitBacked());
-        assertFalse(deletePreview.hasLocalChanges());
-
-        PromptState prompt = PromptState.multiWithOptions(
-            PromptAction.DELETE_REPOSITORY_FILE_BASED,
-            "Delete file-based repository",
-            List.of("Type repository name to confirm: file-based-repo", "Delete local folder as well?"),
-            List.of(List.of(), List.of("no", "yes"))
-        );
-        prompt.expectedConfirmation = "file-based-repo";
+        PromptState prompt = InteractiveApp.buildDeleteRepositoryPrompt("file-based-repo", deletePreview);
 
         assertEquals(PromptAction.DELETE_REPOSITORY_FILE_BASED, prompt.action);
         assertEquals("file-based-repo", prompt.expectedConfirmation);

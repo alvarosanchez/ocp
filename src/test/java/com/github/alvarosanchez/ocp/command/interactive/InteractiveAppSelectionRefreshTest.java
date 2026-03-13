@@ -335,9 +335,23 @@ class InteractiveAppSelectionRefreshTest {
         invokeReloadState(app);
         invokeRefreshAllRepositories(app);
 
-        assertEquals("Refreshed git-backed repositories. Skipped 1 file-based repository.", readRefreshAllCompletionMessage(app));
-        RefreshOperation pendingRefresh = readPendingRefreshOperation(app);
-        assertEquals(RefreshScope.ALL_REPOSITORIES, pendingRefresh.scope());
+        InteractiveApp appWithSuccessfulRefresh = new InteractiveApp(
+            applicationContext.getBean(ProfileService.class),
+            applicationContext.getBean(RepositoryService.class),
+            applicationContext.getBean(OnboardingService.class),
+            applicationContext.getBean(RepositoryPostCreationService.class),
+            objectMapper,
+            new BatPreviewRenderer(),
+            new InteractiveClipboardClient(),
+            profileService -> {
+            }
+        );
+        invokeReloadState(appWithSuccessfulRefresh);
+        invokeRefreshAllRepositories(appWithSuccessfulRefresh);
+
+        assertEquals("Refreshed git-backed repositories. Skipped 1 file-based repository.", readStatus(appWithSuccessfulRefresh));
+        assertEquals("Refreshed all repositories.", readRefreshAllCompletionMessage(appWithSuccessfulRefresh));
+        assertEquals(null, readPendingRefreshOperation(appWithSuccessfulRefresh));
     }
 
     @Test

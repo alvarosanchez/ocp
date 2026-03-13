@@ -123,6 +123,7 @@ public final class InteractiveApp extends ToolkitApp {
     private final String currentVersion = OcpVersionProvider.readVersion();
     private final BatPreviewRenderer batPreviewRenderer;
     private final InteractiveClipboardClient clipboardClient;
+    private final RefreshExecutor refreshExecutor;
 
     private final TreeElement<NodeRef> hierarchyTree = Toolkit.<NodeRef>tree()
         .title("Repositories / Profiles / Files")
@@ -199,7 +200,8 @@ public final class InteractiveApp extends ToolkitApp {
             repositoryPostCreationService,
             objectMapper,
             new BatPreviewRenderer(),
-            new InteractiveClipboardClient()
+            new InteractiveClipboardClient(),
+            ProfileService::refreshAllRepositories
         );
     }
 
@@ -218,7 +220,8 @@ public final class InteractiveApp extends ToolkitApp {
             repositoryPostCreationService,
             objectMapper,
             batPreviewRenderer,
-            new InteractiveClipboardClient()
+            new InteractiveClipboardClient(),
+            ProfileService::refreshAllRepositories
         );
     }
 
@@ -231,6 +234,28 @@ public final class InteractiveApp extends ToolkitApp {
         BatPreviewRenderer batPreviewRenderer,
         InteractiveClipboardClient clipboardClient
     ) {
+        this(
+            profileService,
+            repositoryService,
+            onboardingService,
+            repositoryPostCreationService,
+            objectMapper,
+            batPreviewRenderer,
+            clipboardClient,
+            ProfileService::refreshAllRepositories
+        );
+    }
+
+    InteractiveApp(
+        ProfileService profileService,
+        RepositoryService repositoryService,
+        OnboardingService onboardingService,
+        RepositoryPostCreationService repositoryPostCreationService,
+        ObjectMapper objectMapper,
+        BatPreviewRenderer batPreviewRenderer,
+        InteractiveClipboardClient clipboardClient,
+        RefreshExecutor refreshExecutor
+    ) {
         this.profileService = profileService;
         this.repositoryService = repositoryService;
         this.onboardingService = onboardingService;
@@ -238,6 +263,7 @@ public final class InteractiveApp extends ToolkitApp {
         this.objectMapper = objectMapper;
         this.batPreviewRenderer = batPreviewRenderer;
         this.clipboardClient = clipboardClient;
+        this.refreshExecutor = refreshExecutor;
         startupUpdateNotice = Cli.consumeStartupNotice();
     }
 
@@ -434,36 +460,7 @@ public final class InteractiveApp extends ToolkitApp {
 
                 try {
                     RepositoryService.RepositoryDeletePreview deletePreview = repositoryService.inspectDelete(repositoryName);
-                    if (!deletePreview.gitBacked()) {
-                        prompt = PromptState.multiWithOptions(
-                            PromptAction.DELETE_REPOSITORY_FILE_BASED,
-                            "Delete file-based repository",
-                            List.of(
-                                "Type repository name to confirm: " + repositoryName,
-                                "Delete local folder as well?"
-                            ),
-                            List.of(List.of(), List.of("no", "yes"))
-                        );
-                        prompt.expectedConfirmation = repositoryName;
-                        return EventResult.HANDLED;
-                    }
-
-                    if (deletePreview.hasLocalChanges()) {
-                        prompt = PromptState.single(
-                            PromptAction.DELETE_REPOSITORY_FORCE,
-                            "Delete repository (local changes detected)",
-                            "Type repository name to force delete: " + repositoryName
-                        );
-                        prompt.expectedConfirmation = repositoryName;
-                        return EventResult.HANDLED;
-                    }
-
-                    prompt = PromptState.single(
-                        PromptAction.DELETE_REPOSITORY,
-                        "Delete repository",
-                        "Type repository name to confirm: " + repositoryName
-                    );
-                    prompt.expectedConfirmation = repositoryName;
+                    prompt = buildDeleteRepositoryPrompt(repositoryName, deletePreview);
                 } catch (RuntimeException e) {
                     status = "Error: " + e.getMessage();
                 }
@@ -508,16 +505,7 @@ public final class InteractiveApp extends ToolkitApp {
                 return EventResult.HANDLED;
             }
             try {
-                List<String> parentOptions = new ArrayList<>();
-                parentOptions.add("");
-                parentOptions.addAll(profileService.listResolvableProfileNames());
-                prompt = PromptState.multiWithOptions(
-                    PromptAction.CREATE_PROFILE,
-                    "Create profile",
-                    List.of("Profile name", "Extends from profile (optional)"),
-                    List.of(List.of(), parentOptions)
-                );
-                prompt.contextRepositoryName = repositoryName;
+                prompt = buildCreateProfilePrompt(repositoryName, profileService.listResolvableProfileNames());
             } catch (RuntimeException e) {
                 status = "Error: " + e.getMessage();
             }
@@ -1420,6 +1408,57 @@ public final class InteractiveApp extends ToolkitApp {
         return "Skipped " + skippedFileBased + " file-based " + noun + ".";
     }
 
+    static PromptState buildCreateProfilePrompt(String repositoryName, List<String> resolvableProfileNames) {
+        List<String> parentOptions = new ArrayList<>();
+        parentOptions.add("");
+        parentOptions.addAll(resolvableProfileNames);
+        PromptState prompt = PromptState.multiWithOptions(
+            PromptAction.CREATE_PROFILE,
+            "Create profile",
+            List.of("Profile name", "Extends from profile (optional)"),
+            List.of(List.of(), parentOptions)
+        );
+        prompt.contextRepositoryName = repositoryName;
+        return prompt;
+    }
+
+    static PromptState buildDeleteRepositoryPrompt(String repositoryName, RepositoryService.RepositoryDeletePreview deletePreview) {
+        if (!deletePreview.gitBacked()) {
+            PromptState prompt = PromptState.multiWithOptions(
+                PromptAction.DELETE_REPOSITORY_FILE_BASED,
+                "Delete file-based repository",
+                List.of(
+                    "Type repository name to confirm: " + repositoryName,
+                    "Delete local folder as well?"
+                ),
+                List.of(List.of(), List.of("no", "yes"))
+            );
+            prompt.expectedConfirmation = repositoryName;
+            return prompt;
+        }
+        if (deletePreview.hasLocalChanges()) {
+            PromptState prompt = PromptState.single(
+                PromptAction.DELETE_REPOSITORY_FORCE,
+                "Delete repository (local changes detected)",
+                "Type repository name to force delete: " + repositoryName
+            );
+            prompt.expectedConfirmation = repositoryName;
+            return prompt;
+        }
+        PromptState prompt = PromptState.single(
+            PromptAction.DELETE_REPOSITORY,
+            "Delete repository",
+            "Type repository name to confirm: " + repositoryName
+        );
+        prompt.expectedConfirmation = repositoryName;
+        return prompt;
+    }
+
+    @FunctionalInterface
+    interface RefreshExecutor {
+        void refreshAllRepositories(ProfileService profileService);
+    }
+
     private void attemptPendingRefresh() {
         if (pendingRefreshOperation == null) {
             return;
@@ -1436,7 +1475,7 @@ public final class InteractiveApp extends ToolkitApp {
         }
         runBusyOperation(
             "Refreshing all repositories...",
-            profileService::refreshAllRepositories,
+            () -> refreshExecutor.refreshAllRepositories(profileService),
             refreshAllCompletionMessage,
             () -> {
                 pendingRefreshOperation = null;

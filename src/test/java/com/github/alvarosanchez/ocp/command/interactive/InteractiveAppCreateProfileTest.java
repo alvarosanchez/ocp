@@ -146,18 +146,8 @@ class InteractiveAppCreateProfileTest {
             new RepositoryEntry("repo-b", null, otherRepositoryPath.toString())
         );
 
-        InteractiveApp app = createApp();
-        invokeReloadState(app);
-        PromptState prompt = PromptState.multiWithOptions(
-            PromptAction.CREATE_PROFILE,
-            "Create profile",
-            List.of("Profile name", "Extends from profile (optional)"),
-            List.of(List.of(), List.of("", "base", "default"))
-        );
-        prompt.contextRepositoryName = "repo-a";
-        setPrompt(app, prompt);
+        PromptState storedPrompt = InteractiveApp.buildCreateProfilePrompt("repo-a", List.of("base", "default"));
 
-        PromptState storedPrompt = readPrompt(app);
         assertNotNull(storedPrompt);
         assertEquals(PromptAction.CREATE_PROFILE, storedPrompt.action);
         assertEquals("repo-a", storedPrompt.contextRepositoryName);
