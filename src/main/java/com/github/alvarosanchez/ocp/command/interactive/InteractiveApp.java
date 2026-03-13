@@ -122,6 +122,8 @@ public final class InteractiveApp extends ToolkitApp {
     private final ObjectMapper objectMapper;
     private final String currentVersion = OcpVersionProvider.readVersion();
     private final BatPreviewRenderer batPreviewRenderer;
+    private final InteractiveClipboardClient clipboardClient;
+    private final RefreshExecutor refreshExecutor;
 
     private final TreeElement<NodeRef> hierarchyTree = Toolkit.<NodeRef>tree()
         .title("Repositories / Profiles / Files")
@@ -197,7 +199,9 @@ public final class InteractiveApp extends ToolkitApp {
             onboardingService,
             repositoryPostCreationService,
             objectMapper,
-            new BatPreviewRenderer()
+            new BatPreviewRenderer(),
+            new InteractiveClipboardClient(),
+            ProfileService::refreshAllRepositories
         );
     }
 
@@ -209,12 +213,57 @@ public final class InteractiveApp extends ToolkitApp {
         ObjectMapper objectMapper,
         BatPreviewRenderer batPreviewRenderer
     ) {
+        this(
+            profileService,
+            repositoryService,
+            onboardingService,
+            repositoryPostCreationService,
+            objectMapper,
+            batPreviewRenderer,
+            new InteractiveClipboardClient(),
+            ProfileService::refreshAllRepositories
+        );
+    }
+
+    InteractiveApp(
+        ProfileService profileService,
+        RepositoryService repositoryService,
+        OnboardingService onboardingService,
+        RepositoryPostCreationService repositoryPostCreationService,
+        ObjectMapper objectMapper,
+        BatPreviewRenderer batPreviewRenderer,
+        InteractiveClipboardClient clipboardClient
+    ) {
+        this(
+            profileService,
+            repositoryService,
+            onboardingService,
+            repositoryPostCreationService,
+            objectMapper,
+            batPreviewRenderer,
+            clipboardClient,
+            ProfileService::refreshAllRepositories
+        );
+    }
+
+    InteractiveApp(
+        ProfileService profileService,
+        RepositoryService repositoryService,
+        OnboardingService onboardingService,
+        RepositoryPostCreationService repositoryPostCreationService,
+        ObjectMapper objectMapper,
+        BatPreviewRenderer batPreviewRenderer,
+        InteractiveClipboardClient clipboardClient,
+        RefreshExecutor refreshExecutor
+    ) {
         this.profileService = profileService;
         this.repositoryService = repositoryService;
         this.onboardingService = onboardingService;
         this.repositoryPostCreationService = repositoryPostCreationService;
         this.objectMapper = objectMapper;
         this.batPreviewRenderer = batPreviewRenderer;
+        this.clipboardClient = clipboardClient;
+        this.refreshExecutor = refreshExecutor;
         startupUpdateNotice = Cli.consumeStartupNotice();
     }
 
@@ -392,78 +441,7 @@ public final class InteractiveApp extends ToolkitApp {
             return EventResult.HANDLED;
         }
         if (event.isChar('d')) {
-            if (selectedNode == null) {
-                status = STATUS_SELECT_NODE_FIRST;
-                return EventResult.HANDLED;
-            }
-
-            if (selectedNode.kind() == NodeKind.FILE) {
-                promptDeleteFile();
-                return EventResult.HANDLED;
-            }
-
-            if (selectedNode.kind() == NodeKind.REPOSITORY) {
-                String repositoryName = selectedRepositoryName();
-                if (repositoryName == null) {
-                    status = STATUS_SELECT_NODE_FIRST;
-                    return EventResult.HANDLED;
-                }
-
-                try {
-                    RepositoryService.RepositoryDeletePreview deletePreview = repositoryService.inspectDelete(repositoryName);
-                    if (!deletePreview.gitBacked()) {
-                        prompt = PromptState.multiWithOptions(
-                            PromptAction.DELETE_REPOSITORY_FILE_BASED,
-                            "Delete file-based repository",
-                            List.of(
-                                "Type repository name to confirm: " + repositoryName,
-                                "Delete local folder as well?"
-                            ),
-                            List.of(List.of(), List.of("no", "yes"))
-                        );
-                        prompt.expectedConfirmation = repositoryName;
-                        return EventResult.HANDLED;
-                    }
-
-                    if (deletePreview.hasLocalChanges()) {
-                        prompt = PromptState.single(
-                            PromptAction.DELETE_REPOSITORY_FORCE,
-                            "Delete repository (local changes detected)",
-                            "Type repository name to force delete: " + repositoryName
-                        );
-                        prompt.expectedConfirmation = repositoryName;
-                        return EventResult.HANDLED;
-                    }
-
-                    prompt = PromptState.single(
-                        PromptAction.DELETE_REPOSITORY,
-                        "Delete repository",
-                        "Type repository name to confirm: " + repositoryName
-                    );
-                    prompt.expectedConfirmation = repositoryName;
-                } catch (RuntimeException e) {
-                    status = "Error: " + e.getMessage();
-                }
-                return EventResult.HANDLED;
-            }
-
-            String profileName = selectedProfileName();
-            String repositoryName = selectedRepositoryName();
-            if (profileName == null) {
-                status = STATUS_SELECT_NODE_FIRST;
-                return EventResult.HANDLED;
-            }
-            if (repositoryName == null) {
-                status = STATUS_SELECT_NODE_FIRST;
-                return EventResult.HANDLED;
-            }
-            prompt = PromptState.single(
-                PromptAction.DELETE_PROFILE,
-                "Delete profile",
-                "Type profile name to confirm: " + profileName
-            );
-            prompt.expectedConfirmation = profileName;
-            prompt.contextRepositoryName = repositoryName;
+            openPromptForSelectedNode(PromptShortcut.DELETE);
             return EventResult.HANDLED;
         }
         if (event.isChar('n')) {
@@ -479,25 +457,7 @@ public final class InteractiveApp extends ToolkitApp {
             return EventResult.HANDLED;
         }
         if (event.isChar('c')) {
-            String repositoryName = selectedRepositoryName();
-            if (repositoryName == null) {
-                status = STATUS_SELECT_NODE_FIRST;
-                return EventResult.HANDLED;
-            }
-            try {
-                List<String> parentOptions = new ArrayList<>();
-                parentOptions.add("");
-                parentOptions.addAll(profileService.listResolvableProfileNames());
-                prompt = PromptState.multiWithOptions(
-                    PromptAction.CREATE_PROFILE,
-                    "Create profile",
-                    List.of("Profile name", "Extends from profile (optional)"),
-                    List.of(List.of(), parentOptions)
-                );
-                prompt.contextRepositoryName = repositoryName;
-            } catch (RuntimeException e) {
-                status = "Error: " + e.getMessage();
-            }
+            openPromptForSelectedNode(PromptShortcut.CREATE_PROFILE);
             return EventResult.HANDLED;
         }
         if (event.isChar('f')) {
@@ -1397,6 +1357,119 @@ public final class InteractiveApp extends ToolkitApp {
         return "Skipped " + skippedFileBased + " file-based " + noun + ".";
     }
 
+    private static PromptState buildCreateProfilePrompt(String repositoryName, List<String> resolvableProfileNames) {
+        List<String> parentOptions = new ArrayList<>();
+        parentOptions.add("");
+        parentOptions.addAll(resolvableProfileNames);
+        PromptState prompt = PromptState.multiWithOptions(
+            PromptAction.CREATE_PROFILE,
+            "Create profile",
+            List.of("Profile name", "Extends from profile (optional)"),
+            List.of(List.of(), parentOptions)
+        );
+        prompt.contextRepositoryName = repositoryName;
+        return prompt;
+    }
+
+    private static PromptState buildDeleteRepositoryPrompt(String repositoryName, RepositoryService.RepositoryDeletePreview deletePreview) {
+        if (!deletePreview.gitBacked()) {
+            PromptState prompt = PromptState.multiWithOptions(
+                PromptAction.DELETE_REPOSITORY_FILE_BASED,
+                "Delete file-based repository",
+                List.of(
+                    "Type repository name to confirm: " + repositoryName,
+                    "Delete local folder as well?"
+                ),
+                List.of(List.of(), List.of("no", "yes"))
+            );
+            prompt.expectedConfirmation = repositoryName;
+            return prompt;
+        }
+        if (deletePreview.hasLocalChanges()) {
+            PromptState prompt = PromptState.single(
+                PromptAction.DELETE_REPOSITORY_FORCE,
+                "Delete repository (local changes detected)",
+                "Type repository name to force delete: " + repositoryName
+            );
+            prompt.expectedConfirmation = repositoryName;
+            return prompt;
+        }
+        PromptState prompt = PromptState.single(
+            PromptAction.DELETE_REPOSITORY,
+            "Delete repository",
+            "Type repository name to confirm: " + repositoryName
+        );
+        prompt.expectedConfirmation = repositoryName;
+        return prompt;
+    }
+
+    private void openPromptForSelectedNode(PromptShortcut shortcut) {
+        switch (shortcut) {
+            case CREATE_PROFILE -> openCreateProfilePromptForCurrentSelection();
+            case DELETE -> openDeletePromptForCurrentSelection();
+        }
+    }
+
+    private enum PromptShortcut {
+        CREATE_PROFILE,
+        DELETE
+    }
+
+    private void openCreateProfilePromptForCurrentSelection() {
+        String repositoryName = selectedRepositoryName();
+        if (repositoryName == null) {
+            status = STATUS_SELECT_NODE_FIRST;
+            return;
+        }
+        try {
+            prompt = buildCreateProfilePrompt(repositoryName, profileService.listResolvableProfileNames());
+        } catch (RuntimeException e) {
+            status = "Error: " + e.getMessage();
+        }
+    }
+
+    private void openDeletePromptForCurrentSelection() {
+        if (selectedNode == null) {
+            status = STATUS_SELECT_NODE_FIRST;
+            return;
+        }
+        if (selectedNode.kind() == NodeKind.FILE) {
+            promptDeleteFile();
+            return;
+        }
+        if (selectedNode.kind() == NodeKind.REPOSITORY) {
+            String repositoryName = selectedRepositoryName();
+            if (repositoryName == null) {
+                status = STATUS_SELECT_NODE_FIRST;
+                return;
+            }
+            try {
+                prompt = buildDeleteRepositoryPrompt(repositoryName, repositoryService.inspectDelete(repositoryName));
+            } catch (RuntimeException e) {
+                status = "Error: " + e.getMessage();
+            }
+            return;
+        }
+        String profileName = selectedProfileName();
+        String repositoryName = selectedRepositoryName();
+        if (profileName == null || repositoryName == null) {
+            status = STATUS_SELECT_NODE_FIRST;
+            return;
+        }
+        prompt = PromptState.single(
+            PromptAction.DELETE_PROFILE,
+            "Delete profile",
+            "Type profile name to confirm: " + profileName
+        );
+        prompt.expectedConfirmation = profileName;
+        prompt.contextRepositoryName = repositoryName;
+    }
+
+    @FunctionalInterface
+    interface RefreshExecutor {
+        void refreshAllRepositories(ProfileService profileService);
+    }
+
     private void attemptPendingRefresh() {
         if (pendingRefreshOperation == null) {
             return;
@@ -1413,7 +1486,7 @@ public final class InteractiveApp extends ToolkitApp {
         }
         runBusyOperation(
             "Refreshing all repositories...",
-            profileService::refreshAllRepositories,
+            () -> refreshExecutor.refreshAllRepositories(profileService),
             refreshAllCompletionMessage,
             () -> {
                 pendingRefreshOperation = null;
@@ -2078,7 +2151,7 @@ public final class InteractiveApp extends ToolkitApp {
 
         Path absolutePath = selectedNode.path().toAbsolutePath().normalize();
         try {
-            InteractiveClipboard.copy(absolutePath.toString());
+            clipboardClient.copy(absolutePath.toString());
             status = "Copied path " + absolutePath + " to the clipboard.";
         } catch (IllegalStateException e) {
             status = e.getMessage();

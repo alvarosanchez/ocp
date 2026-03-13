@@ -1,6 +1,7 @@
 package com.github.alvarosanchez.ocp.command.interactive;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import com.github.alvarosanchez.ocp.command.Cli;
@@ -297,6 +298,103 @@ class InteractiveAppSelectionRefreshTest {
         assertEquals(Color.indexed(1), preview.lines().getFirst().spans().getFirst().style().fg().orElseThrow());
     }
 
+    @Test
+    void refreshAllRepositoriesShowsFileBasedOnlyMessageWhenNoGitRepos() throws Exception {
+        Path repositoryA = tempDir.resolve("repo-a");
+        Path repositoryB = tempDir.resolve("repo-b");
+        Files.createDirectories(repositoryA.resolve("default"));
+        Files.createDirectories(repositoryB.resolve("base"));
+        Files.writeString(repositoryA.resolve("repository.json"), "{\"profiles\":[{\"name\":\"default\"}]}");
+        Files.writeString(repositoryB.resolve("repository.json"), "{\"profiles\":[{\"name\":\"base\"}]}");
+        writeConfig(
+            new RepositoryEntry("repo-a", null, repositoryA.toString()),
+            new RepositoryEntry("repo-b", null, repositoryB.toString())
+        );
+
+        InteractiveApp app = createApp();
+        invokeReloadState(app);
+        invokeRefreshAllRepositories(app);
+
+        assertEquals("All configured repositories are file-based; nothing to refresh.", readStatus(app));
+    }
+
+    @Test
+    void refreshAllRepositoriesSetsSkippedFileBasedCompletionMessage() throws Exception {
+        Path fileBasedRepository = tempDir.resolve("repo-a");
+        Path gitBackedRepository = tempDir.resolve("repo-b");
+        Files.createDirectories(fileBasedRepository.resolve("default"));
+        Files.createDirectories(gitBackedRepository.resolve(".git"));
+        Files.writeString(fileBasedRepository.resolve("repository.json"), "{\"profiles\":[{\"name\":\"default\"}]}");
+        Files.writeString(gitBackedRepository.resolve("repository.json"), "{\"profiles\":[{\"name\":\"work\"}]}");
+        writeConfig(
+            new RepositoryEntry("repo-a", null, fileBasedRepository.toString()),
+            new RepositoryEntry("repo-b", "git@github.com:acme/repo-b.git", gitBackedRepository.toString())
+        );
+
+        InteractiveApp appWithSuccessfulRefresh = new InteractiveApp(
+            applicationContext.getBean(ProfileService.class),
+            applicationContext.getBean(RepositoryService.class),
+            applicationContext.getBean(OnboardingService.class),
+            applicationContext.getBean(RepositoryPostCreationService.class),
+            objectMapper,
+            new BatPreviewRenderer(),
+            new InteractiveClipboardClient(),
+            profileService -> {
+            }
+        );
+        invokeReloadState(appWithSuccessfulRefresh);
+        invokeRefreshAllRepositories(appWithSuccessfulRefresh);
+
+        assertEquals("Refreshed git-backed repositories. Skipped 1 file-based repository.", readStatus(appWithSuccessfulRefresh));
+        assertEquals("Refreshed all repositories.", readRefreshAllCompletionMessage(appWithSuccessfulRefresh));
+        assertNull(readPendingRefreshOperation(appWithSuccessfulRefresh));
+    }
+
+    @Test
+    void refreshSelectedFilePreviewFallsBackToPlainTextWhenBatUnavailable() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path profilePath = repositoryPath.resolve("default");
+        Path filePath = profilePath.resolve("opencode.json");
+        Files.createDirectories(profilePath);
+        Files.writeString(repositoryPath.resolve("repository.json"), "{\"profiles\":[{\"name\":\"default\"}]}");
+        Files.writeString(filePath, "plain text\n");
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = createApp();
+        invokeReloadState(app);
+        setBatAvailable(app, false);
+        selectTreeNode(app, node -> node.kind() == NodeKind.FILE && filePath.equals(node.path()));
+        invokeSyncSelectionAndPreview(app);
+
+        assertEquals("plain text", previewPlainText(readSelectedFilePreview(app)));
+    }
+
+    @Test
+    void refreshSelectedFilePreviewFallsBackToPlainTextWhenBatRendererReturnsNull() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path profilePath = repositoryPath.resolve("default");
+        Path filePath = profilePath.resolve("opencode.json");
+        Files.createDirectories(profilePath);
+        Files.writeString(repositoryPath.resolve("repository.json"), "{\"profiles\":[{\"name\":\"default\"}]}");
+        Files.writeString(filePath, "plain fallback\n");
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = new InteractiveApp(
+            applicationContext.getBean(ProfileService.class),
+            applicationContext.getBean(RepositoryService.class),
+            applicationContext.getBean(OnboardingService.class),
+            applicationContext.getBean(RepositoryPostCreationService.class),
+            objectMapper,
+            new NullBatPreviewRenderer()
+        );
+        invokeReloadState(app);
+        setBatAvailable(app, true);
+        selectTreeNode(app, node -> node.kind() == NodeKind.FILE && filePath.equals(node.path()));
+        invokeSyncSelectionAndPreview(app);
+
+        assertEquals("plain fallback", previewPlainText(readSelectedFilePreview(app)));
+    }
+
     private InteractiveApp createApp() {
         return new InteractiveApp(
             applicationContext.getBean(ProfileService.class),
@@ -307,12 +405,12 @@ class InteractiveAppSelectionRefreshTest {
         );
     }
 
-    private void writeConfig(RepositoryEntry repositoryEntry) throws IOException {
+    private void writeConfig(RepositoryEntry... repositoryEntries) throws IOException {
         Path configDir = Path.of(System.getProperty("ocp.config.dir"));
         Files.createDirectories(configDir);
         Files.writeString(
             configDir.resolve("config.json"),
-            objectMapper.writeValueAsString(new OcpConfigFile(new OcpConfigOptions(), List.of(repositoryEntry)))
+            objectMapper.writeValueAsString(new OcpConfigFile(new OcpConfigOptions(), List.of(repositoryEntries)))
         );
     }
 
@@ -418,6 +516,12 @@ class InteractiveAppSelectionRefreshTest {
         method.invoke(app, nodeRef);
     }
 
+    private static void invokeRefreshAllRepositories(InteractiveApp app) throws Exception {
+        Method method = InteractiveApp.class.getDeclaredMethod("refreshAllRepositories");
+        method.setAccessible(true);
+        method.invoke(app);
+    }
+
     private static String readSelectedFileContent(InteractiveApp app) throws Exception {
         Field field = InteractiveApp.class.getDeclaredField("selectedFileContent");
         field.setAccessible(true);
@@ -428,6 +532,24 @@ class InteractiveAppSelectionRefreshTest {
         Field field = InteractiveApp.class.getDeclaredField("selectedFilePreview");
         field.setAccessible(true);
         return (Text) field.get(app);
+    }
+
+    private static String readStatus(InteractiveApp app) throws Exception {
+        Field field = InteractiveApp.class.getDeclaredField("status");
+        field.setAccessible(true);
+        return (String) field.get(app);
+    }
+
+    private static String readRefreshAllCompletionMessage(InteractiveApp app) throws Exception {
+        Field field = InteractiveApp.class.getDeclaredField("refreshAllCompletionMessage");
+        field.setAccessible(true);
+        return (String) field.get(app);
+    }
+
+    private static RefreshOperation readPendingRefreshOperation(InteractiveApp app) throws Exception {
+        Field field = InteractiveApp.class.getDeclaredField("pendingRefreshOperation");
+        field.setAccessible(true);
+        return (RefreshOperation) field.get(app);
     }
 
     private static String readEditorText(InteractiveApp app) throws Exception {
@@ -527,6 +649,24 @@ class InteractiveAppSelectionRefreshTest {
 
         private int highlightInvocations() {
             return invocations.get();
+        }
+    }
+
+    private static final class NullBatPreviewRenderer extends BatPreviewRenderer {
+
+        @Override
+        Text highlight(Path filePath) {
+            return null;
+        }
+
+        @Override
+        Text highlight(Path filePath, String content) {
+            return null;
+        }
+
+        @Override
+        boolean probeAvailability() {
+            return true;
         }
     }
 
