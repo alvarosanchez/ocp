@@ -1,6 +1,7 @@
 package com.github.alvarosanchez.ocp.command.interactive;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import com.github.alvarosanchez.ocp.command.Cli;
@@ -346,7 +347,7 @@ class InteractiveAppSelectionRefreshTest {
 
         assertEquals("Refreshed git-backed repositories. Skipped 1 file-based repository.", readStatus(appWithSuccessfulRefresh));
         assertEquals("Refreshed all repositories.", readRefreshAllCompletionMessage(appWithSuccessfulRefresh));
-        assertEquals(null, readPendingRefreshOperation(appWithSuccessfulRefresh));
+        assertNull(readPendingRefreshOperation(appWithSuccessfulRefresh));
     }
 
     @Test

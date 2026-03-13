@@ -441,49 +441,7 @@ public final class InteractiveApp extends ToolkitApp {
             return EventResult.HANDLED;
         }
         if (event.isChar('d')) {
-            if (selectedNode == null) {
-                status = STATUS_SELECT_NODE_FIRST;
-                return EventResult.HANDLED;
-            }
-
-            if (selectedNode.kind() == NodeKind.FILE) {
-                promptDeleteFile();
-                return EventResult.HANDLED;
-            }
-
-            if (selectedNode.kind() == NodeKind.REPOSITORY) {
-                String repositoryName = selectedRepositoryName();
-                if (repositoryName == null) {
-                    status = STATUS_SELECT_NODE_FIRST;
-                    return EventResult.HANDLED;
-                }
-
-                try {
-                    RepositoryService.RepositoryDeletePreview deletePreview = repositoryService.inspectDelete(repositoryName);
-                    prompt = buildDeleteRepositoryPrompt(repositoryName, deletePreview);
-                } catch (RuntimeException e) {
-                    status = "Error: " + e.getMessage();
-                }
-                return EventResult.HANDLED;
-            }
-
-            String profileName = selectedProfileName();
-            String repositoryName = selectedRepositoryName();
-            if (profileName == null) {
-                status = STATUS_SELECT_NODE_FIRST;
-                return EventResult.HANDLED;
-            }
-            if (repositoryName == null) {
-                status = STATUS_SELECT_NODE_FIRST;
-                return EventResult.HANDLED;
-            }
-            prompt = PromptState.single(
-                PromptAction.DELETE_PROFILE,
-                "Delete profile",
-                "Type profile name to confirm: " + profileName
-            );
-            prompt.expectedConfirmation = profileName;
-            prompt.contextRepositoryName = repositoryName;
+            openDeletePromptForSelectedNode();
             return EventResult.HANDLED;
         }
         if (event.isChar('n')) {
@@ -499,16 +457,7 @@ public final class InteractiveApp extends ToolkitApp {
             return EventResult.HANDLED;
         }
         if (event.isChar('c')) {
-            String repositoryName = selectedRepositoryName();
-            if (repositoryName == null) {
-                status = STATUS_SELECT_NODE_FIRST;
-                return EventResult.HANDLED;
-            }
-            try {
-                prompt = buildCreateProfilePrompt(repositoryName, profileService.listResolvableProfileNames());
-            } catch (RuntimeException e) {
-                status = "Error: " + e.getMessage();
-            }
+            openCreateProfilePromptForSelectedNode();
             return EventResult.HANDLED;
         }
         if (event.isChar('f')) {
