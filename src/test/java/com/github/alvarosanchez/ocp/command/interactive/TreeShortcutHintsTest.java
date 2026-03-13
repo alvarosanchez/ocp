@@ -87,6 +87,7 @@ class TreeShortcutHintsTest {
             List.of(
                 new TreeShortcutHints.Shortcut("u", "use profile"),
                 new TreeShortcutHints.Shortcut("c", "create profile"),
+                new TreeShortcutHints.Shortcut("f", "create file"),
                 new TreeShortcutHints.Shortcut("p", "go parent"),
                 new TreeShortcutHints.Shortcut("g", "commit and push"),
                 new TreeShortcutHints.Shortcut("r", "refresh repository"),
@@ -111,6 +112,7 @@ class TreeShortcutHintsTest {
             List.of(
                 new TreeShortcutHints.Shortcut("u", "use profile"),
                 new TreeShortcutHints.Shortcut("c", "create profile"),
+                new TreeShortcutHints.Shortcut("f", "create file"),
                 new TreeShortcutHints.Shortcut("p", "go parent"),
                 new TreeShortcutHints.Shortcut("r", "refresh repository"),
                 new TreeShortcutHints.Shortcut("d", "delete profile")
@@ -133,11 +135,12 @@ class TreeShortcutHintsTest {
         assertEquals(
             List.of(
                 new TreeShortcutHints.Shortcut("e", "edit file"),
+                new TreeShortcutHints.Shortcut("f", "create file"),
+                new TreeShortcutHints.Shortcut("d", "delete file"),
                 new TreeShortcutHints.Shortcut("y", "copy path"),
                 new TreeShortcutHints.Shortcut("u", "use profile"),
                 new TreeShortcutHints.Shortcut("g", "commit and push"),
-                new TreeShortcutHints.Shortcut("r", "refresh repository"),
-                new TreeShortcutHints.Shortcut("d", "delete profile")
+                new TreeShortcutHints.Shortcut("r", "refresh repository")
             ),
             hints.actions()
         );
@@ -159,8 +162,7 @@ class TreeShortcutHintsTest {
                 new TreeShortcutHints.Shortcut("y", "copy path"),
                 new TreeShortcutHints.Shortcut("u", "use profile"),
                 new TreeShortcutHints.Shortcut("p", "go parent"),
-                new TreeShortcutHints.Shortcut("r", "refresh repository"),
-                new TreeShortcutHints.Shortcut("d", "delete profile")
+                new TreeShortcutHints.Shortcut("r", "refresh repository")
             ),
             hints.actions()
         );

@@ -46,6 +46,8 @@ dependencies {
     testImplementation(libs.testcontainers.junit.jupiter)
     testImplementation(libs.testcontainers.gitserver)
     testImplementation(libs.commons.codec)
+    testImplementation(testFixtures(libs.tamboui.toolkit.test.fixtures))
+    testImplementation(testFixtures(libs.tamboui.tui.test.fixtures))
 }
 
 application {
@@ -105,8 +107,10 @@ graalvmNative {
         }
         named("test") {
             buildArgs.add("--initialize-at-build-time=org.junit.platform.commons.logging.LoggerFactory\$DelegatingLogger")
+            buildArgs.add("--enable-monitoring=jfr")
             buildArgs.add("-H:+UnlockExperimentalVMOptions")
             buildArgs.add("-H:+SharedArenaSupport")
+            buildArgs.add("-H:IncludeResources=dev/tamboui/tui/bindings/.*\\.properties")
             quickBuild.set(true)
         }
     }

@@ -31,15 +31,15 @@ class DetailPaneRendererTest {
         NodeRef inheritedFile = NodeRef.inheritedFile("repo", "profile", Path.of("config.json"), "base");
 
         assertEquals(
-            "Press e to edit selected file | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview",
+            "Press e to edit selected file | f creates a new file | d deletes this file | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview",
             DetailPaneRenderer.detailHint(file, false)
         );
         assertEquals(
-            "Preview shows resolved deep-merged contents. Press e to edit the profile file | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview",
+            "Preview shows resolved deep-merged contents. Press e to edit the profile file | f creates a new file | d deletes this file | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview",
             DetailPaneRenderer.detailHint(deepMergedFile, false)
         );
         assertEquals(
-            "Inherited file (read-only). Press p to open the parent file | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview",
+            "Inherited file (read-only). Press p to open the parent file | f creates a new file in this profile | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview",
             DetailPaneRenderer.detailHint(inheritedFile, false)
         );
         assertEquals("Editing mode: Ctrl+S save, Esc exit", DetailPaneRenderer.detailHint(file, true));
