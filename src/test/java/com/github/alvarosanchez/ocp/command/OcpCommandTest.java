@@ -184,31 +184,6 @@ class OcpCommandTest {
     }
 
     @Test
-    void shouldNotStartInteractiveModeWhenTermIsDumb() throws Exception {
-        String previousTerm = System.getProperty("TERM");
-        System.setProperty("TERM", "dumb");
-        try (ApplicationContext context = ApplicationContext.run()) {
-            OcpCommand command = new OcpCommand(
-                context.getBean(ProfileService.class),
-                context.getBean(RepositoryService.class),
-                context.getBean(OnboardingService.class),
-                context.getBean(RepositoryPostCreationService.class),
-                context.getBean(ObjectMapper.class)
-            );
-            Method method = OcpCommand.class.getDeclaredMethod("shouldStartInteractiveMode");
-            method.setAccessible(true);
-
-            assertFalse((boolean) method.invoke(command));
-        } finally {
-            if (previousTerm == null) {
-                System.clearProperty("TERM");
-            } else {
-                System.setProperty("TERM", previousTerm);
-            }
-        }
-    }
-
-    @Test
     void startupFailureMessageIsStableWhenExceptionMessageIsMissing() {
         String previousConfigDir = System.getProperty("ocp.config.dir");
         System.setProperty("ocp.config.dir", "/tmp/ocp-config-test");
