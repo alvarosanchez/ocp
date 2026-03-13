@@ -335,8 +335,12 @@ class InteractiveAppPostCreationFlowTest {
         RepositoryService repositoryService = applicationContext.getBean(RepositoryService.class);
         writeConfig(new RepositoryEntry("dirty-repo", "git@github.com:acme/dirty-repo.git", localRepository.toString()));
 
-        RepositoryService.RepositoryDeletePreview deletePreview = repositoryService.inspectDelete("dirty-repo");
-        PromptState prompt = InteractiveApp.buildDeleteRepositoryPrompt("dirty-repo", deletePreview);
+        InteractiveApp app = createApp();
+        invokeReloadState(app);
+        setSelectedNode(app, NodeRef.repository("dirty-repo", localRepository));
+        app.openDeletePromptForSelectedNodeForTest();
+
+        PromptState prompt = readPrompt(app);
 
         assertEquals(PromptAction.DELETE_REPOSITORY_FORCE, prompt.action);
         assertEquals("dirty-repo", prompt.expectedConfirmation);
@@ -353,8 +357,12 @@ class InteractiveAppPostCreationFlowTest {
         RepositoryService repositoryService = applicationContext.getBean(RepositoryService.class);
         writeConfig(new RepositoryEntry("clean-repo", "git@github.com:acme/clean-repo.git", localRepository.toString()));
 
-        RepositoryService.RepositoryDeletePreview deletePreview = repositoryService.inspectDelete("clean-repo");
-        PromptState prompt = InteractiveApp.buildDeleteRepositoryPrompt("clean-repo", deletePreview);
+        InteractiveApp app = createApp();
+        invokeReloadState(app);
+        setSelectedNode(app, NodeRef.repository("clean-repo", localRepository));
+        app.openDeletePromptForSelectedNodeForTest();
+
+        PromptState prompt = readPrompt(app);
 
         assertEquals(PromptAction.DELETE_REPOSITORY, prompt.action);
         assertEquals("clean-repo", prompt.expectedConfirmation);
@@ -370,8 +378,12 @@ class InteractiveAppPostCreationFlowTest {
         RepositoryService repositoryService = applicationContext.getBean(RepositoryService.class);
         repositoryService.add(localRepository.toString(), "file-based-repo");
 
-        RepositoryService.RepositoryDeletePreview deletePreview = repositoryService.inspectDelete("file-based-repo");
-        PromptState prompt = InteractiveApp.buildDeleteRepositoryPrompt("file-based-repo", deletePreview);
+        InteractiveApp app = createApp();
+        invokeReloadState(app);
+        setSelectedNode(app, NodeRef.repository("file-based-repo", localRepository));
+        app.openDeletePromptForSelectedNodeForTest();
+
+        PromptState prompt = readPrompt(app);
 
         assertEquals(PromptAction.DELETE_REPOSITORY_FILE_BASED, prompt.action);
         assertEquals("file-based-repo", prompt.expectedConfirmation);

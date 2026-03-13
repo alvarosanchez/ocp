@@ -146,7 +146,12 @@ class InteractiveAppCreateProfileTest {
             new RepositoryEntry("repo-b", null, otherRepositoryPath.toString())
         );
 
-        PromptState storedPrompt = InteractiveApp.buildCreateProfilePrompt("repo-a", List.of("base", "default"));
+        InteractiveApp app = createApp();
+        invokeReloadState(app);
+        setSelectedNode(app, NodeRef.file("repo-a", "default", filePath));
+        app.openCreateProfilePromptForSelectedNodeForTest();
+
+        PromptState storedPrompt = readPrompt(app);
 
         assertNotNull(storedPrompt);
         assertEquals(PromptAction.CREATE_PROFILE, storedPrompt.action);

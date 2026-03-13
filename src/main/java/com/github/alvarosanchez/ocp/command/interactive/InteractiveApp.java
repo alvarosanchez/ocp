@@ -1454,6 +1454,48 @@ public final class InteractiveApp extends ToolkitApp {
         return prompt;
     }
 
+    void openCreateProfilePromptForSelectedNodeForTest() {
+        String repositoryName = selectedRepositoryName();
+        if (repositoryName == null) {
+            status = STATUS_SELECT_NODE_FIRST;
+            return;
+        }
+        prompt = buildCreateProfilePrompt(repositoryName, profileService.listResolvableProfileNames());
+    }
+
+    void openDeletePromptForSelectedNodeForTest() {
+        if (selectedNode == null) {
+            status = STATUS_SELECT_NODE_FIRST;
+            return;
+        }
+        if (selectedNode.kind() == NodeKind.FILE) {
+            promptDeleteFile();
+            return;
+        }
+        if (selectedNode.kind() == NodeKind.REPOSITORY) {
+            String repositoryName = selectedRepositoryName();
+            if (repositoryName == null) {
+                status = STATUS_SELECT_NODE_FIRST;
+                return;
+            }
+            prompt = buildDeleteRepositoryPrompt(repositoryName, repositoryService.inspectDelete(repositoryName));
+            return;
+        }
+        String profileName = selectedProfileName();
+        String repositoryName = selectedRepositoryName();
+        if (profileName == null || repositoryName == null) {
+            status = STATUS_SELECT_NODE_FIRST;
+            return;
+        }
+        prompt = PromptState.single(
+            PromptAction.DELETE_PROFILE,
+            "Delete profile",
+            "Type profile name to confirm: " + profileName
+        );
+        prompt.expectedConfirmation = profileName;
+        prompt.contextRepositoryName = repositoryName;
+    }
+
     @FunctionalInterface
     interface RefreshExecutor {
         void refreshAllRepositories(ProfileService profileService);
