@@ -1408,7 +1408,7 @@ public final class InteractiveApp extends ToolkitApp {
         return "Skipped " + skippedFileBased + " file-based " + noun + ".";
     }
 
-    static PromptState buildCreateProfilePrompt(String repositoryName, List<String> resolvableProfileNames) {
+    private static PromptState buildCreateProfilePrompt(String repositoryName, List<String> resolvableProfileNames) {
         List<String> parentOptions = new ArrayList<>();
         parentOptions.add("");
         parentOptions.addAll(resolvableProfileNames);
@@ -1422,7 +1422,7 @@ public final class InteractiveApp extends ToolkitApp {
         return prompt;
     }
 
-    static PromptState buildDeleteRepositoryPrompt(String repositoryName, RepositoryService.RepositoryDeletePreview deletePreview) {
+    private static PromptState buildDeleteRepositoryPrompt(String repositoryName, RepositoryService.RepositoryDeletePreview deletePreview) {
         if (!deletePreview.gitBacked()) {
             PromptState prompt = PromptState.multiWithOptions(
                 PromptAction.DELETE_REPOSITORY_FILE_BASED,
@@ -1460,7 +1460,11 @@ public final class InteractiveApp extends ToolkitApp {
             status = STATUS_SELECT_NODE_FIRST;
             return;
         }
-        prompt = buildCreateProfilePrompt(repositoryName, profileService.listResolvableProfileNames());
+        try {
+            prompt = buildCreateProfilePrompt(repositoryName, profileService.listResolvableProfileNames());
+        } catch (RuntimeException e) {
+            status = "Error: " + e.getMessage();
+        }
     }
 
     void openDeletePromptForSelectedNode() {
@@ -1478,7 +1482,11 @@ public final class InteractiveApp extends ToolkitApp {
                 status = STATUS_SELECT_NODE_FIRST;
                 return;
             }
-            prompt = buildDeleteRepositoryPrompt(repositoryName, repositoryService.inspectDelete(repositoryName));
+            try {
+                prompt = buildDeleteRepositoryPrompt(repositoryName, repositoryService.inspectDelete(repositoryName));
+            } catch (RuntimeException e) {
+                status = "Error: " + e.getMessage();
+            }
             return;
         }
         String profileName = selectedProfileName();
