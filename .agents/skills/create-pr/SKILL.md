@@ -117,6 +117,8 @@ If no PR exists, create one with a prepared title/body:
 ./.agents/skills/create-pr/scripts/pr-create.sh <base-branch> <title> <body-file> [--draft]
 ```
 
+If the current task is to resolve a specific GitHub issue, the prepared PR body MUST include a GitHub closing keyword that links the PR to that issue, such as `Closes #123` or `Fixes owner/repo#123`, so merging the PR closes the issue automatically. Treat this linkage as required PR metadata, not an optional note.
+
 Then run `./.agents/skills/create-pr/scripts/pr-view.sh` again and record the PR number and URL.
 
 ### 5. Wait for CI first, then Copilot review
@@ -313,6 +315,7 @@ Do not merge the PR as part of this skill unless a higher-priority instruction e
 
 - Treat commits, pushes, PR creation, and PR comments as externally visible actions.
 - Follow higher-priority runtime rules that require explicit user authorization for commits or pushes.
+- When the task is tied to a specific GitHub issue number, include a closing keyword reference for that issue in the PR body before creating the PR.
 - Never force-push unless the user explicitly requested a history rewrite.
 - Never mention `@copilot` in a comment to trigger review.
 - Never claim a fix, push, reply, check status, or green CI result unless command output confirms it.
@@ -325,6 +328,7 @@ Do not merge the PR as part of this skill unless a higher-priority instruction e
 - [ ] `description` includes PR creation, dirty-worktree commit handling, Copilot review, and CI loop triggers.
 - [ ] The workflow includes an initial commit step for dirty worktrees when commits are allowed.
 - [ ] The workflow treats CI as a required wait-and-remediate loop, not just Copilot review.
+- [ ] The workflow requires issue-resolving PRs to include a closing-keyword issue reference in the PR body.
 - [ ] Repeated shell operations live under `.agents/skills/create-pr/scripts/`.
 - [ ] Trigger phrases are broad enough to catch plain "create a PR" requests.
 - [ ] The skill does not instruct the agent to mention `@copilot`.
