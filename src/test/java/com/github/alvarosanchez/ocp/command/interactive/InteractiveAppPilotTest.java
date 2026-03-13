@@ -1,7 +1,7 @@
 package com.github.alvarosanchez.ocp.command.interactive;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.alvarosanchez.ocp.command.Cli;
@@ -21,8 +21,8 @@ import io.micronaut.context.ApplicationContext;
 import io.micronaut.serde.ObjectMapper;
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.nio.file.Path;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -119,6 +119,119 @@ class InteractiveAppPilotTest {
         }
     }
 
+    @Test
+    void inheritedFileSupportsParentNavigationAndBlocksEditing() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path baseProfilePath = repositoryPath.resolve("base");
+        Path childProfilePath = repositoryPath.resolve("child");
+        Path inheritedFilePath = baseProfilePath.resolve("opencode.json");
+        Files.createDirectories(baseProfilePath);
+        Files.createDirectories(childProfilePath);
+        Files.writeString(
+            repositoryPath.resolve("repository.json"),
+            "{\"profiles\":[{\"name\":\"base\"},{\"name\":\"child\",\"extends_from\":\"base\"}]}"
+        );
+        Files.writeString(inheritedFilePath, "{\"base\":true}\n");
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = createApp();
+        app.onStart();
+
+        try (ToolkitTestRunner test = ToolkitTestRunner.runTest(app::render)) {
+            Pilot pilot = test.pilot();
+
+            pressDown(pilot, 4);
+            assertEquals("opencode.json", readSelectedNodeFileName(app));
+            assertTrue(readSelectedNode(app).inherited());
+
+            pilot.press('e');
+            pilot.pause();
+            assertFalse(readEditMode(app));
+            assertFalse(pilot.hasElement("file-editor"));
+            assertTrue(readStatus(app).contains("Inherited file is read-only"));
+
+            pilot.press('p');
+            pilot.pause();
+            assertEquals("base", readSelectedNode(app).profileName());
+            assertEquals(inheritedFilePath, readSelectedNode(app).path());
+            assertFalse(readSelectedNode(app).inherited());
+            assertEquals("Selected inherited parent file from profile base.", readStatus(app));
+        }
+    }
+
+    @Test
+    void fileBasedRepositorySupportsRefreshShortcut() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Files.createDirectories(repositoryPath.resolve("default"));
+        Files.writeString(repositoryPath.resolve("repository.json"), "{\"profiles\":[{\"name\":\"default\"}]}");
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = createApp();
+        app.onStart();
+
+        try (ToolkitTestRunner test = ToolkitTestRunner.runTest(app::render)) {
+            Pilot pilot = test.pilot();
+
+            pilot.press(KeyCode.DOWN);
+            pilot.pause();
+            pilot.press(KeyCode.UP);
+            pilot.pause();
+            assertEquals("repo-a", readSelectedNode(app).repositoryName());
+
+            pilot.press('r');
+            pilot.pause();
+            assertEquals("Repository repo-a is file-based; nothing to refresh.", readStatus(app));
+
+        }
+    }
+
+    @Test
+    void profileSelectionSupportsUseAndDeleteFlows() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path defaultProfilePath = repositoryPath.resolve("default");
+        Path otherProfilePath = repositoryPath.resolve("other");
+        Files.createDirectories(defaultProfilePath);
+        Files.createDirectories(otherProfilePath);
+        Files.writeString(
+            repositoryPath.resolve("repository.json"),
+            "{\"profiles\":[{\"name\":\"default\"},{\"name\":\"other\"}]}"
+        );
+        Files.writeString(defaultProfilePath.resolve("opencode.json"), "{\"name\":\"default\"}\n");
+        Files.writeString(otherProfilePath.resolve("opencode.json"), "{\"name\":\"other\"}\n");
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = createApp();
+        app.onStart();
+
+        try (ToolkitTestRunner test = ToolkitTestRunner.runTest(app::render)) {
+            Pilot pilot = test.pilot();
+
+            pilot.press(KeyCode.DOWN);
+            pilot.pause();
+            assertEquals("default", readSelectedNode(app).profileName());
+
+            pilot.press('u');
+            pilot.pause();
+            assertEquals("Switched to profile default.", readStatus(app));
+
+            pilot.press('d');
+            pilot.pause();
+            assertTrue(waitForPromptAction(app, PromptAction.DELETE_PROFILE));
+            assertTrue(readStatus(app).contains("Switched to profile default."));
+
+            pressText(pilot, "default");
+            pilot.press(KeyCode.ENTER);
+            pilot.pause();
+            waitForPromptToClear(app);
+
+            assertFalse(Files.exists(defaultProfilePath));
+            assertEquals("Deleted profile default from repository repo-a.", readStatus(app));
+            NodeRef selectedNode = readSelectedNode(app);
+            assertEquals(NodeKind.PROFILE, selectedNode.kind());
+            assertEquals("default", selectedNode.profileName());
+        }
+    }
+
     private InteractiveApp createApp() {
         return new InteractiveApp(
             applicationContext.getBean(ProfileService.class),
@@ -138,6 +251,20 @@ class InteractiveAppPilotTest {
         );
     }
 
+    private static void pressDown(Pilot pilot, int count) throws Exception {
+        for (int index = 0; index < count; index++) {
+            pilot.press(KeyCode.DOWN);
+            pilot.pause();
+        }
+    }
+
+    private static void pressText(Pilot pilot, String value) throws Exception {
+        for (char character : value.toCharArray()) {
+            pilot.press(character);
+        }
+        pilot.pause();
+    }
+
     private static boolean readEditMode(InteractiveApp app) throws Exception {
         Field field = InteractiveApp.class.getDeclaredField("editMode");
         field.setAccessible(true);
@@ -150,10 +277,14 @@ class InteractiveAppPilotTest {
         return (String) field.get(app);
     }
 
-    private static String readSelectedNodeFileName(InteractiveApp app) throws Exception {
+    private static NodeRef readSelectedNode(InteractiveApp app) throws Exception {
         Field field = InteractiveApp.class.getDeclaredField("selectedNode");
         field.setAccessible(true);
-        NodeRef selectedNode = (NodeRef) field.get(app);
+        return (NodeRef) field.get(app);
+    }
+
+    private static String readSelectedNodeFileName(InteractiveApp app) throws Exception {
+        NodeRef selectedNode = readSelectedNode(app);
         return selectedNode == null || selectedNode.path() == null ? null : selectedNode.path().getFileName().toString();
     }
 
@@ -169,13 +300,37 @@ class InteractiveAppPilotTest {
         return selectedTreeNode.data().path().getFileName().toString();
     }
 
-
     @SuppressWarnings("unchecked")
     private static int readTreeSelectionIndex(InteractiveApp app) throws Exception {
         Field field = InteractiveApp.class.getDeclaredField("hierarchyTree");
         field.setAccessible(true);
         TreeElement<NodeRef> hierarchyTree = (TreeElement<NodeRef>) field.get(app);
         return hierarchyTree.selected();
+    }
+
+    private static void waitForPromptToClear(InteractiveApp app) throws Exception {
+        Field field = InteractiveApp.class.getDeclaredField("prompt");
+        field.setAccessible(true);
+        for (int attempt = 0; attempt < 50; attempt++) {
+            if (field.get(app) == null) {
+                return;
+            }
+            Thread.sleep(20);
+        }
+        throw new AssertionError("Timed out waiting for prompt to clear");
+    }
+
+    private static boolean waitForPromptAction(InteractiveApp app, PromptAction action) throws Exception {
+        Field field = InteractiveApp.class.getDeclaredField("prompt");
+        field.setAccessible(true);
+        for (int attempt = 0; attempt < 50; attempt++) {
+            PromptState prompt = (PromptState) field.get(app);
+            if (prompt != null && prompt.action == action) {
+                return true;
+            }
+            Thread.sleep(20);
+        }
+        return false;
     }
 
     private static void restoreProperty(String key, String value) {

@@ -23,6 +23,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -207,13 +208,87 @@ class InteractiveAppFileActionsTest {
         assertEquals("Delete cancelled: file name mismatch.", readStatus(app));
     }
 
+    @Test
+    void copySelectedPathCopiesAbsoluteNormalizedPathForFileNode() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path profilePath = repositoryPath.resolve("default");
+        Path filePath = profilePath.resolve("subdir").resolve("opencode.json");
+        Files.createDirectories(filePath.getParent());
+        Files.writeString(repositoryPath.resolve("repository.json"), "{\"profiles\":[{\"name\":\"default\"}]}");
+        Files.writeString(filePath, "{}\n");
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        AtomicReference<String> copiedValue = new AtomicReference<>();
+        InteractiveApp app = createApp(new InteractiveClipboardClient() {
+            @Override
+            void copy(String value) {
+                copiedValue.set(value);
+            }
+        });
+        invokeReloadState(app);
+        setSelectedNode(app, NodeRef.file("repo-a", "default", filePath));
+
+        invokeCopySelectedPath(app);
+
+        String expectedPath = filePath.toAbsolutePath().normalize().toString();
+        assertEquals(expectedPath, copiedValue.get());
+        assertEquals("Copied path " + expectedPath + " to the clipboard.", readStatus(app));
+    }
+
+    @Test
+    void copySelectedPathRejectsNonFileSelection() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path profilePath = repositoryPath.resolve("default");
+        Files.createDirectories(profilePath);
+        Files.writeString(repositoryPath.resolve("repository.json"), "{\"profiles\":[{\"name\":\"default\"}]}");
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = createApp();
+        invokeReloadState(app);
+        setSelectedNode(app, NodeRef.profile("repo-a", "default", profilePath));
+
+        invokeCopySelectedPath(app);
+
+        assertEquals("Select a file first.", readStatus(app));
+    }
+
+    @Test
+    void copySelectedPathReportsClipboardUnavailableMessage() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path profilePath = repositoryPath.resolve("default");
+        Path filePath = profilePath.resolve("opencode.json");
+        Files.createDirectories(profilePath);
+        Files.writeString(repositoryPath.resolve("repository.json"), "{\"profiles\":[{\"name\":\"default\"}]}");
+        Files.writeString(filePath, "{}\n");
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = createApp(new InteractiveClipboardClient() {
+            @Override
+            void copy(String value) {
+                throw new IllegalStateException("Clipboard is unavailable for tests.");
+            }
+        });
+        invokeReloadState(app);
+        setSelectedNode(app, NodeRef.file("repo-a", "default", filePath));
+
+        invokeCopySelectedPath(app);
+
+        assertEquals("Clipboard is unavailable for tests.", readStatus(app));
+    }
+
     private InteractiveApp createApp() {
+        return createApp(new InteractiveClipboardClient());
+    }
+
+    private InteractiveApp createApp(InteractiveClipboardClient clipboardClient) {
         return new InteractiveApp(
             applicationContext.getBean(ProfileService.class),
             applicationContext.getBean(RepositoryService.class),
             applicationContext.getBean(OnboardingService.class),
             applicationContext.getBean(RepositoryPostCreationService.class),
-            objectMapper
+            objectMapper,
+            new BatPreviewRenderer(),
+            clipboardClient
         );
     }
 
@@ -234,6 +309,12 @@ class InteractiveAppFileActionsTest {
 
     private static void invokeApplyPrompt(InteractiveApp app) throws Exception {
         Method method = InteractiveApp.class.getDeclaredMethod("applyPrompt");
+        method.setAccessible(true);
+        method.invoke(app);
+    }
+
+    private static void invokeCopySelectedPath(InteractiveApp app) throws Exception {
+        Method method = InteractiveApp.class.getDeclaredMethod("copySelectedPath");
         method.setAccessible(true);
         method.invoke(app);
     }

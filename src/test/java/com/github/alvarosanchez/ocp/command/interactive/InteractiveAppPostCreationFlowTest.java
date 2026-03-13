@@ -17,6 +17,7 @@ import io.micronaut.serde.ObjectMapper;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -323,6 +324,89 @@ class InteractiveAppPostCreationFlowTest {
         assertEquals("Deleted repository delete-me and local folder.", readStatus(app));
     }
 
+    @Test
+    void inspectDeleteForDirtyGitRepositoryRequiresForcePromptVariant() throws Exception {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
+        Path localRepository = tempDir.resolve("dirty-repo");
+        Files.createDirectories(localRepository);
+        runCommand(List.of("git", "init", localRepository.toString()));
+        Files.writeString(localRepository.resolve("dirty.txt"), "changes\n");
+
+        RepositoryService repositoryService = applicationContext.getBean(RepositoryService.class);
+        writeConfig(new RepositoryEntry("dirty-repo", "git@github.com:acme/dirty-repo.git", localRepository.toString()));
+
+        RepositoryService.RepositoryDeletePreview deletePreview = repositoryService.inspectDelete("dirty-repo");
+
+        assertTrue(deletePreview.gitBacked());
+        assertTrue(deletePreview.hasLocalChanges());
+
+        PromptState prompt = PromptState.single(
+            PromptAction.DELETE_REPOSITORY_FORCE,
+            "Delete repository (local changes detected)",
+            "Type repository name to force delete: dirty-repo"
+        );
+        prompt.expectedConfirmation = "dirty-repo";
+
+        assertEquals(PromptAction.DELETE_REPOSITORY_FORCE, prompt.action);
+        assertEquals("dirty-repo", prompt.expectedConfirmation);
+        assertEquals("Type repository name to force delete: dirty-repo", prompt.labels.getFirst());
+    }
+
+    @Test
+    void inspectDeleteForCleanGitRepositoryUsesSimpleDeletePromptVariant() throws Exception {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
+        Path localRepository = tempDir.resolve("clean-repo");
+        Files.createDirectories(localRepository);
+        runCommand(List.of("git", "init", localRepository.toString()));
+
+        RepositoryService repositoryService = applicationContext.getBean(RepositoryService.class);
+        writeConfig(new RepositoryEntry("clean-repo", "git@github.com:acme/clean-repo.git", localRepository.toString()));
+
+        RepositoryService.RepositoryDeletePreview deletePreview = repositoryService.inspectDelete("clean-repo");
+
+        assertTrue(deletePreview.gitBacked());
+        assertFalse(deletePreview.hasLocalChanges());
+
+        PromptState prompt = PromptState.single(
+            PromptAction.DELETE_REPOSITORY,
+            "Delete repository",
+            "Type repository name to confirm: clean-repo"
+        );
+        prompt.expectedConfirmation = "clean-repo";
+
+        assertEquals(PromptAction.DELETE_REPOSITORY, prompt.action);
+        assertEquals("clean-repo", prompt.expectedConfirmation);
+        assertEquals("Type repository name to confirm: clean-repo", prompt.labels.getFirst());
+    }
+
+    @Test
+    void inspectDeleteForFileBasedRepositoryUsesDeleteLocalFolderPromptVariant() throws Exception {
+        Path localRepository = tempDir.resolve("file-based-repo");
+        Files.createDirectories(localRepository);
+        Files.writeString(localRepository.resolve("repository.json"), "{\"profiles\":[]}");
+
+        RepositoryService repositoryService = applicationContext.getBean(RepositoryService.class);
+        repositoryService.add(localRepository.toString(), "file-based-repo");
+
+        RepositoryService.RepositoryDeletePreview deletePreview = repositoryService.inspectDelete("file-based-repo");
+
+        assertFalse(deletePreview.gitBacked());
+        assertFalse(deletePreview.hasLocalChanges());
+
+        PromptState prompt = PromptState.multiWithOptions(
+            PromptAction.DELETE_REPOSITORY_FILE_BASED,
+            "Delete file-based repository",
+            List.of("Type repository name to confirm: file-based-repo", "Delete local folder as well?"),
+            List.of(List.of(), List.of("no", "yes"))
+        );
+        prompt.expectedConfirmation = "file-based-repo";
+
+        assertEquals(PromptAction.DELETE_REPOSITORY_FILE_BASED, prompt.action);
+        assertEquals("file-based-repo", prompt.expectedConfirmation);
+        assertEquals(List.of("no", "yes"), prompt.options.get(1));
+        assertEquals("Delete local folder as well?", prompt.labels.get(1));
+    }
+
     private InteractiveApp createApp() {
         return new InteractiveApp(
             applicationContext.getBean(ProfileService.class),
@@ -330,6 +414,20 @@ class InteractiveAppPostCreationFlowTest {
             applicationContext.getBean(OnboardingService.class),
             applicationContext.getBean(RepositoryPostCreationService.class),
             applicationContext.getBean(ObjectMapper.class)
+        );
+    }
+
+    private void writeConfig(RepositoryEntry repositoryEntry) throws IOException {
+        Path configDir = Path.of(System.getProperty("ocp.config.dir"));
+        Files.createDirectories(configDir);
+        Files.writeString(
+            configDir.resolve("config.json"),
+            applicationContext.getBean(ObjectMapper.class).writeValueAsString(
+                new com.github.alvarosanchez.ocp.config.OcpConfigFile(
+                    new com.github.alvarosanchez.ocp.config.OcpConfigFile.OcpConfigOptions(),
+                    List.of(repositoryEntry)
+                )
+            )
         );
     }
 
@@ -368,6 +466,7 @@ class InteractiveAppPostCreationFlowTest {
         selectedNodeField.setAccessible(true);
         selectedNodeField.set(app, nodeRef);
     }
+
 
     private static NodeRef readSelectedNode(InteractiveApp app) throws Exception {
         Field selectedNodeField = InteractiveApp.class.getDeclaredField("selectedNode");

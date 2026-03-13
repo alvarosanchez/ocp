@@ -122,6 +122,7 @@ public final class InteractiveApp extends ToolkitApp {
     private final ObjectMapper objectMapper;
     private final String currentVersion = OcpVersionProvider.readVersion();
     private final BatPreviewRenderer batPreviewRenderer;
+    private final InteractiveClipboardClient clipboardClient;
 
     private final TreeElement<NodeRef> hierarchyTree = Toolkit.<NodeRef>tree()
         .title("Repositories / Profiles / Files")
@@ -197,7 +198,8 @@ public final class InteractiveApp extends ToolkitApp {
             onboardingService,
             repositoryPostCreationService,
             objectMapper,
-            new BatPreviewRenderer()
+            new BatPreviewRenderer(),
+            new InteractiveClipboardClient()
         );
     }
 
@@ -209,12 +211,33 @@ public final class InteractiveApp extends ToolkitApp {
         ObjectMapper objectMapper,
         BatPreviewRenderer batPreviewRenderer
     ) {
+        this(
+            profileService,
+            repositoryService,
+            onboardingService,
+            repositoryPostCreationService,
+            objectMapper,
+            batPreviewRenderer,
+            new InteractiveClipboardClient()
+        );
+    }
+
+    InteractiveApp(
+        ProfileService profileService,
+        RepositoryService repositoryService,
+        OnboardingService onboardingService,
+        RepositoryPostCreationService repositoryPostCreationService,
+        ObjectMapper objectMapper,
+        BatPreviewRenderer batPreviewRenderer,
+        InteractiveClipboardClient clipboardClient
+    ) {
         this.profileService = profileService;
         this.repositoryService = repositoryService;
         this.onboardingService = onboardingService;
         this.repositoryPostCreationService = repositoryPostCreationService;
         this.objectMapper = objectMapper;
         this.batPreviewRenderer = batPreviewRenderer;
+        this.clipboardClient = clipboardClient;
         startupUpdateNotice = Cli.consumeStartupNotice();
     }
 
@@ -2078,7 +2101,7 @@ public final class InteractiveApp extends ToolkitApp {
 
         Path absolutePath = selectedNode.path().toAbsolutePath().normalize();
         try {
-            InteractiveClipboard.copy(absolutePath.toString());
+            clipboardClient.copy(absolutePath.toString());
             status = "Copied path " + absolutePath + " to the clipboard.";
         } catch (IllegalStateException e) {
             status = e.getMessage();
