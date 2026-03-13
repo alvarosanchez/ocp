@@ -1403,21 +1403,11 @@ public final class InteractiveApp extends ToolkitApp {
         return prompt;
     }
 
-    void openCreateProfilePromptForSelectedNode() {
-        openPromptForSelectedNode(PromptAction.CREATE_PROFILE);
-    }
-
-    void openDeletePromptForSelectedNode() {
-        openPromptForSelectedNode(PromptAction.DELETE_PROFILE);
-    }
-
     private void openPromptForSelectedNode(PromptAction action) {
-        if (action == PromptAction.CREATE_PROFILE) {
-            openCreateProfilePromptForCurrentSelection();
-            return;
-        }
-        if (action == PromptAction.DELETE_PROFILE) {
-            openDeletePromptForCurrentSelection();
+        switch (action) {
+            case CREATE_PROFILE -> openCreateProfilePromptForCurrentSelection();
+            case DELETE_PROFILE -> openDeletePromptForCurrentSelection();
+            default -> throw new IllegalArgumentException("Unsupported prompt action: " + action);
         }
     }
 
