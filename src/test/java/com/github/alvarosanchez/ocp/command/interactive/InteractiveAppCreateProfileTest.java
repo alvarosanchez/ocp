@@ -149,7 +149,7 @@ class InteractiveAppCreateProfileTest {
         InteractiveApp app = createApp();
         invokeReloadState(app);
         setSelectedNode(app, NodeRef.file("repo-a", "default", filePath));
-        invokeOpenPromptForSelectedNode(app, PromptAction.CREATE_PROFILE);
+        invokeOpenCreateProfilePromptForSelectedNode(app);
 
         PromptState storedPrompt = readPrompt(app);
 
@@ -194,10 +194,15 @@ class InteractiveAppCreateProfileTest {
         method.invoke(app);
     }
 
-    private static void invokeOpenPromptForSelectedNode(InteractiveApp app, PromptAction action) throws Exception {
-        Method method = InteractiveApp.class.getDeclaredMethod("openPromptForSelectedNode", PromptAction.class);
+    private static void invokeOpenCreateProfilePromptForSelectedNode(InteractiveApp app) throws Exception {
+        Class<?> promptShortcutClass = Class.forName(
+            "com.github.alvarosanchez.ocp.command.interactive.InteractiveApp$PromptShortcut"
+        );
+        @SuppressWarnings("unchecked")
+        Object shortcut = Enum.valueOf((Class<Enum>) promptShortcutClass.asSubclass(Enum.class), "CREATE_PROFILE");
+        Method method = InteractiveApp.class.getDeclaredMethod("openPromptForSelectedNode", promptShortcutClass);
         method.setAccessible(true);
-        method.invoke(app, action);
+        method.invoke(app, shortcut);
     }
 
     private static void setPrompt(InteractiveApp app, PromptState prompt) throws Exception {

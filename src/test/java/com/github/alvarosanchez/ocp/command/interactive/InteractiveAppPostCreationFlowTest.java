@@ -337,7 +337,7 @@ class InteractiveAppPostCreationFlowTest {
         InteractiveApp app = createApp();
         invokeReloadState(app);
         setSelectedNode(app, NodeRef.repository("dirty-repo", localRepository));
-        invokeOpenPromptForSelectedNode(app, PromptAction.DELETE_PROFILE);
+        invokeOpenDeletePromptForSelectedNode(app);
 
         PromptState prompt = readPrompt(app);
 
@@ -358,7 +358,7 @@ class InteractiveAppPostCreationFlowTest {
         InteractiveApp app = createApp();
         invokeReloadState(app);
         setSelectedNode(app, NodeRef.repository("clean-repo", localRepository));
-        invokeOpenPromptForSelectedNode(app, PromptAction.DELETE_PROFILE);
+        invokeOpenDeletePromptForSelectedNode(app);
 
         PromptState prompt = readPrompt(app);
 
@@ -379,7 +379,7 @@ class InteractiveAppPostCreationFlowTest {
         InteractiveApp app = createApp();
         invokeReloadState(app);
         setSelectedNode(app, NodeRef.repository("file-based-repo", localRepository));
-        invokeOpenPromptForSelectedNode(app, PromptAction.DELETE_PROFILE);
+        invokeOpenDeletePromptForSelectedNode(app);
 
         PromptState prompt = readPrompt(app);
 
@@ -431,10 +431,15 @@ class InteractiveAppPostCreationFlowTest {
         reloadState.invoke(app);
     }
 
-    private static void invokeOpenPromptForSelectedNode(InteractiveApp app, PromptAction action) throws Exception {
-        Method method = InteractiveApp.class.getDeclaredMethod("openPromptForSelectedNode", PromptAction.class);
+    private static void invokeOpenDeletePromptForSelectedNode(InteractiveApp app) throws Exception {
+        Class<?> promptShortcutClass = Class.forName(
+            "com.github.alvarosanchez.ocp.command.interactive.InteractiveApp$PromptShortcut"
+        );
+        @SuppressWarnings("unchecked")
+        Object shortcut = Enum.valueOf((Class<Enum>) promptShortcutClass.asSubclass(Enum.class), "DELETE");
+        Method method = InteractiveApp.class.getDeclaredMethod("openPromptForSelectedNode", promptShortcutClass);
         method.setAccessible(true);
-        method.invoke(app, action);
+        method.invoke(app, shortcut);
     }
 
     private static void setPrompt(InteractiveApp app, PromptState prompt) throws Exception {

@@ -441,7 +441,7 @@ public final class InteractiveApp extends ToolkitApp {
             return EventResult.HANDLED;
         }
         if (event.isChar('d')) {
-            openPromptForSelectedNode(PromptAction.DELETE_PROFILE);
+            openPromptForSelectedNode(PromptShortcut.DELETE);
             return EventResult.HANDLED;
         }
         if (event.isChar('n')) {
@@ -457,7 +457,7 @@ public final class InteractiveApp extends ToolkitApp {
             return EventResult.HANDLED;
         }
         if (event.isChar('c')) {
-            openPromptForSelectedNode(PromptAction.CREATE_PROFILE);
+            openPromptForSelectedNode(PromptShortcut.CREATE_PROFILE);
             return EventResult.HANDLED;
         }
         if (event.isChar('f')) {
@@ -1403,12 +1403,16 @@ public final class InteractiveApp extends ToolkitApp {
         return prompt;
     }
 
-    private void openPromptForSelectedNode(PromptAction action) {
-        switch (action) {
+    private void openPromptForSelectedNode(PromptShortcut shortcut) {
+        switch (shortcut) {
             case CREATE_PROFILE -> openCreateProfilePromptForCurrentSelection();
-            case DELETE_PROFILE -> openDeletePromptForCurrentSelection();
-            default -> throw new IllegalArgumentException("Unsupported prompt action: " + action);
+            case DELETE -> openDeletePromptForCurrentSelection();
         }
+    }
+
+    private enum PromptShortcut {
+        CREATE_PROFILE,
+        DELETE
     }
 
     private void openCreateProfilePromptForCurrentSelection() {
