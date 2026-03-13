@@ -337,7 +337,7 @@ class InteractiveAppPostCreationFlowTest {
         InteractiveApp app = createApp();
         invokeReloadState(app);
         setSelectedNode(app, NodeRef.repository("dirty-repo", localRepository));
-        app.openDeletePromptForSelectedNode();
+        invokeOpenPromptForSelectedNode(app, PromptAction.DELETE_PROFILE);
 
         PromptState prompt = readPrompt(app);
 
@@ -358,7 +358,7 @@ class InteractiveAppPostCreationFlowTest {
         InteractiveApp app = createApp();
         invokeReloadState(app);
         setSelectedNode(app, NodeRef.repository("clean-repo", localRepository));
-        app.openDeletePromptForSelectedNode();
+        invokeOpenPromptForSelectedNode(app, PromptAction.DELETE_PROFILE);
 
         PromptState prompt = readPrompt(app);
 
@@ -379,7 +379,7 @@ class InteractiveAppPostCreationFlowTest {
         InteractiveApp app = createApp();
         invokeReloadState(app);
         setSelectedNode(app, NodeRef.repository("file-based-repo", localRepository));
-        app.openDeletePromptForSelectedNode();
+        invokeOpenPromptForSelectedNode(app, PromptAction.DELETE_PROFILE);
 
         PromptState prompt = readPrompt(app);
 
@@ -429,6 +429,12 @@ class InteractiveAppPostCreationFlowTest {
         Method reloadState = InteractiveApp.class.getDeclaredMethod("reloadState");
         reloadState.setAccessible(true);
         reloadState.invoke(app);
+    }
+
+    private static void invokeOpenPromptForSelectedNode(InteractiveApp app, PromptAction action) throws Exception {
+        Method method = InteractiveApp.class.getDeclaredMethod("openPromptForSelectedNode", PromptAction.class);
+        method.setAccessible(true);
+        method.invoke(app, action);
     }
 
     private static void setPrompt(InteractiveApp app, PromptState prompt) throws Exception {

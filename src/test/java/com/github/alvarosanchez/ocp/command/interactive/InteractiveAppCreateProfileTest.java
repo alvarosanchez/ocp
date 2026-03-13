@@ -149,7 +149,7 @@ class InteractiveAppCreateProfileTest {
         InteractiveApp app = createApp();
         invokeReloadState(app);
         setSelectedNode(app, NodeRef.file("repo-a", "default", filePath));
-        app.openCreateProfilePromptForSelectedNode();
+        invokeOpenPromptForSelectedNode(app, PromptAction.CREATE_PROFILE);
 
         PromptState storedPrompt = readPrompt(app);
 
@@ -192,6 +192,12 @@ class InteractiveAppCreateProfileTest {
         Method method = InteractiveApp.class.getDeclaredMethod("applyPrompt");
         method.setAccessible(true);
         method.invoke(app);
+    }
+
+    private static void invokeOpenPromptForSelectedNode(InteractiveApp app, PromptAction action) throws Exception {
+        Method method = InteractiveApp.class.getDeclaredMethod("openPromptForSelectedNode", PromptAction.class);
+        method.setAccessible(true);
+        method.invoke(app, action);
     }
 
     private static void setPrompt(InteractiveApp app, PromptState prompt) throws Exception {

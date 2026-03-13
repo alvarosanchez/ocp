@@ -441,7 +441,7 @@ public final class InteractiveApp extends ToolkitApp {
             return EventResult.HANDLED;
         }
         if (event.isChar('d')) {
-            openDeletePromptForSelectedNode();
+            openPromptForSelectedNode(PromptAction.DELETE_PROFILE);
             return EventResult.HANDLED;
         }
         if (event.isChar('n')) {
@@ -457,7 +457,7 @@ public final class InteractiveApp extends ToolkitApp {
             return EventResult.HANDLED;
         }
         if (event.isChar('c')) {
-            openCreateProfilePromptForSelectedNode();
+            openPromptForSelectedNode(PromptAction.CREATE_PROFILE);
             return EventResult.HANDLED;
         }
         if (event.isChar('f')) {
@@ -1404,6 +1404,24 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     void openCreateProfilePromptForSelectedNode() {
+        openPromptForSelectedNode(PromptAction.CREATE_PROFILE);
+    }
+
+    void openDeletePromptForSelectedNode() {
+        openPromptForSelectedNode(PromptAction.DELETE_PROFILE);
+    }
+
+    private void openPromptForSelectedNode(PromptAction action) {
+        if (action == PromptAction.CREATE_PROFILE) {
+            openCreateProfilePromptForCurrentSelection();
+            return;
+        }
+        if (action == PromptAction.DELETE_PROFILE) {
+            openDeletePromptForCurrentSelection();
+        }
+    }
+
+    private void openCreateProfilePromptForCurrentSelection() {
         String repositoryName = selectedRepositoryName();
         if (repositoryName == null) {
             status = STATUS_SELECT_NODE_FIRST;
@@ -1416,7 +1434,7 @@ public final class InteractiveApp extends ToolkitApp {
         }
     }
 
-    void openDeletePromptForSelectedNode() {
+    private void openDeletePromptForCurrentSelection() {
         if (selectedNode == null) {
             status = STATUS_SELECT_NODE_FIRST;
             return;
