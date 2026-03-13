@@ -27,7 +27,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -330,10 +329,6 @@ class InteractiveAppSelectionRefreshTest {
             new RepositoryEntry("repo-a", null, fileBasedRepository.toString()),
             new RepositoryEntry("repo-b", "git@github.com:acme/repo-b.git", gitBackedRepository.toString())
         );
-
-        InteractiveApp app = createApp();
-        invokeReloadState(app);
-        invokeRefreshAllRepositories(app);
 
         InteractiveApp appWithSuccessfulRefresh = new InteractiveApp(
             applicationContext.getBean(ProfileService.class),
