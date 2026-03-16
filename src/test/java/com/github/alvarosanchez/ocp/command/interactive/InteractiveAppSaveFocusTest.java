@@ -15,8 +15,6 @@ import com.github.alvarosanchez.ocp.service.RepositoryService;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.serde.ObjectMapper;
 import java.io.IOException;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -72,18 +70,18 @@ class InteractiveAppSaveFocusTest {
         writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
 
         InteractiveApp app = createApp();
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.file("repo-a", "default", filePath));
-        setEditMode(app, true);
-        setActivePane(app, Pane.DETAIL);
-        setEditorText(app, "updated");
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.file("repo-a", "default", filePath));
+        app.testSetEditMode(true);
+        app.testSetActivePane(Pane.DETAIL);
+        app.testEditorState().setText("updated");
 
-        invokeSaveSelectedFile(app);
+        app.testSaveSelectedFile();
 
         assertEquals("updated", Files.readString(filePath));
-        assertFalse(readEditMode(app));
-        assertEquals(Pane.TREE, readActivePane(app));
-        assertEquals("Saved opencode.json.", readStatus(app));
+        assertFalse(app.testEditMode());
+        assertEquals(Pane.TREE, app.testActivePane());
+        assertEquals("Saved opencode.json.", app.testStatus());
     }
 
 
@@ -98,16 +96,16 @@ class InteractiveAppSaveFocusTest {
         writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
 
         InteractiveApp app = createApp();
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.file("repo-a", "default", filePath));
-        setEditMode(app, true);
-        setActivePane(app, Pane.DETAIL);
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.file("repo-a", "default", filePath));
+        app.testSetEditMode(true);
+        app.testSetActivePane(Pane.DETAIL);
 
-        invokeExitEditMode(app);
+        app.testExitEditModeToTree();
 
-        assertFalse(readEditMode(app));
-        assertEquals(Pane.TREE, readActivePane(app));
-        assertEquals("Exited edit mode.", readStatus(app));
+        assertFalse(app.testEditMode());
+        assertEquals(Pane.TREE, app.testActivePane());
+        assertEquals("Exited edit mode.", app.testStatus());
     }
 
     @Test
@@ -124,14 +122,14 @@ class InteractiveAppSaveFocusTest {
         writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
 
         InteractiveApp app = createApp();
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.deepMergedFile("repo-a", "child", filePath));
-        setEditMode(app, true);
-        setEditorText(app, "{\"child\":1,\"shared\":3,\"new\":4}");
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.deepMergedFile("repo-a", "child", filePath));
+        app.testSetEditMode(true);
+        app.testEditorState().setText("{\"child\":1,\"shared\":3,\"new\":4}");
 
-        invokeSaveSelectedFile(app);
+        app.testSaveSelectedFile();
 
-        String preview = readSelectedFilePreviewText(app);
+        String preview = selectedFilePreviewText(app);
         assertEquals(
             objectMapper.readValue("{\"base\":1,\"shared\":3,\"child\":1,\"new\":4}", Object.class),
             objectMapper.readValue(preview, Object.class)
@@ -146,17 +144,17 @@ class InteractiveAppSaveFocusTest {
         writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
 
         InteractiveApp app = createApp();
-        invokeReloadState(app);
+        app.testReloadState();
 
-        invokeEditOcpConfigFile(app);
+        app.testEditOcpConfigFile();
 
-        assertFalse(readSelectedNode(app).inherited());
-        assertEquals(configFilePath(), readSelectedNode(app).path());
-        assertEquals(NodeKind.FILE, readSelectedNode(app).kind());
-        assertEquals(Files.readString(configFilePath()), readEditorText(app));
-        assertTrue(readEditMode(app));
-        assertEquals(Pane.DETAIL, readActivePane(app));
-        assertEquals("Editing config.json. Ctrl+S to save, Esc to cancel.", readStatus(app));
+        assertFalse(app.testSelectedNode().inherited());
+        assertEquals(configFilePath(), app.testSelectedNode().path());
+        assertEquals(NodeKind.FILE, app.testSelectedNode().kind());
+        assertEquals(Files.readString(configFilePath()), app.testEditorState().text());
+        assertTrue(app.testEditMode());
+        assertEquals(Pane.DETAIL, app.testActivePane());
+        assertEquals("Editing config.json. Ctrl+S to save, Esc to cancel.", app.testStatus());
     }
 
     @Test
@@ -167,28 +165,28 @@ class InteractiveAppSaveFocusTest {
         writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
 
         InteractiveApp app = createApp();
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.file(null, null, configFilePath()));
-        setEditMode(app, true);
-        setEditorText(app, objectMapper.writeValueAsString(new OcpConfigFile(
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.file(null, null, configFilePath()));
+        app.testSetEditMode(true);
+        app.testEditorState().setText(objectMapper.writeValueAsString(new OcpConfigFile(
             new OcpConfigOptions(),
             List.of(new RepositoryEntry("repo-b", null, repositoryPath.toString()))
         )));
 
-        invokeSaveSelectedFile(app);
+        app.testSaveSelectedFile();
 
-        assertEquals("repo-b", readRepositories(app).getFirst().name());
-        assertEquals("Saved config.json.", readStatus(app));
+        assertEquals("repo-b", app.testRepositories().getFirst().name());
+        assertEquals("Saved config.json.", app.testStatus());
     }
 
     @Test
     void editOcpConfigFileReportsMissingConfig() throws Exception {
         InteractiveApp app = createApp();
 
-        invokeEditOcpConfigFile(app);
+        app.testEditOcpConfigFile();
 
-        assertEquals("OCP config file does not exist yet. Add or create a repository first.", readStatus(app));
-        assertFalse(readEditMode(app));
+        assertEquals("OCP config file does not exist yet. Add or create a repository first.", app.testStatus());
+        assertFalse(app.testEditMode());
     }
 
     @Test
@@ -202,16 +200,16 @@ class InteractiveAppSaveFocusTest {
         writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
 
         InteractiveApp app = createApp();
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.file(null, null, configFilePath()));
-        setEditMode(app, true);
-        setEditorText(app, Files.readString(configFilePath()));
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.file(null, null, configFilePath()));
+        app.testSetEditMode(true);
+        app.testEditorState().setText(Files.readString(configFilePath()));
 
-        invokeSyncSelectionAndPreview(app);
+        app.testSyncSelectionAndPreview();
 
-        assertEquals(configFilePath(), readSelectedNode(app).path());
-        assertTrue(readEditMode(app));
-        assertEquals(Files.readString(configFilePath()), readEditorText(app));
+        assertEquals(configFilePath(), app.testSelectedNode().path());
+        assertTrue(app.testEditMode());
+        assertEquals(Files.readString(configFilePath()), app.testEditorState().text());
     }
 
     private InteractiveApp createApp() {
@@ -233,100 +231,12 @@ class InteractiveAppSaveFocusTest {
         );
     }
 
-    private static void invokeReloadState(InteractiveApp app) throws Exception {
-        Method method = InteractiveApp.class.getDeclaredMethod("reloadState");
-        method.setAccessible(true);
-        method.invoke(app);
-    }
-
-    private static void invokeExitEditMode(InteractiveApp app) throws Exception {
-        Method method = InteractiveApp.class.getDeclaredMethod("exitEditModeToTree");
-        method.setAccessible(true);
-        method.invoke(app);
-    }
-
-    private static void invokeSaveSelectedFile(InteractiveApp app) throws Exception {
-        Method method = InteractiveApp.class.getDeclaredMethod("saveSelectedFile");
-        method.setAccessible(true);
-        method.invoke(app);
-    }
-
-    private static void invokeEditOcpConfigFile(InteractiveApp app) throws Exception {
-        Method method = InteractiveApp.class.getDeclaredMethod("editOcpConfigFile");
-        method.setAccessible(true);
-        method.invoke(app);
-    }
-
-    private static void invokeSyncSelectionAndPreview(InteractiveApp app) throws Exception {
-        Method method = InteractiveApp.class.getDeclaredMethod("syncSelectionAndPreview");
-        method.setAccessible(true);
-        method.invoke(app);
-    }
-
-    private static void setSelectedNode(InteractiveApp app, NodeRef nodeRef) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("selectedNode");
-        field.setAccessible(true);
-        field.set(app, nodeRef);
-    }
-
-    private static void setEditMode(InteractiveApp app, boolean value) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("editMode");
-        field.setAccessible(true);
-        field.setBoolean(app, value);
-    }
-
-    private static boolean readEditMode(InteractiveApp app) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("editMode");
-        field.setAccessible(true);
-        return field.getBoolean(app);
-    }
-
-    private static void setActivePane(InteractiveApp app, Pane pane) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("activePane");
-        field.setAccessible(true);
-        field.set(app, pane);
-    }
-
-    private static Pane readActivePane(InteractiveApp app) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("activePane");
-        field.setAccessible(true);
-        return (Pane) field.get(app);
-    }
-
-    private static void setEditorText(InteractiveApp app, String text) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("editorState");
-        field.setAccessible(true);
-        dev.tamboui.widgets.input.TextAreaState editorState = (dev.tamboui.widgets.input.TextAreaState) field.get(app);
-        editorState.setText(text);
-    }
-
-    private static String readStatus(InteractiveApp app) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("status");
-        field.setAccessible(true);
-        return (String) field.get(app);
-    }
-
-    private static NodeRef readSelectedNode(InteractiveApp app) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("selectedNode");
-        field.setAccessible(true);
-        return (NodeRef) field.get(app);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static java.util.List<RepositoryService.ConfiguredRepository> readRepositories(InteractiveApp app) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("repositories");
-        field.setAccessible(true);
-        return (java.util.List<RepositoryService.ConfiguredRepository>) field.get(app);
-    }
-
     private Path configFilePath() {
         return Path.of(System.getProperty("ocp.config.dir")).resolve("config.json");
     }
 
-    private static String readSelectedFilePreviewText(InteractiveApp app) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("selectedFilePreview");
-        field.setAccessible(true);
-        dev.tamboui.text.Text text = (dev.tamboui.text.Text) field.get(app);
+    private static String selectedFilePreviewText(InteractiveApp app) {
+        dev.tamboui.text.Text text = app.testSelectedFilePreview();
         StringBuilder builder = new StringBuilder();
         for (var line : text.lines()) {
             for (var span : line.spans()) {
@@ -334,13 +244,6 @@ class InteractiveAppSaveFocusTest {
             }
         }
         return builder.toString();
-    }
-
-    private static String readEditorText(InteractiveApp app) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("editorState");
-        field.setAccessible(true);
-        dev.tamboui.widgets.input.TextAreaState editorState = (dev.tamboui.widgets.input.TextAreaState) field.get(app);
-        return editorState.text();
     }
 
     private static void restoreProperty(String key, String value) {

@@ -12,9 +12,6 @@ import io.micronaut.context.ApplicationContext;
 import io.micronaut.serde.ObjectMapper;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -273,9 +270,22 @@ class OnboardingServiceTest {
         Files.writeString(openCodeFile, "{\"model\":\"gpt-5\"}");
 
         RepositoryService failingRepositoryService = new RepositoryService(
-            objectMapperFailingOnActiveProfileWrite(),
+            objectMapper,
             new GitRepositoryClient(new GitProcessExecutor())
-        );
+        ).withConfigWriter(new RepositoryService.ConfigWriter() {
+                @Override
+                public String writeConfig(OcpConfigFile configFile) throws IOException {
+                    if (configFile.config().activeProfile() != null) {
+                        throw new IOException("Injected active-profile write failure");
+                    }
+                    return objectMapper.writeValueAsString(configFile);
+                }
+
+                @Override
+                public String writeRepositoryConfig(com.github.alvarosanchez.ocp.config.RepositoryConfigFile configFile) throws IOException {
+                    return objectMapper.writeValueAsString(configFile);
+                }
+            });
         ProfileService failingProfileService = new ProfileService(objectMapper, failingRepositoryService, new GitRepositoryClient(new GitProcessExecutor()));
         OnboardingService failingOnboardingService = new OnboardingService(failingRepositoryService, failingProfileService);
 
@@ -292,29 +302,4 @@ class OnboardingServiceTest {
         assertTrue(Files.notExists(tempDir.resolve("cache").resolve("repositories").resolve("personal-repo")));
         assertTrue(Files.notExists(Path.of(System.getProperty("ocp.config.dir")).resolve("config.json")));
     }
-
-    private ObjectMapper objectMapperFailingOnActiveProfileWrite() {
-        InvocationHandler handler = (proxy, method, args) -> {
-            if (
-                method.getName().equals("writeValueAsString")
-                    && args != null
-                    && args.length == 1
-                    && args[0] instanceof OcpConfigFile configFile
-                    && configFile.config().activeProfile() != null
-            ) {
-                throw new IOException("Injected active-profile write failure");
-            }
-            try {
-                return method.invoke(objectMapper, args);
-            } catch (InvocationTargetException e) {
-                throw e.getCause();
-            }
-        };
-        return (ObjectMapper) Proxy.newProxyInstance(
-            ObjectMapper.class.getClassLoader(),
-            new Class<?>[] {ObjectMapper.class},
-            handler
-        );
-    }
-
 }

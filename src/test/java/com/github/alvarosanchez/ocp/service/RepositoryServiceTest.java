@@ -18,9 +18,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -457,9 +454,9 @@ class RepositoryServiceTest {
         Files.createDirectories(location);
 
         RepositoryService failingRepositoryService = new RepositoryService(
-            objectMapperFailingOnRepositoryConfigWrite(),
+            objectMapper,
             new GitRepositoryClient(new GitProcessExecutor())
-        );
+        ).withConfigWriter(configWriterFailingOnRepositoryConfigWrite());
 
         UncheckedIOException thrown = assertThrows(
             UncheckedIOException.class,
@@ -896,27 +893,18 @@ class RepositoryServiceTest {
         return projectRoot.relativize(absoluteTarget).toString();
     }
 
-    private ObjectMapper objectMapperFailingOnRepositoryConfigWrite() {
-        InvocationHandler handler = (proxy, method, args) -> {
-            if (
-                method.getName().equals("writeValueAsString")
-                    && args != null
-                    && args.length == 1
-                    && args[0] instanceof RepositoryConfigFile
-            ) {
+    private RepositoryService.ConfigWriter configWriterFailingOnRepositoryConfigWrite() {
+        return new RepositoryService.ConfigWriter() {
+            @Override
+            public String writeConfig(OcpConfigFile configFile) throws IOException {
+                return objectMapper.writeValueAsString(configFile);
+            }
+
+            @Override
+            public String writeRepositoryConfig(RepositoryConfigFile configFile) throws IOException {
                 throw new IOException("Injected repository config write failure");
             }
-            try {
-                return method.invoke(objectMapper, args);
-            } catch (InvocationTargetException e) {
-                throw e.getCause();
-            }
         };
-        return (ObjectMapper) Proxy.newProxyInstance(
-            ObjectMapper.class.getClassLoader(),
-            new Class<?>[] {ObjectMapper.class},
-            handler
-        );
     }
 
     private Path createRemoteRepository() throws IOException, InterruptedException {

@@ -19,11 +19,7 @@ final class CommitConfirmDialogRenderer {
     }
 
     static Element render(CommitConfirmState state, KeyEventHandler keyEventHandler) {
-        List<Element> content = new ArrayList<>();
-        content.add(text("Review changes for repository " + state.repositoryName() + " before commit and push.").fg(Color.YELLOW));
-        content.add(text("Diff:").bold().fg(Color.CYAN));
-        content.addAll(buildColoredDiffPreview(state.diff()));
-        content.add(text("Press [Y] to continue to the commit message, [Esc] to cancel.").bold().fg(Color.YELLOW));
+        List<Element> content = dialogContent(state);
 
         return dialog("Review local changes", content.toArray(Element[]::new))
             .rounded()
@@ -33,6 +29,15 @@ final class CommitConfirmDialogRenderer {
             .id(DIALOG_ID)
             .focusable()
             .onKeyEvent(keyEventHandler);
+    }
+
+    static List<Element> dialogContent(CommitConfirmState state) {
+        List<Element> content = new ArrayList<>();
+        content.add(text("Review changes for repository " + state.repositoryName() + " before commit and push.").fg(Color.YELLOW));
+        content.add(text("Diff:").bold().fg(Color.CYAN));
+        content.addAll(buildColoredDiffPreview(state.diff()));
+        content.add(text("Press [Y] to continue to the commit message, [Esc] to cancel.").bold().fg(Color.YELLOW));
+        return content;
     }
 
     private static List<Element> buildColoredDiffPreview(String diff) {

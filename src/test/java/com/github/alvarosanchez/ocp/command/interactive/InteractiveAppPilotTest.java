@@ -20,7 +20,6 @@ import dev.tamboui.widgets.tree.TreeNode;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.serde.ObjectMapper;
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -267,21 +266,15 @@ class InteractiveAppPilotTest {
     }
 
     private static boolean readEditMode(InteractiveApp app) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("editMode");
-        field.setAccessible(true);
-        return field.getBoolean(app);
+        return app.testEditMode();
     }
 
     private static String readStatus(InteractiveApp app) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("status");
-        field.setAccessible(true);
-        return (String) field.get(app);
+        return app.testStatus();
     }
 
     private static NodeRef readSelectedNode(InteractiveApp app) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("selectedNode");
-        field.setAccessible(true);
-        return (NodeRef) field.get(app);
+        return app.testSelectedNode();
     }
 
     private static String readSelectedNodeFileName(InteractiveApp app) throws Exception {
@@ -291,9 +284,7 @@ class InteractiveAppPilotTest {
 
     @SuppressWarnings("unchecked")
     private static String readSelectedTreeNodeFileName(InteractiveApp app) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("hierarchyTree");
-        field.setAccessible(true);
-        TreeElement<NodeRef> hierarchyTree = (TreeElement<NodeRef>) field.get(app);
+        TreeElement<NodeRef> hierarchyTree = app.testHierarchyTree();
         TreeNode<NodeRef> selectedTreeNode = hierarchyTree.selectedNode();
         if (selectedTreeNode == null || selectedTreeNode.data() == null || selectedTreeNode.data().path() == null) {
             return null;
@@ -303,17 +294,13 @@ class InteractiveAppPilotTest {
 
     @SuppressWarnings("unchecked")
     private static int readTreeSelectionIndex(InteractiveApp app) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("hierarchyTree");
-        field.setAccessible(true);
-        TreeElement<NodeRef> hierarchyTree = (TreeElement<NodeRef>) field.get(app);
+        TreeElement<NodeRef> hierarchyTree = app.testHierarchyTree();
         return hierarchyTree.selected();
     }
 
     private static void waitForPromptToClear(InteractiveApp app) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("prompt");
-        field.setAccessible(true);
         for (int attempt = 0; attempt < 50; attempt++) {
-            if (field.get(app) == null) {
+            if (app.testPrompt() == null) {
                 return;
             }
             Thread.sleep(20);
@@ -322,10 +309,8 @@ class InteractiveAppPilotTest {
     }
 
     private static boolean waitForPromptAction(InteractiveApp app, PromptAction action) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("prompt");
-        field.setAccessible(true);
         for (int attempt = 0; attempt < 50; attempt++) {
-            PromptState prompt = (PromptState) field.get(app);
+            PromptState prompt = app.testPrompt();
             if (prompt != null && prompt.action == action) {
                 return true;
             }

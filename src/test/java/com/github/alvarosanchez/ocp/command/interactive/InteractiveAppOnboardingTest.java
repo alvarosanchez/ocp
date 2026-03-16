@@ -11,8 +11,6 @@ import com.github.alvarosanchez.ocp.service.OnboardingService;
 import com.github.alvarosanchez.ocp.service.ProfileService;
 import com.github.alvarosanchez.ocp.service.RepositoryPostCreationService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import io.micronaut.context.ApplicationContext;
@@ -81,13 +79,9 @@ class InteractiveAppOnboardingTest {
 
         app.onStart();
 
-        Field splashVisibleField = InteractiveApp.class.getDeclaredField("splashVisible");
-        splashVisibleField.setAccessible(true);
-        assertFalse((boolean) splashVisibleField.get(app));
+        assertFalse(app.testSplashVisible());
 
-        Field promptField = InteractiveApp.class.getDeclaredField("prompt");
-        promptField.setAccessible(true);
-        PromptState prompt = (PromptState) promptField.get(app);
+        PromptState prompt = app.testPrompt();
         assertNotNull(prompt);
         assertEquals(PromptAction.ONBOARD_EXISTING_CONFIG_CONFIRM, prompt.action);
         assertEquals("Import existing OpenCode config files into OCP?", prompt.title);
@@ -110,8 +104,6 @@ class InteractiveAppOnboardingTest {
             applicationContext.getBean(ObjectMapper.class)
         );
 
-        Field promptField = InteractiveApp.class.getDeclaredField("prompt");
-        promptField.setAccessible(true);
         PromptState prompt = PromptState.single(
             PromptAction.ONBOARD_EXISTING_CONFIG_PROFILE_NAME,
             "Create onboarding profile",
@@ -119,19 +111,15 @@ class InteractiveAppOnboardingTest {
         );
         prompt.contextRepositoryName = "personal-repo";
         prompt.values.set(0, "bad/name");
-        promptField.set(app, prompt);
+        app.testSetPrompt(prompt);
 
-        Method applyPrompt = InteractiveApp.class.getDeclaredMethod("applyPrompt");
-        applyPrompt.setAccessible(true);
-        applyPrompt.invoke(app);
+        app.testApplyPrompt();
 
-        PromptState retainedPrompt = (PromptState) promptField.get(app);
+        PromptState retainedPrompt = app.testPrompt();
         assertNotNull(retainedPrompt);
         assertEquals(PromptAction.ONBOARD_EXISTING_CONFIG_PROFILE_NAME, retainedPrompt.action);
 
-        Field statusField = InteractiveApp.class.getDeclaredField("status");
-        statusField.setAccessible(true);
-        String status = (String) statusField.get(app);
+        String status = app.testStatus();
         assertEquals("Error: Profile name must be a single safe path segment.", status);
     }
 
@@ -145,27 +133,21 @@ class InteractiveAppOnboardingTest {
             applicationContext.getBean(ObjectMapper.class)
         );
 
-        Field promptField = InteractiveApp.class.getDeclaredField("prompt");
-        promptField.setAccessible(true);
         PromptState prompt = PromptState.single(
             PromptAction.ONBOARD_EXISTING_CONFIG_REPOSITORY_NAME,
             "Create onboarding repository",
             "Repository name"
         );
         prompt.values.set(0, "bad/name");
-        promptField.set(app, prompt);
+        app.testSetPrompt(prompt);
 
-        Method applyPrompt = InteractiveApp.class.getDeclaredMethod("applyPrompt");
-        applyPrompt.setAccessible(true);
-        applyPrompt.invoke(app);
+        app.testApplyPrompt();
 
-        PromptState retainedPrompt = (PromptState) promptField.get(app);
+        PromptState retainedPrompt = app.testPrompt();
         assertNotNull(retainedPrompt);
         assertEquals(PromptAction.ONBOARD_EXISTING_CONFIG_REPOSITORY_NAME, retainedPrompt.action);
 
-        Field statusField = InteractiveApp.class.getDeclaredField("status");
-        statusField.setAccessible(true);
-        String status = (String) statusField.get(app);
+        String status = app.testStatus();
         assertEquals("Error: Repository name must be a single safe path segment.", status);
     }
 
@@ -194,15 +176,11 @@ class InteractiveAppOnboardingTest {
 
         app.onStart();
 
-        Field promptField = InteractiveApp.class.getDeclaredField("prompt");
-        promptField.setAccessible(true);
-        PromptState prompt = (PromptState) promptField.get(app);
+        PromptState prompt = app.testPrompt();
         assertNotNull(prompt);
         assertEquals(PromptAction.ONBOARD_EXISTING_CONFIG_CONFIRM, prompt.action);
 
-        Method activeOverlay = InteractiveApp.class.getDeclaredMethod("activeOverlay");
-        activeOverlay.setAccessible(true);
-        Object overlay = activeOverlay.invoke(app);
+        Object overlay = app.testActiveOverlay();
         assertEquals("PROMPT", overlay.toString());
     }
 
@@ -220,18 +198,12 @@ class InteractiveAppOnboardingTest {
             applicationContext.getBean(ObjectMapper.class)
         );
 
-        Method loadInitialDataInBackground = InteractiveApp.class.getDeclaredMethod("loadInitialDataInBackground");
-        loadInitialDataInBackground.setAccessible(true);
-        loadInitialDataInBackground.invoke(app);
+        app.testLoadInitialDataInBackground();
 
-        Field statusField = InteractiveApp.class.getDeclaredField("status");
-        statusField.setAccessible(true);
-        String status = (String) statusField.get(app);
+        String status = app.testStatus();
         assertEquals("Error loading onboarding: Failed to read repository registry", status);
 
-        Field promptField = InteractiveApp.class.getDeclaredField("prompt");
-        promptField.setAccessible(true);
-        assertEquals(null, promptField.get(app));
+        assertEquals(null, app.testPrompt());
     }
 
     @Test
@@ -250,14 +222,10 @@ class InteractiveAppOnboardingTest {
 
         app.onStart();
 
-        Field statusField = InteractiveApp.class.getDeclaredField("status");
-        statusField.setAccessible(true);
-        String status = (String) statusField.get(app);
+        String status = app.testStatus();
         assertEquals("Error loading onboarding: Failed to read repository registry", status);
 
-        Field promptField = InteractiveApp.class.getDeclaredField("prompt");
-        promptField.setAccessible(true);
-        assertEquals(null, promptField.get(app));
+        assertEquals(null, app.testPrompt());
     }
 
     @Test
@@ -275,22 +243,18 @@ class InteractiveAppOnboardingTest {
         );
         app.onStart();
 
-        Field promptField = InteractiveApp.class.getDeclaredField("prompt");
-        promptField.setAccessible(true);
-        PromptState confirmPrompt = (PromptState) promptField.get(app);
+        PromptState confirmPrompt = app.testPrompt();
         assertEquals("yes", confirmPrompt.values.getFirst());
 
-        Method applyPrompt = InteractiveApp.class.getDeclaredMethod("applyPrompt");
-        applyPrompt.setAccessible(true);
-        applyPrompt.invoke(app);
+        app.testApplyPrompt();
 
-        PromptState repositoryPrompt = (PromptState) promptField.get(app);
+        PromptState repositoryPrompt = app.testPrompt();
         assertEquals(PromptAction.ONBOARD_EXISTING_CONFIG_REPOSITORY_NAME, repositoryPrompt.action);
         repositoryPrompt.values.set(0, "personal-repo");
 
-        applyPrompt.invoke(app);
+        app.testApplyPrompt();
 
-        PromptState profilePrompt = (PromptState) promptField.get(app);
+        PromptState profilePrompt = app.testPrompt();
         assertEquals(PromptAction.ONBOARD_EXISTING_CONFIG_PROFILE_NAME, profilePrompt.action);
         assertEquals("personal-repo", profilePrompt.contextRepositoryName);
     }

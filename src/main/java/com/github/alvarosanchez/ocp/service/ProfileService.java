@@ -1577,4 +1577,16 @@ public final class ProfileService {
             return driftedFiles;
         }
     }
+
+    public static ProfileRefreshConflictException testRepositoryRefreshConflict(String repositoryName, String repositoryPath, String diff) {
+        return new ProfileRefreshConflictException(repositoryName, repositoryPath, diff);
+    }
+
+    public static ProfileRefreshUserConfigConflictException testMergedFilesRefreshConflict(
+        String profileName,
+        Path targetDirectory,
+        List<Path> driftedFiles
+    ) {
+        return new ProfileRefreshUserConfigConflictException(profileName, targetDirectory, driftedFiles);
+    }
 }

@@ -16,9 +16,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -263,33 +260,24 @@ class RepositoryPostCreationServiceTest {
     }
 
     private RepositoryService failingRepositoryService(StubGitProcessExecutor gitProcessExecutor) {
-        return new RepositoryService(objectMapperFailingOnRegistryWrite(), new GitRepositoryClient(gitProcessExecutor));
-    }
-
-    private ObjectMapper objectMapperFailingOnRegistryWrite() {
         ObjectMapper objectMapper = applicationContext.getBean(ObjectMapper.class);
-        InvocationHandler handler = (proxy, method, args) -> {
-            if (
-                method.getName().equals("writeValueAsString")
-                    && args != null
-                    && args.length == 1
-                    && args[0] instanceof com.github.alvarosanchez.ocp.config.OcpConfigFile configFile
-                    && !configFile.repositories().isEmpty()
-                    && configFile.repositories().stream().anyMatch(repository -> repository.uri() != null)
-            ) {
-                throw new IOException("Injected registry write failure");
-            }
-            try {
-                return method.invoke(objectMapper, args);
-            } catch (InvocationTargetException e) {
-                throw e.getCause();
-            }
-        };
-        return (ObjectMapper) Proxy.newProxyInstance(
-            ObjectMapper.class.getClassLoader(),
-            new Class<?>[] {ObjectMapper.class},
-            handler
-        );
+        return new RepositoryService(
+            objectMapper,
+            new GitRepositoryClient(gitProcessExecutor)
+        ).withConfigWriter(new RepositoryService.ConfigWriter() {
+                @Override
+                public String writeConfig(com.github.alvarosanchez.ocp.config.OcpConfigFile configFile) throws IOException {
+                    if (!configFile.repositories().isEmpty() && configFile.repositories().stream().anyMatch(repository -> repository.uri() != null)) {
+                        throw new IOException("Injected registry write failure");
+                    }
+                    return objectMapper.writeValueAsString(configFile);
+                }
+
+                @Override
+                public String writeRepositoryConfig(com.github.alvarosanchez.ocp.config.RepositoryConfigFile configFile) throws IOException {
+                    return objectMapper.writeValueAsString(configFile);
+                }
+            });
     }
 
     private static final class StubGitProcessExecutor extends GitProcessExecutor {

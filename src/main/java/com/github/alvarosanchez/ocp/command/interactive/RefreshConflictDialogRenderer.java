@@ -20,6 +20,17 @@ final class RefreshConflictDialogRenderer {
     }
 
     static Element render(RefreshConflictState refreshConflict, KeyEventHandler keyEventHandler) {
+        List<Element> content = dialogContent(refreshConflict);
+        return dialog("Refresh conflict", content.toArray(Element[]::new))
+            .rounded()
+            .borderColor(Color.YELLOW)
+            .width(132)
+            .padding(1)
+            .focusable()
+            .onKeyEvent(keyEventHandler);
+    }
+
+    static List<Element> dialogContent(RefreshConflictState refreshConflict) {
         if (refreshConflict.kind() == RefreshConflictKind.REPOSITORY) {
             var conflict = refreshConflict.repositoryConflict();
             List<Element> content = new ArrayList<>();
@@ -31,14 +42,7 @@ final class RefreshConflictDialogRenderer {
             content.add(text("2) Commit local changes and force push to remote.").fg(Color.YELLOW));
             content.add(text("3) Do nothing and fix manually.").fg(Color.YELLOW));
             content.add(text("Press 1/2/3 to choose").dim());
-
-            return dialog("Refresh conflict", content.toArray(Element[]::new))
-                .rounded()
-                .borderColor(Color.YELLOW)
-                .width(132)
-                .padding(1)
-                .focusable()
-                .onKeyEvent(keyEventHandler);
+            return content;
         }
 
         var conflict = refreshConflict.mergedFilesConflict();
@@ -63,14 +67,7 @@ final class RefreshConflictDialogRenderer {
         content.add(text("1) Discard local merged-file changes and refresh.").fg(Color.YELLOW));
         content.add(text("2) Do nothing and fix manually.").fg(Color.YELLOW));
         content.add(text("Press 1/2 to choose").dim());
-
-        return dialog("Refresh conflict", content.toArray(Element[]::new))
-            .rounded()
-            .borderColor(Color.YELLOW)
-            .width(132)
-            .padding(1)
-            .focusable()
-            .onKeyEvent(keyEventHandler);
+        return content;
     }
 
     private static List<Element> buildColoredDiffPreview(String diff) {
