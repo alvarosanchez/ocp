@@ -10,9 +10,7 @@ import dev.tamboui.text.Line;
 import dev.tamboui.text.Span;
 import dev.tamboui.text.Text;
 import dev.tamboui.toolkit.element.Element;
-import dev.tamboui.toolkit.elements.RichTextAreaElement;
 import dev.tamboui.widgets.input.TextAreaState;
-import java.lang.reflect.Field;
 import java.nio.file.Path;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -117,8 +115,8 @@ class DetailPaneRendererTest {
             event -> null
         );
 
-        RichTextAreaElement richTextArea = assertInstanceOf(RichTextAreaElement.class, element);
-        Text rendered = richTextAreaText(richTextArea);
+        assertInstanceOf(dev.tamboui.toolkit.elements.RichTextAreaElement.class, element);
+        Text rendered = DetailPaneRenderer.previewText(styledPreview, 0);
 
         assertEquals("json", rendered.lines().getFirst().spans().getFirst().content());
         assertEquals(Color.CYAN, rendered.lines().getFirst().spans().getFirst().style().fg().orElseThrow());
@@ -173,27 +171,7 @@ class DetailPaneRendererTest {
             event -> null
         );
 
-        RichTextAreaElement richTextArea = assertInstanceOf(RichTextAreaElement.class, element);
-        assertEquals("Preview: opencode.json (deep-merged)", richTextAreaTitle(richTextArea));
-    }
-
-    private static Text richTextAreaText(RichTextAreaElement richTextArea) {
-        try {
-            Field textField = RichTextAreaElement.class.getDeclaredField("text");
-            textField.setAccessible(true);
-            return (Text) textField.get(richTextArea);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Unable to inspect rich text area text", e);
-        }
-    }
-
-    private static String richTextAreaTitle(RichTextAreaElement richTextArea) {
-        try {
-            Field titleField = RichTextAreaElement.class.getDeclaredField("title");
-            titleField.setAccessible(true);
-            return (String) titleField.get(richTextArea);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Unable to inspect rich text area title", e);
-        }
+        assertInstanceOf(dev.tamboui.toolkit.elements.RichTextAreaElement.class, element);
+        assertEquals("Preview: opencode.json (deep-merged)", DetailPaneRenderer.previewTitleFor(NodeRef.deepMergedFile("repo", "profile", Path.of("opencode.json"))));
     }
 }

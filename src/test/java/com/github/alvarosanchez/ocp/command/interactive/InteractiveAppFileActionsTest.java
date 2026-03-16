@@ -18,9 +18,6 @@ import dev.tamboui.widgets.tree.TreeNode;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.serde.ObjectMapper;
 import java.io.IOException;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicReference;
@@ -75,25 +72,26 @@ class InteractiveAppFileActionsTest {
         writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
 
         InteractiveApp app = createApp();
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.profile("repo-a", "default", profilePath));
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.profile("repo-a", "default", profilePath));
 
         PromptState prompt = PromptState.single(PromptAction.CREATE_FILE, "Create file", "File name");
         prompt.contextRepositoryName = "repo-a";
         prompt.values.set(0, "new.json");
-        setPrompt(app, prompt);
+        app.testSetPrompt(prompt);
 
-        invokeApplyPrompt(app);
+        app.testApplyPrompt();
 
         Path createdFile = profilePath.resolve("new.json");
         assertTrue(Files.exists(createdFile));
         assertEquals("", Files.readString(createdFile));
-        assertEquals(createdFile, readSelectedNode(app).path());
-        assertEquals(createdFile, readSelectedTreeNode(app).path());
-        assertTrue(readEditMode(app));
-        assertEquals(Pane.DETAIL, readActivePane(app));
-        assertEquals("Editing new.json. Ctrl+S to save, Esc to cancel.", readStatus(app));
-        assertEquals("", readEditorText(app));
+        assertEquals(createdFile, app.testSelectedNode().path());
+        assertTrue(app.testSelectTreeNode(node -> createdFile.equals(node.path())));
+        assertEquals(createdFile, app.testSelectedNode().path());
+        assertTrue(app.testEditMode());
+        assertEquals(Pane.DETAIL, app.testActivePane());
+        assertEquals("Editing new.json. Ctrl+S to save, Esc to cancel.", app.testStatus());
+        assertEquals("", app.testEditorState().text());
     }
 
     @Test
@@ -105,22 +103,23 @@ class InteractiveAppFileActionsTest {
         writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
 
         InteractiveApp app = createApp();
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.profile("repo-a", "default", profilePath));
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.profile("repo-a", "default", profilePath));
 
         PromptState prompt = PromptState.single(PromptAction.CREATE_FILE, "Create file", "File name");
         prompt.contextRepositoryName = "repo-a";
         prompt.values.set(0, "selected.json");
-        setPrompt(app, prompt);
+        app.testSetPrompt(prompt);
 
-        invokeApplyPrompt(app);
+        app.testApplyPrompt();
 
-        NodeRef selectedNode = readSelectedNode(app);
+        NodeRef selectedNode = app.testSelectedNode();
         assertNotNull(selectedNode);
         assertEquals(NodeKind.FILE, selectedNode.kind());
         assertEquals(profilePath.resolve("selected.json"), selectedNode.path());
         assertEquals("default", selectedNode.profileName());
-        assertEquals(profilePath.resolve("selected.json"), readSelectedTreeNode(app).path());
+        assertTrue(app.testSelectTreeNode(node -> profilePath.resolve("selected.json").equals(node.path())));
+        assertEquals(profilePath.resolve("selected.json"), app.testSelectedNode().path());
     }
 
     @Test
@@ -134,20 +133,21 @@ class InteractiveAppFileActionsTest {
         writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
 
         InteractiveApp app = createApp();
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.file("repo-a", "default", existingFile));
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.file("repo-a", "default", existingFile));
 
         PromptState prompt = PromptState.single(PromptAction.CREATE_FILE, "Create file", "File name");
         prompt.contextRepositoryName = "repo-a";
         prompt.values.set(0, "extra.json");
-        setPrompt(app, prompt);
+        app.testSetPrompt(prompt);
 
-        invokeApplyPrompt(app);
+        app.testApplyPrompt();
 
         assertTrue(Files.exists(profilePath.resolve("extra.json")));
-        assertEquals(profilePath.resolve("extra.json"), readSelectedNode(app).path());
-        assertEquals(profilePath.resolve("extra.json"), readSelectedTreeNode(app).path());
-        assertTrue(readEditMode(app));
+        assertEquals(profilePath.resolve("extra.json"), app.testSelectedNode().path());
+        assertTrue(app.testSelectTreeNode(node -> profilePath.resolve("extra.json").equals(node.path())));
+        assertEquals(profilePath.resolve("extra.json"), app.testSelectedNode().path());
+        assertTrue(app.testEditMode());
     }
 
     @Test
@@ -161,25 +161,25 @@ class InteractiveAppFileActionsTest {
         writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
 
         InteractiveApp app = createApp();
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.file("repo-a", "default", filePath));
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.file("repo-a", "default", filePath));
 
         PromptState prompt = PromptState.single(PromptAction.DELETE_FILE, "Delete file", "Type file name to confirm: opencode.json");
         prompt.expectedConfirmation = "opencode.json";
         prompt.contextRepositoryName = "repo-a";
         prompt.values.set(0, "opencode.json");
-        setPrompt(app, prompt);
+        app.testSetPrompt(prompt);
 
-        invokeApplyPrompt(app);
+        app.testApplyPrompt();
 
         assertFalse(Files.exists(filePath));
-        NodeRef selectedNode = readSelectedNode(app);
+        NodeRef selectedNode = app.testSelectedNode();
         assertNotNull(selectedNode);
         assertEquals(NodeKind.PROFILE, selectedNode.kind());
         assertEquals("default", selectedNode.profileName());
         assertEquals(profilePath, selectedNode.path());
-        assertEquals("Deleted file opencode.json.", readStatus(app));
-        assertFalse(readEditMode(app));
+        assertEquals("Deleted file opencode.json.", app.testStatus());
+        assertFalse(app.testEditMode());
     }
 
     @Test
@@ -193,19 +193,19 @@ class InteractiveAppFileActionsTest {
         writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
 
         InteractiveApp app = createApp();
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.file("repo-a", "default", filePath));
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.file("repo-a", "default", filePath));
 
         PromptState prompt = PromptState.single(PromptAction.DELETE_FILE, "Delete file", "Type file name to confirm: opencode.json");
         prompt.expectedConfirmation = "opencode.json";
         prompt.contextRepositoryName = "repo-a";
         prompt.values.set(0, "wrong.json");
-        setPrompt(app, prompt);
+        app.testSetPrompt(prompt);
 
-        invokeApplyPrompt(app);
+        app.testApplyPrompt();
 
         assertTrue(Files.exists(filePath));
-        assertEquals("Delete cancelled: file name mismatch.", readStatus(app));
+        assertEquals("Delete cancelled: file name mismatch.", app.testStatus());
     }
 
     @Test
@@ -225,14 +225,14 @@ class InteractiveAppFileActionsTest {
                 copiedValue.set(value);
             }
         });
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.file("repo-a", "default", filePath));
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.file("repo-a", "default", filePath));
 
-        invokeCopySelectedPath(app);
+        app.testCopySelectedPath();
 
         String expectedPath = filePath.toAbsolutePath().normalize().toString();
         assertEquals(expectedPath, copiedValue.get());
-        assertEquals("Copied path " + expectedPath + " to the clipboard.", readStatus(app));
+        assertEquals("Copied path " + expectedPath + " to the clipboard.", app.testStatus());
     }
 
     @Test
@@ -244,12 +244,12 @@ class InteractiveAppFileActionsTest {
         writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
 
         InteractiveApp app = createApp();
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.profile("repo-a", "default", profilePath));
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.profile("repo-a", "default", profilePath));
 
-        invokeCopySelectedPath(app);
+        app.testCopySelectedPath();
 
-        assertEquals("Select a file first.", readStatus(app));
+        assertEquals("Select a file first.", app.testStatus());
     }
 
     @Test
@@ -268,12 +268,12 @@ class InteractiveAppFileActionsTest {
                 throw new IllegalStateException("Clipboard is unavailable for tests.");
             }
         });
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.file("repo-a", "default", filePath));
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.file("repo-a", "default", filePath));
 
-        invokeCopySelectedPath(app);
+        app.testCopySelectedPath();
 
-        assertEquals("Clipboard is unavailable for tests.", readStatus(app));
+        assertEquals("Clipboard is unavailable for tests.", app.testStatus());
     }
 
     private InteractiveApp createApp() {
@@ -299,113 +299,6 @@ class InteractiveAppFileActionsTest {
             configDir.resolve("config.json"),
             objectMapper.writeValueAsString(new OcpConfigFile(new OcpConfigOptions(), List.of(repositoryEntry)))
         );
-    }
-
-    private static void invokeReloadState(InteractiveApp app) throws Exception {
-        Method method = InteractiveApp.class.getDeclaredMethod("reloadState");
-        method.setAccessible(true);
-        method.invoke(app);
-    }
-
-    private static void invokeApplyPrompt(InteractiveApp app) throws Exception {
-        Method method = InteractiveApp.class.getDeclaredMethod("applyPrompt");
-        method.setAccessible(true);
-        method.invoke(app);
-    }
-
-    private static void invokeCopySelectedPath(InteractiveApp app) throws Exception {
-        Method method = InteractiveApp.class.getDeclaredMethod("copySelectedPath");
-        method.setAccessible(true);
-        method.invoke(app);
-    }
-
-    private static void setPrompt(InteractiveApp app, PromptState prompt) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("prompt");
-        field.setAccessible(true);
-        field.set(app, prompt);
-    }
-
-
-    private static void setSelectedNode(InteractiveApp app, NodeRef selectedNode) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("selectedNode");
-        field.setAccessible(true);
-        field.set(app, selectedNode);
-    }
-
-    private static NodeRef readSelectedNode(InteractiveApp app) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("selectedNode");
-        field.setAccessible(true);
-        return (NodeRef) field.get(app);
-    }
-
-    private static NodeRef readSelectedTreeNode(InteractiveApp app) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("hierarchyTree");
-        field.setAccessible(true);
-        TreeElement<NodeRef> hierarchyTree = (TreeElement<NodeRef>) field.get(app);
-        populateFlatEntries(app, hierarchyTree);
-        TreeNode<NodeRef> selectedTreeNode = hierarchyTree.selectedNode();
-        return selectedTreeNode == null ? null : selectedTreeNode.data();
-    }
-
-    private static void populateFlatEntries(InteractiveApp app, TreeElement<NodeRef> hierarchyTree) throws Exception {
-        Field rootsField = InteractiveApp.class.getDeclaredField("hierarchyRoots");
-        rootsField.setAccessible(true);
-        List<TreeNode<NodeRef>> roots = (List<TreeNode<NodeRef>>) rootsField.get(app);
-
-        Field lastFlatEntriesField = TreeElement.class.getDeclaredField("lastFlatEntries");
-        lastFlatEntriesField.setAccessible(true);
-        lastFlatEntriesField.set(hierarchyTree, buildFlatEntries(roots));
-    }
-
-    private static List<Object> buildFlatEntries(List<TreeNode<NodeRef>> roots) throws Exception {
-        List<Object> flatEntries = new java.util.ArrayList<>();
-        Constructor<?> constructor = Class.forName("dev.tamboui.widgets.tree.TreeWidget$FlatEntry")
-            .getDeclaredConstructor(Object.class, Object.class, int.class, List.class, boolean.class);
-        constructor.setAccessible(true);
-        for (TreeNode<NodeRef> root : roots) {
-            addFlatEntries(flatEntries, constructor, root, null, 0);
-        }
-        return flatEntries;
-    }
-
-    private static void addFlatEntries(
-        List<Object> flatEntries,
-        Constructor<?> constructor,
-        TreeNode<NodeRef> node,
-        TreeNode<NodeRef> parent,
-        int depth
-    ) throws Exception {
-        flatEntries.add(constructor.newInstance(node, parent, depth, List.of(), false));
-        if (!node.isLeaf() && node.isExpanded()) {
-            for (TreeNode<NodeRef> child : node.children()) {
-                addFlatEntries(flatEntries, constructor, child, node, depth + 1);
-            }
-        }
-    }
-
-    private static boolean readEditMode(InteractiveApp app) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("editMode");
-        field.setAccessible(true);
-        return field.getBoolean(app);
-    }
-
-    private static Pane readActivePane(InteractiveApp app) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("activePane");
-        field.setAccessible(true);
-        return (Pane) field.get(app);
-    }
-
-    private static String readStatus(InteractiveApp app) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("status");
-        field.setAccessible(true);
-        return (String) field.get(app);
-    }
-
-    private static String readEditorText(InteractiveApp app) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("editorState");
-        field.setAccessible(true);
-        dev.tamboui.widgets.input.TextAreaState editorState = (dev.tamboui.widgets.input.TextAreaState) field.get(app);
-        return editorState.text();
     }
 
     private static void restoreProperty(String key, String value) {

@@ -189,6 +189,14 @@ final class DetailPaneRenderer {
         return Text.from(lines);
     }
 
+    static Text previewText(Text selectedFilePreview, int previewScrollOffset) {
+        return scrolledPreviewText(selectedFilePreview, previewScrollOffset);
+    }
+
+    static String previewTitleFor(NodeRef selectedNode) {
+        return previewTitle(selectedNode);
+    }
+
     private static String previewTitle(NodeRef selectedNode) {
         String fileName = String.valueOf(selectedNode.path().getFileName());
         if (selectedNode.deepMerged()) {

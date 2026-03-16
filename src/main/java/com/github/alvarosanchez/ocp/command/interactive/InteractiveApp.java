@@ -46,6 +46,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalInt;
+import java.util.function.Predicate;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static dev.tamboui.toolkit.Toolkit.column;
@@ -1408,6 +1409,14 @@ public final class InteractiveApp extends ToolkitApp {
             case CREATE_PROFILE -> openCreateProfilePromptForCurrentSelection();
             case DELETE -> openDeletePromptForCurrentSelection();
         }
+    }
+
+    void testOpenCreateProfilePromptForSelectedNode() {
+        openPromptForSelectedNode(PromptShortcut.CREATE_PROFILE);
+    }
+
+    void testOpenDeletePromptForSelectedNode() {
+        openPromptForSelectedNode(PromptShortcut.DELETE);
     }
 
     private enum PromptShortcut {
@@ -2945,6 +2954,256 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     private record OnboardingLoadResult(OnboardingService.OnboardingCandidate candidate, String errorStatus) {
+    }
+
+    void testReloadState() {
+        reloadState();
+    }
+
+    void testApplyPrompt() {
+        applyPrompt();
+    }
+
+    void testSyncSelectionAndPreview() {
+        syncSelectionAndPreview();
+    }
+
+    void testRestoreConfigEditReturnSelection(NodeRef nodeRef) {
+        restoreConfigEditReturnSelection(nodeRef);
+    }
+
+    void testRefreshAllRepositories() {
+        refreshAllRepositories();
+    }
+
+    void testNavigateToParentProfile() {
+        navigateToParentProfile();
+    }
+
+    void testExitEditModeToTree() {
+        exitEditModeToTree();
+    }
+
+    void testSaveSelectedFile() {
+        saveSelectedFile();
+    }
+
+    void testEditOcpConfigFile() {
+        editOcpConfigFile();
+    }
+
+    void testHandleRefreshConflictKey(KeyEvent event) {
+        handleRefreshConflictKey(event);
+    }
+
+    void testHandleCommitConfirmKey(KeyEvent event) {
+        handleCommitConfirmKey(event);
+    }
+
+    void testHandlePromptKey(KeyEvent event) {
+        handlePromptKey(event);
+    }
+
+    void testRefreshSelectedRepositoryCommitPushPreview() {
+        refreshSelectedRepositoryCommitPushPreview();
+    }
+
+    void testCommitAndPushSelectedRepository() {
+        commitAndPushSelectedRepository();
+    }
+
+    void testMigrateSelectedRepository() {
+        migrateSelectedRepository();
+    }
+
+    boolean testIsSelectedRepositoryCommitPushAvailable() {
+        return isSelectedRepositoryCommitPushAvailable();
+    }
+
+    void testLoadInitialDataInBackground() {
+        loadInitialDataInBackground();
+    }
+
+    ActiveOverlay testActiveOverlay() {
+        return activeOverlay();
+    }
+
+    void testCopySelectedPath() {
+        copySelectedPath();
+    }
+
+    void testSetSelectedNode(NodeRef nodeRef) {
+        selectedNode = nodeRef;
+    }
+
+    NodeRef testSelectedNode() {
+        return selectedNode;
+    }
+
+    void testSetPrompt(PromptState promptState) {
+        prompt = promptState;
+    }
+
+    PromptState testPrompt() {
+        return prompt;
+    }
+
+    String testStatus() {
+        return status;
+    }
+
+    boolean testEditMode() {
+        return editMode;
+    }
+
+    void testSetEditMode(boolean value) {
+        editMode = value;
+    }
+
+    Pane testActivePane() {
+        return activePane;
+    }
+
+    void testSetActivePane(Pane pane) {
+        activePane = pane;
+    }
+
+    TextAreaState testEditorState() {
+        return editorState;
+    }
+
+    Text testSelectedFilePreview() {
+        return selectedFilePreview;
+    }
+
+    void testSetSelectedFilePreview(Text preview) {
+        selectedFilePreview = preview;
+    }
+
+    String testSelectedFileContent() {
+        return selectedFileContent;
+    }
+
+    List<TreeNode<NodeRef>> testHierarchyRoots() {
+        return hierarchyRoots;
+    }
+
+    TreeElement<NodeRef> testHierarchyTree() {
+        return hierarchyTree;
+    }
+
+    boolean testSelectTreeNode(Predicate<NodeRef> predicate) {
+        int selectedIndex = 0;
+        for (TreeNode<NodeRef> root : hierarchyRoots) {
+            int match = testFindVisibleNodeIndex(root, predicate, selectedIndex);
+            if (match >= 0) {
+                hierarchyTree.selected(match);
+                TreeNode<NodeRef> selectedTreeNode = hierarchyTree.selectedNode();
+                if (selectedTreeNode != null && selectedTreeNode.data() != null && predicate.test(selectedTreeNode.data())) {
+                    selectedNode = selectedTreeNode.data();
+                    lastSyncedTreeSelection = hierarchyTree.selected();
+                    return true;
+                }
+                TreeNode<NodeRef> visibleTreeNode = visibleTreeNodeAt(match, hierarchyRoots, new int[] {0});
+                if (visibleTreeNode != null && visibleTreeNode.data() != null && predicate.test(visibleTreeNode.data())) {
+                    selectedNode = visibleTreeNode.data();
+                    lastSyncedTreeSelection = hierarchyTree.selected();
+                    return true;
+                }
+                return false;
+            }
+            selectedIndex += testCountVisibleNodes(root);
+        }
+        return false;
+    }
+
+    boolean testSelectTreeNodeAndSync(Predicate<NodeRef> predicate) {
+        if (!testSelectTreeNode(predicate)) {
+            return false;
+        }
+        skipNextSelectionSync = false;
+        lastSyncedTreeSelection = -1;
+        syncSelectionAndPreview();
+        return selectedNode != null && predicate.test(selectedNode);
+    }
+
+    String testRefreshAllCompletionMessage() {
+        return refreshAllCompletionMessage;
+    }
+
+    RefreshOperation testPendingRefreshOperation() {
+        return pendingRefreshOperation;
+    }
+
+    void testSetPendingRefreshOperation(RefreshOperation operation) {
+        pendingRefreshOperation = operation;
+    }
+
+    RefreshConflictState testRefreshConflict() {
+        return refreshConflict;
+    }
+
+    void testSetRefreshConflict(RefreshConflictState state) {
+        refreshConflict = state;
+    }
+
+    CommitConfirmState testCommitConfirm() {
+        return commitConfirm;
+    }
+
+    Map<String, RepositoryDirtyState> testRepositoryDirtyStateByName() {
+        return repositoryDirtyStateByName;
+    }
+
+    List<ConfiguredRepository> testRepositories() {
+        return repositories;
+    }
+
+    boolean testSplashVisible() {
+        return splashVisible;
+    }
+
+    void testSetBatAvailable(boolean value) {
+        batAvailable = value;
+    }
+
+    String testStartupUpdateNotice() {
+        return startupUpdateNotice;
+    }
+
+    public String startupUpdateNotice() {
+        return startupUpdateNotice;
+    }
+
+    public String status() {
+        return status;
+    }
+
+    private int testFindVisibleNodeIndex(TreeNode<NodeRef> node, Predicate<NodeRef> predicate, int currentIndex) {
+        if (node.data() != null && predicate.test(node.data())) {
+            return currentIndex;
+        }
+        int nextIndex = currentIndex + 1;
+        if (!node.isLeaf() && node.isExpanded()) {
+            for (TreeNode<NodeRef> child : node.children()) {
+                int match = testFindVisibleNodeIndex(child, predicate, nextIndex);
+                if (match >= 0) {
+                    return match;
+                }
+                nextIndex += testCountVisibleNodes(child);
+            }
+        }
+        return -1;
+    }
+
+    private int testCountVisibleNodes(TreeNode<NodeRef> node) {
+        int count = 1;
+        if (!node.isLeaf() && node.isExpanded()) {
+            for (TreeNode<NodeRef> child : node.children()) {
+                count += testCountVisibleNodes(child);
+            }
+        }
+        return count;
     }
 
 }

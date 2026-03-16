@@ -22,8 +22,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -87,14 +85,14 @@ class InteractiveAppRepositoryCommitPushTest {
         RepositoryService repositoryService = repositoryService(processExecutor);
 
         InteractiveApp app = createApp(repositoryService);
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.repository("dirty-repository", localRepository));
-        invokeRefreshSelectedRepositoryCommitPushPreview(app);
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.repository("dirty-repository", localRepository));
+        app.testRefreshSelectedRepositoryCommitPushPreview();
 
-        invokeCommitAndPushSelectedRepository(app);
+        app.testCommitAndPushSelectedRepository();
 
-        assertNull(readPrompt(app));
-        CommitConfirmState commitConfirm = readCommitConfirm(app);
+        assertNull(app.testPrompt());
+        CommitConfirmState commitConfirm = app.testCommitConfirm();
         assertNotNull(commitConfirm);
         assertEquals("dirty-repository", commitConfirm.repositoryName());
         assertEquals("diff --git a/opencode.json b/opencode.json\n+foo", commitConfirm.diff());
@@ -111,13 +109,13 @@ class InteractiveAppRepositoryCommitPushTest {
         RepositoryService repositoryService = repositoryService(processExecutor);
 
         InteractiveApp app = createApp(repositoryService);
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.repository("drifting-repository", localRepository));
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.repository("drifting-repository", localRepository));
 
-        invokeRefreshSelectedRepositoryCommitPushPreview(app);
+        app.testRefreshSelectedRepositoryCommitPushPreview();
 
-        assertTrue(readRepositoryDirtyStateByName(app).get("drifting-repository").hasLocalChanges());
-        assertTrue(invokeIsSelectedRepositoryCommitPushAvailable(app));
+        assertTrue(app.testRepositoryDirtyStateByName().get("drifting-repository").hasLocalChanges());
+        assertTrue(app.testIsSelectedRepositoryCommitPushAvailable());
     }
 
     @Test
@@ -144,28 +142,28 @@ class InteractiveAppRepositoryCommitPushTest {
         RepositoryService repositoryService = repositoryService(processExecutor);
 
         InteractiveApp app = createApp(repositoryService);
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.repository("dirty-repository", localRepository));
-        invokeRefreshSelectedRepositoryCommitPushPreview(app);
-        invokeCommitAndPushSelectedRepository(app);
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.repository("dirty-repository", localRepository));
+        app.testRefreshSelectedRepositoryCommitPushPreview();
+        app.testCommitAndPushSelectedRepository();
 
-        CommitConfirmState commitConfirm = readCommitConfirm(app);
+        CommitConfirmState commitConfirm = app.testCommitConfirm();
         assertNotNull(commitConfirm);
         assertEquals("diff --git a/opencode.json b/opencode.json\n+foo", commitConfirm.diff());
 
-        invokeHandleCommitConfirmKey(app, dev.tamboui.tui.event.KeyEvent.ofChar('y'));
+        app.testHandleCommitConfirmKey(dev.tamboui.tui.event.KeyEvent.ofChar('y'));
 
-        PromptState prompt = readPrompt(app);
+        PromptState prompt = app.testPrompt();
         assertNotNull(prompt);
         prompt.values.set(0, "chore: save local changes");
-        setPrompt(app, prompt);
-        invokeApplyPrompt(app);
+        app.testSetPrompt(prompt);
+        app.testApplyPrompt();
 
         waitForCommitConfirmToClear(app);
 
-        assertNull(readPrompt(app));
-        assertNull(readCommitConfirm(app));
-        assertNotNull(readStatus(app));
+        assertNull(app.testPrompt());
+        assertNull(app.testCommitConfirm());
+        assertNotNull(app.testStatus());
         assertEquals(
             List.of(
                 List.of("git", "-C", localRepository.toString(), "status", "--porcelain"),
@@ -209,22 +207,22 @@ class InteractiveAppRepositoryCommitPushTest {
         RepositoryService repositoryService = repositoryService(processExecutor);
 
         InteractiveApp app = createApp(repositoryService);
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.repository("dirty-repository", localRepository));
-        invokeRefreshSelectedRepositoryCommitPushPreview(app);
-        invokeCommitAndPushSelectedRepository(app);
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.repository("dirty-repository", localRepository));
+        app.testRefreshSelectedRepositoryCommitPushPreview();
+        app.testCommitAndPushSelectedRepository();
 
-        invokeHandleCommitConfirmKey(app, dev.tamboui.tui.event.KeyEvent.ofChar('y'));
+        app.testHandleCommitConfirmKey(dev.tamboui.tui.event.KeyEvent.ofChar('y'));
 
-        PromptState prompt = readPrompt(app);
+        PromptState prompt = app.testPrompt();
         assertNotNull(prompt);
         prompt.values.set(0, "chore: save local changes");
-        setPrompt(app, prompt);
-        invokeHandlePromptKey(app, dev.tamboui.tui.event.KeyEvent.ofKey(dev.tamboui.tui.event.KeyCode.ESCAPE));
+        app.testSetPrompt(prompt);
+        app.testHandlePromptKey(dev.tamboui.tui.event.KeyEvent.ofKey(dev.tamboui.tui.event.KeyCode.ESCAPE));
 
-        assertNull(readPrompt(app));
-        assertNull(readCommitConfirm(app));
-        assertEquals("Cancelled.", readStatus(app));
+        assertNull(app.testPrompt());
+        assertNull(app.testCommitConfirm());
+        assertEquals("Cancelled.", app.testStatus());
 
         assertEquals(
             List.of(
@@ -253,18 +251,18 @@ class InteractiveAppRepositoryCommitPushTest {
         RepositoryService repositoryService = repositoryService(processExecutor);
 
         InteractiveApp app = createApp(repositoryService);
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.repository("dirty-repository", localRepository));
-        invokeRefreshSelectedRepositoryCommitPushPreview(app);
-        invokeCommitAndPushSelectedRepository(app);
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.repository("dirty-repository", localRepository));
+        app.testRefreshSelectedRepositoryCommitPushPreview();
+        app.testCommitAndPushSelectedRepository();
 
-        assertNotNull(readCommitConfirm(app));
+        assertNotNull(app.testCommitConfirm());
 
-        invokeHandleCommitConfirmKey(app, dev.tamboui.tui.event.KeyEvent.ofKey(dev.tamboui.tui.event.KeyCode.ESCAPE));
+        app.testHandleCommitConfirmKey(dev.tamboui.tui.event.KeyEvent.ofKey(dev.tamboui.tui.event.KeyCode.ESCAPE));
 
-        assertNull(readCommitConfirm(app));
-        assertNull(readPrompt(app));
-        assertEquals("Commit cancelled.", readStatus(app));
+        assertNull(app.testCommitConfirm());
+        assertNull(app.testPrompt());
+        assertEquals("Commit cancelled.", app.testStatus());
         assertEquals(
             List.of(
                 List.of("git", "-C", localRepository.toString(), "status", "--porcelain"),
@@ -292,14 +290,14 @@ class InteractiveAppRepositoryCommitPushTest {
         RepositoryService repositoryService = repositoryService(processExecutor);
 
         InteractiveApp app = createApp(repositoryService);
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.profile("dirty-repository", "work", profilePath));
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.profile("dirty-repository", "work", profilePath));
 
-        assertTrue(invokeIsSelectedRepositoryCommitPushAvailable(app));
+        assertTrue(app.testIsSelectedRepositoryCommitPushAvailable());
 
-        invokeCommitAndPushSelectedRepository(app);
+        app.testCommitAndPushSelectedRepository();
 
-        CommitConfirmState commitConfirm = readCommitConfirm(app);
+        CommitConfirmState commitConfirm = app.testCommitConfirm();
         assertNotNull(commitConfirm);
         assertEquals("dirty-repository", commitConfirm.repositoryName());
         assertEquals("diff --git a/opencode.json b/opencode.json\n+foo", commitConfirm.diff());
@@ -316,14 +314,14 @@ class InteractiveAppRepositoryCommitPushTest {
         RepositoryService repositoryService = repositoryService(processExecutor);
 
         InteractiveApp app = createApp(repositoryService);
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.repository("clean-repository", localRepository));
-        invokeRefreshSelectedRepositoryCommitPushPreview(app);
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.repository("clean-repository", localRepository));
+        app.testRefreshSelectedRepositoryCommitPushPreview();
 
-        invokeCommitAndPushSelectedRepository(app);
+        app.testCommitAndPushSelectedRepository();
 
-        assertNull(readPrompt(app));
-        assertTrue(readStatus(app).contains("has no local git changes"));
+        assertNull(app.testPrompt());
+        assertTrue(app.testStatus().contains("has no local git changes"));
     }
 
     @Test
@@ -335,14 +333,14 @@ class InteractiveAppRepositoryCommitPushTest {
         RepositoryService repositoryService = repositoryService(processExecutor);
 
         InteractiveApp app = createApp(repositoryService);
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.repository("file-based-repository", localRepository));
-        invokeRefreshSelectedRepositoryCommitPushPreview(app);
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.repository("file-based-repository", localRepository));
+        app.testRefreshSelectedRepositoryCommitPushPreview();
 
-        invokeCommitAndPushSelectedRepository(app);
+        app.testCommitAndPushSelectedRepository();
 
-        assertNull(readPrompt(app));
-        assertTrue(readStatus(app).contains("is file-based"));
+        assertNull(app.testPrompt());
+        assertTrue(app.testStatus().contains("is file-based"));
     }
 
     @Test
@@ -354,15 +352,15 @@ class InteractiveAppRepositoryCommitPushTest {
         RepositoryService repositoryService = repositoryService(processExecutor);
 
         InteractiveApp app = createApp(repositoryService);
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.repository("broken-repository", localRepository));
-        invokeRefreshSelectedRepositoryCommitPushPreview(app);
-        String inspectionStatus = readStatus(app);
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.repository("broken-repository", localRepository));
+        app.testRefreshSelectedRepositoryCommitPushPreview();
+        String inspectionStatus = app.testStatus();
 
-        invokeCommitAndPushSelectedRepository(app);
+        app.testCommitAndPushSelectedRepository();
 
-        assertNull(readPrompt(app));
-        assertTrue(readRepositoryDirtyStateByName(app).get("broken-repository").inspectionFailed());
+        assertNull(app.testPrompt());
+        assertTrue(app.testRepositoryDirtyStateByName().get("broken-repository").inspectionFailed());
     }
 
     @Test
@@ -376,16 +374,16 @@ class InteractiveAppRepositoryCommitPushTest {
         RepositoryService repositoryService = repositoryService(processExecutor);
 
         InteractiveApp app = createApp(repositoryService);
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.repository("broken-diff-repository", localRepository));
-        invokeRefreshSelectedRepositoryCommitPushPreview(app);
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.repository("broken-diff-repository", localRepository));
+        app.testRefreshSelectedRepositoryCommitPushPreview();
 
-        invokeCommitAndPushSelectedRepository(app);
+        app.testCommitAndPushSelectedRepository();
 
-        assertNull(readPrompt(app));
-        assertNull(readCommitConfirm(app));
-        assertNotNull(readStatus(app));
-        assertTrue(readStatus(app).contains("Error:") || readStatus(app).contains("Unable to inspect repository `broken-diff-repository` for local git changes"));
+        assertNull(app.testPrompt());
+        assertNull(app.testCommitConfirm());
+        assertNotNull(app.testStatus());
+        assertTrue(app.testStatus().contains("Error:") || app.testStatus().contains("Unable to inspect repository `broken-diff-repository` for local git changes"));
     }
 
     private InteractiveApp createApp(RepositoryService repositoryService) {
@@ -399,9 +397,7 @@ class InteractiveAppRepositoryCommitPushTest {
     }
 
     private RepositoryService repositoryService(RecordingGitProcessExecutor processExecutor) throws Exception {
-        var constructor = RepositoryService.class.getDeclaredConstructor(ObjectMapper.class, GitRepositoryClient.class);
-        constructor.setAccessible(true);
-        return constructor.newInstance(objectMapper, new GitRepositoryClient(processExecutor));
+        return RepositoryService.forTest(objectMapper, new GitRepositoryClient(processExecutor));
     }
 
     private void writeConfig(RepositoryEntry repositoryEntry) throws IOException {
@@ -421,88 +417,9 @@ class InteractiveAppRepositoryCommitPushTest {
         }
     }
 
-    private static void invokeApplyPrompt(InteractiveApp app) throws Exception {
-        Method method = InteractiveApp.class.getDeclaredMethod("applyPrompt");
-        method.setAccessible(true);
-        method.invoke(app);
-    }
-
-    private static void invokeReloadState(InteractiveApp app) throws Exception {
-        Method method = InteractiveApp.class.getDeclaredMethod("reloadState");
-        method.setAccessible(true);
-        method.invoke(app);
-    }
-
-    private static void invokeRefreshSelectedRepositoryCommitPushPreview(InteractiveApp app) throws Exception {
-        Method method = InteractiveApp.class.getDeclaredMethod("refreshSelectedRepositoryCommitPushPreview");
-        method.setAccessible(true);
-        method.invoke(app);
-    }
-
-    private static void invokeCommitAndPushSelectedRepository(InteractiveApp app) throws Exception {
-        Method method = InteractiveApp.class.getDeclaredMethod("commitAndPushSelectedRepository");
-        method.setAccessible(true);
-        method.invoke(app);
-    }
-
-    private static boolean invokeIsSelectedRepositoryCommitPushAvailable(InteractiveApp app) throws Exception {
-        Method method = InteractiveApp.class.getDeclaredMethod("isSelectedRepositoryCommitPushAvailable");
-        method.setAccessible(true);
-        return (boolean) method.invoke(app);
-    }
-
-    private static void setPrompt(InteractiveApp app, PromptState prompt) throws Exception {
-        Field promptField = InteractiveApp.class.getDeclaredField("prompt");
-        promptField.setAccessible(true);
-        promptField.set(app, prompt);
-    }
-
-    private static PromptState readPrompt(InteractiveApp app) throws Exception {
-        Field promptField = InteractiveApp.class.getDeclaredField("prompt");
-        promptField.setAccessible(true);
-        return (PromptState) promptField.get(app);
-    }
-
-    private static void setSelectedNode(InteractiveApp app, NodeRef nodeRef) throws Exception {
-        Field selectedNodeField = InteractiveApp.class.getDeclaredField("selectedNode");
-        selectedNodeField.setAccessible(true);
-        selectedNodeField.set(app, nodeRef);
-    }
-
-    private static String readStatus(InteractiveApp app) throws Exception {
-        Field statusField = InteractiveApp.class.getDeclaredField("status");
-        statusField.setAccessible(true);
-        return (String) statusField.get(app);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static java.util.Map<String, RepositoryDirtyState> readRepositoryDirtyStateByName(InteractiveApp app) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("repositoryDirtyStateByName");
-        field.setAccessible(true);
-        return (java.util.Map<String, RepositoryDirtyState>) field.get(app);
-    }
-
-    private static CommitConfirmState readCommitConfirm(InteractiveApp app) throws Exception {
-        Field field = InteractiveApp.class.getDeclaredField("commitConfirm");
-        field.setAccessible(true);
-        return (CommitConfirmState) field.get(app);
-    }
-
-    private static void invokeHandleCommitConfirmKey(InteractiveApp app, dev.tamboui.tui.event.KeyEvent event) throws Exception {
-        Method method = InteractiveApp.class.getDeclaredMethod("handleCommitConfirmKey", dev.tamboui.tui.event.KeyEvent.class);
-        method.setAccessible(true);
-        method.invoke(app, event);
-    }
-
-    private static void invokeHandlePromptKey(InteractiveApp app, dev.tamboui.tui.event.KeyEvent event) throws Exception {
-        Method method = InteractiveApp.class.getDeclaredMethod("handlePromptKey", dev.tamboui.tui.event.KeyEvent.class);
-        method.setAccessible(true);
-        method.invoke(app, event);
-    }
-
     private static void waitForCommitConfirmToClear(InteractiveApp app) throws Exception {
         for (int attempt = 0; attempt < 50; attempt++) {
-            if (readCommitConfirm(app) == null) {
+            if (app.testCommitConfirm() == null) {
                 return;
             }
             Thread.sleep(20);

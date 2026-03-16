@@ -8,14 +8,11 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 import com.github.alvarosanchez.ocp.service.ProfileService;
 import dev.tamboui.style.Color;
-import dev.tamboui.toolkit.element.ContainerElement;
 import dev.tamboui.toolkit.element.Element;
 import dev.tamboui.toolkit.elements.DialogElement;
 import dev.tamboui.toolkit.elements.TextElement;
 import dev.tamboui.toolkit.event.EventResult;
 import dev.tamboui.toolkit.event.KeyEventHandler;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -43,7 +40,7 @@ class RefreshConflictDialogRendererTest {
         assertSame(keyHandler, dialog.keyEventHandler());
         assertEquals(132, dialog.preferredSize(-1, -1, null).widthOr(-1));
 
-        List<TextElement> textChildren = textChildren(dialog);
+        List<TextElement> textChildren = textChildren(RefreshConflictDialogRenderer.dialogContent(RefreshConflictState.forRepository(conflict)));
         List<String> contents = textChildren.stream().map(TextElement::content).toList();
 
         assertTrue(contents.contains("Local uncommitted changes detected in repository repo-a."));
@@ -86,7 +83,7 @@ class RefreshConflictDialogRendererTest {
         assertTrue(dialog.isFocusable());
         assertSame(keyHandler, dialog.keyEventHandler());
 
-        List<String> contents = textChildren(dialog).stream().map(TextElement::content).toList();
+        List<String> contents = textChildren(RefreshConflictDialogRenderer.dialogContent(RefreshConflictState.forMergedFiles(conflict))).stream().map(TextElement::content).toList();
         assertTrue(contents.contains("Local changes detected in merged active profile files for profile work."));
         assertTrue(contents.contains("Modified files in /tmp/opencode: "));
         assertTrue(contents.contains("- config-0.json"));
@@ -100,18 +97,7 @@ class RefreshConflictDialogRendererTest {
         String repositoryPath,
         String diff
     ) {
-        try {
-            Constructor<ProfileService.ProfileRefreshConflictException> constructor =
-                ProfileService.ProfileRefreshConflictException.class.getDeclaredConstructor(
-                    String.class,
-                    String.class,
-                    String.class
-                );
-            constructor.setAccessible(true);
-            return constructor.newInstance(repositoryName, repositoryPath, diff);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Unable to instantiate repository refresh conflict", e);
-        }
+        return ProfileService.testRepositoryRefreshConflict(repositoryName, repositoryPath, diff);
     }
 
     private static ProfileService.ProfileRefreshUserConfigConflictException mergedFilesConflict(
@@ -119,37 +105,15 @@ class RefreshConflictDialogRendererTest {
         Path targetDirectory,
         List<Path> driftedFiles
     ) {
-        try {
-            Constructor<ProfileService.ProfileRefreshUserConfigConflictException> constructor =
-                ProfileService.ProfileRefreshUserConfigConflictException.class.getDeclaredConstructor(
-                    String.class,
-                    Path.class,
-                    List.class
-                );
-            constructor.setAccessible(true);
-            return constructor.newInstance(profileName, targetDirectory, driftedFiles);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Unable to instantiate merged-files refresh conflict", e);
-        }
+        return ProfileService.testMergedFilesRefreshConflict(profileName, targetDirectory, driftedFiles);
     }
 
-    private static List<TextElement> textChildren(DialogElement dialog) {
+    private static List<TextElement> textChildren(List<Element> elements) {
         List<TextElement> textChildren = new ArrayList<>();
-        for (Element child : dialogChildren(dialog)) {
+        for (Element child : elements) {
             textChildren.add(assertInstanceOf(TextElement.class, child));
         }
         return textChildren;
-    }
-
-    @SuppressWarnings("unchecked")
-    private static List<Element> dialogChildren(DialogElement dialog) {
-        try {
-            Field childrenField = ContainerElement.class.getDeclaredField("children");
-            childrenField.setAccessible(true);
-            return (List<Element>) childrenField.get(dialog);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Unable to inspect dialog children", e);
-        }
     }
 
     private static TextElement textByContent(List<TextElement> elements, String content) {

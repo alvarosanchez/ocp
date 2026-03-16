@@ -31,10 +31,21 @@ public final class RepositoryService {
 
     private final ObjectMapper objectMapper;
     private final GitRepositoryClient gitRepositoryClient;
+    private ConfigWriter configWriter;
 
     RepositoryService(ObjectMapper objectMapper, GitRepositoryClient gitRepositoryClient) {
         this.objectMapper = objectMapper;
         this.gitRepositoryClient = gitRepositoryClient;
+        this.configWriter = new DefaultConfigWriter(objectMapper);
+    }
+
+    RepositoryService withConfigWriter(ConfigWriter configWriter) {
+        this.configWriter = configWriter;
+        return this;
+    }
+
+    public static RepositoryService forTest(ObjectMapper objectMapper, GitRepositoryClient gitRepositoryClient) {
+        return new RepositoryService(objectMapper, gitRepositoryClient);
     }
 
     /**
@@ -286,7 +297,7 @@ public final class RepositoryService {
                 Files.createDirectories(repositoryPath.resolve(normalizedProfileName));
             }
 
-            String content = objectMapper.writeValueAsString(new RepositoryConfigFile(profiles));
+            String content = configWriter.writeRepositoryConfig(new RepositoryConfigFile(profiles));
             Files.writeString(repositoryPath.resolve("repository.json"), content);
             return repositoryPath;
         } catch (IOException e) {
@@ -363,9 +374,34 @@ public final class RepositoryService {
     void saveConfig(OcpConfigFile configFile) {
         try {
             Files.createDirectories(configDirectory());
-            Files.writeString(repositoriesFile(), objectMapper.writeValueAsString(configFile));
+            Files.writeString(repositoriesFile(), configWriter.writeConfig(configFile));
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write repository registry", e);
+        }
+    }
+
+    interface ConfigWriter {
+        String writeConfig(OcpConfigFile configFile) throws IOException;
+
+        String writeRepositoryConfig(RepositoryConfigFile configFile) throws IOException;
+    }
+
+    private static final class DefaultConfigWriter implements ConfigWriter {
+
+        private final ObjectMapper objectMapper;
+
+        private DefaultConfigWriter(ObjectMapper objectMapper) {
+            this.objectMapper = objectMapper;
+        }
+
+        @Override
+        public String writeConfig(OcpConfigFile configFile) throws IOException {
+            return objectMapper.writeValueAsString(configFile);
+        }
+
+        @Override
+        public String writeRepositoryConfig(RepositoryConfigFile configFile) throws IOException {
+            return objectMapper.writeValueAsString(configFile);
         }
     }
 

@@ -19,8 +19,6 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.nio.file.Path;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -157,23 +155,19 @@ class OcpCommandTest {
                 context.getBean(ObjectMapper.class)
             );
 
-            Field startupNoticeField = InteractiveApp.class.getDeclaredField("startupUpdateNotice");
-            startupNoticeField.setAccessible(true);
-            assertEquals("Update available", startupNoticeField.get(app));
-
-            Field statusField = InteractiveApp.class.getDeclaredField("status");
-            statusField.setAccessible(true);
-            assertEquals("Ready. Select a node in the hierarchy.", statusField.get(app));
+            assertEquals("Update available", app.startupUpdateNotice());
+            assertEquals("Ready. Select a node in the hierarchy.", app.status());
             assertNull(Cli.consumeStartupNotice());
         }
     }
 
     @Test
-    void mainMethodIsPublicStatic() throws Exception {
-        Method method = OcpCommand.class.getDeclaredMethod("main", String[].class);
-
-        assertTrue(java.lang.reflect.Modifier.isPublic(method.getModifiers()));
-        assertTrue(java.lang.reflect.Modifier.isStatic(method.getModifiers()));
+    void mainMethodIsPublicStatic() {
+        assertEquals(1, java.util.Arrays.stream(OcpCommand.class.getMethods())
+            .filter(method -> method.getName().equals("main"))
+            .filter(method -> method.getReturnType().equals(void.class))
+            .filter(method -> java.util.Arrays.equals(method.getParameterTypes(), new Class<?>[] {String[].class}))
+            .count());
     }
 
     @Test

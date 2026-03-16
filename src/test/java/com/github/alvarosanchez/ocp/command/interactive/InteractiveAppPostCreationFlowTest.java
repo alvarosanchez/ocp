@@ -14,8 +14,6 @@ import com.github.alvarosanchez.ocp.service.RepositoryPostCreationService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.serde.ObjectMapper;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -87,10 +85,10 @@ class InteractiveAppPostCreationFlowTest {
         prompt.values.set(0, localRepository.toString());
         prompt.values.set(1, "local-repository");
 
-        setPrompt(app, prompt);
-        invokeApplyPrompt(app);
+        app.testSetPrompt(prompt);
+        app.testApplyPrompt();
 
-        PromptState postCreationPrompt = readPrompt(app);
+        PromptState postCreationPrompt = app.testPrompt();
         assertNotNull(postCreationPrompt);
         assertEquals(PromptAction.POST_CREATION_GIT_INIT, postCreationPrompt.action);
         assertEquals("no", postCreationPrompt.values.getFirst());
@@ -107,10 +105,10 @@ class InteractiveAppPostCreationFlowTest {
         prompt.values.set(1, "");
         prompt.values.set(2, "");
 
-        setPrompt(app, prompt);
-        invokeApplyPrompt(app);
+        app.testSetPrompt(prompt);
+        app.testApplyPrompt();
 
-        PromptState postCreationPrompt = readPrompt(app);
+        PromptState postCreationPrompt = app.testPrompt();
         assertNotNull(postCreationPrompt);
         assertEquals(PromptAction.POST_CREATION_GIT_INIT, postCreationPrompt.action);
         assertEquals("yes", postCreationPrompt.values.getFirst());
@@ -129,18 +127,17 @@ class InteractiveAppPostCreationFlowTest {
         repositoryService.add(repositoryPath.toString(), "repo-a");
 
         InteractiveApp app = createApp();
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.file("repo-a", "default", filePath));
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.file("repo-a", "default", filePath));
 
         PromptState prompt = PromptState.multi(PromptAction.CREATE_REPOSITORY, "Create repository", java.util.List.of("Repository name", "Repository location path", "Initial profile name (optional)"));
         prompt.values.set(0, "team-repo");
         prompt.values.set(1, "");
         prompt.values.set(2, "");
-        setPrompt(app, prompt);
+        app.testSetPrompt(prompt);
+        app.testApplyPrompt();
 
-        invokeApplyPrompt(app);
-
-        PromptState postCreationPrompt = readPrompt(app);
+        PromptState postCreationPrompt = app.testPrompt();
         assertNotNull(postCreationPrompt);
         assertEquals(PromptAction.POST_CREATION_GIT_INIT, postCreationPrompt.action);
         assertEquals("yes", postCreationPrompt.values.getFirst());
@@ -161,10 +158,10 @@ class InteractiveAppPostCreationFlowTest {
         prompt.contextRepositoryName = "personal-repo";
         prompt.values.set(0, "personal");
 
-        setPrompt(app, prompt);
-        invokeApplyPrompt(app);
+        app.testSetPrompt(prompt);
+        app.testApplyPrompt();
 
-        PromptState postCreationPrompt = readPrompt(app);
+        PromptState postCreationPrompt = app.testPrompt();
         assertNotNull(postCreationPrompt);
         assertEquals(PromptAction.POST_CREATION_GIT_INIT, postCreationPrompt.action);
         assertEquals("yes", postCreationPrompt.values.getFirst());
@@ -179,12 +176,12 @@ class InteractiveAppPostCreationFlowTest {
         repositoryService.add(localRepository.toString(), "existing-local-repository");
 
         InteractiveApp app = createApp();
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.repository("existing-local-repository", localRepository));
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.repository("existing-local-repository", localRepository));
 
-        invokeMigrateSelectedRepository(app);
+        app.testMigrateSelectedRepository();
 
-        PromptState postCreationPrompt = readPrompt(app);
+        PromptState postCreationPrompt = app.testPrompt();
         assertNotNull(postCreationPrompt);
         assertEquals(PromptAction.POST_CREATION_GIT_INIT, postCreationPrompt.action);
         assertEquals("no", postCreationPrompt.values.getFirst());
@@ -202,13 +199,13 @@ class InteractiveAppPostCreationFlowTest {
         repositoryService.add(localRepository.toString(), "existing-origin-repository");
 
         InteractiveApp app = createApp();
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.repository("existing-origin-repository", localRepository));
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.repository("existing-origin-repository", localRepository));
 
-        invokeMigrateSelectedRepository(app);
+        app.testMigrateSelectedRepository();
 
-        assertNull(readPrompt(app));
-        assertTrue(readStatus(app).contains("Saved origin URI git@github.com:acme/existing-origin-repository.git"));
+        assertNull(app.testPrompt());
+        assertTrue(app.testStatus().contains("Saved origin URI git@github.com:acme/existing-origin-repository.git"));
         RepositoryEntry repositoryEntry = repositoryService.load().getFirst();
         assertEquals("git@github.com:acme/existing-origin-repository.git", repositoryEntry.uri());
         assertEquals(localRepository.toAbsolutePath().normalize().toString(), repositoryEntry.localPath());
@@ -223,13 +220,13 @@ class InteractiveAppPostCreationFlowTest {
         repositoryService.add(localRepository.toString(), "profile-selected-repository");
 
         InteractiveApp app = createApp();
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.profile("profile-selected-repository", "profile", localRepository.resolve("profile")));
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.profile("profile-selected-repository", "profile", localRepository.resolve("profile")));
 
-        invokeMigrateSelectedRepository(app);
+        app.testMigrateSelectedRepository();
 
-        assertNull(readPrompt(app));
-        assertEquals("Select a repository, profile, or file first.", readStatus(app));
+        assertNull(app.testPrompt());
+        assertEquals("Select a repository, profile, or file first.", app.testStatus());
     }
 
     @Test
@@ -243,26 +240,26 @@ class InteractiveAppPostCreationFlowTest {
         prompt.values.set(0, "test-repo");
         prompt.values.set(1, "");
         prompt.values.set(2, "");
-        setPrompt(app, prompt);
-        invokeApplyPrompt(app);
+        app.testSetPrompt(prompt);
+        app.testApplyPrompt();
 
-        PromptState gitInitPrompt = readPrompt(app);
+        PromptState gitInitPrompt = app.testPrompt();
         assertNotNull(gitInitPrompt);
         assertEquals(PromptAction.POST_CREATION_GIT_INIT, gitInitPrompt.action);
         gitInitPrompt.values.set(0, "yes");
-        setPrompt(app, gitInitPrompt);
-        invokeApplyPrompt(app);
+        app.testSetPrompt(gitInitPrompt);
+        app.testApplyPrompt();
 
-        PromptState nextPrompt = readPrompt(app);
+        PromptState nextPrompt = app.testPrompt();
         if (nextPrompt != null) {
             assertEquals(PromptAction.POST_CREATION_PUBLISH_GITHUB, nextPrompt.action);
             nextPrompt.values.set(0, "no");
-            setPrompt(app, nextPrompt);
-            invokeApplyPrompt(app);
-            assertNull(readPrompt(app));
+            app.testSetPrompt(nextPrompt);
+            app.testApplyPrompt();
+            assertNull(app.testPrompt());
         }
 
-        String finalStatus = readStatus(app);
+        String finalStatus = app.testStatus();
         assertTrue(finalStatus.contains("Created and added repository test-repo"));
         assertTrue(finalStatus.contains("Initialized git repository."));
         assertTrue(finalStatus.contains("Created an initial commit."));
@@ -279,17 +276,17 @@ class InteractiveAppPostCreationFlowTest {
         prompt.values.set(0, "selected-repo");
         prompt.values.set(1, "");
         prompt.values.set(2, "");
-        setPrompt(app, prompt);
-        invokeApplyPrompt(app);
+        app.testSetPrompt(prompt);
+        app.testApplyPrompt();
 
-        PromptState postCreationPrompt = readPrompt(app);
+        PromptState postCreationPrompt = app.testPrompt();
         assertNotNull(postCreationPrompt);
         assertEquals(PromptAction.POST_CREATION_GIT_INIT, postCreationPrompt.action);
         postCreationPrompt.values.set(0, "no");
-        setPrompt(app, postCreationPrompt);
-        invokeApplyPrompt(app);
+        app.testSetPrompt(postCreationPrompt);
+        app.testApplyPrompt();
 
-        NodeRef selectedNode = readSelectedNode(app);
+        NodeRef selectedNode = app.testSelectedNode();
         assertNotNull(selectedNode);
         assertEquals(NodeKind.REPOSITORY, selectedNode.kind());
         assertEquals("selected-repo", selectedNode.repositoryName());
@@ -305,8 +302,8 @@ class InteractiveAppPostCreationFlowTest {
         repositoryService.add(localRepository.toString(), "delete-me");
 
         InteractiveApp app = createApp();
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.repository("delete-me", localRepository));
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.repository("delete-me", localRepository));
 
         PromptState prompt = PromptState.multiWithOptions(
             PromptAction.DELETE_REPOSITORY_FILE_BASED,
@@ -317,11 +314,10 @@ class InteractiveAppPostCreationFlowTest {
         prompt.expectedConfirmation = "delete-me";
         prompt.values.set(0, "delete-me");
         prompt.values.set(1, "yes");
-        setPrompt(app, prompt);
+        app.testSetPrompt(prompt);
+        app.testApplyPrompt();
 
-        invokeApplyPrompt(app);
-
-        assertEquals("Deleted repository delete-me and local folder.", readStatus(app));
+        assertEquals("Deleted repository delete-me and local folder.", app.testStatus());
     }
 
     @Test
@@ -335,11 +331,11 @@ class InteractiveAppPostCreationFlowTest {
         writeConfig(new RepositoryEntry("dirty-repo", "git@github.com:acme/dirty-repo.git", localRepository.toString()));
 
         InteractiveApp app = createApp();
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.repository("dirty-repo", localRepository));
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.repository("dirty-repo", localRepository));
         invokeOpenDeletePromptForSelectedNode(app);
 
-        PromptState prompt = readPrompt(app);
+        PromptState prompt = app.testPrompt();
 
         assertEquals(PromptAction.DELETE_REPOSITORY_FORCE, prompt.action);
         assertEquals("dirty-repo", prompt.expectedConfirmation);
@@ -356,11 +352,11 @@ class InteractiveAppPostCreationFlowTest {
         writeConfig(new RepositoryEntry("clean-repo", "git@github.com:acme/clean-repo.git", localRepository.toString()));
 
         InteractiveApp app = createApp();
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.repository("clean-repo", localRepository));
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.repository("clean-repo", localRepository));
         invokeOpenDeletePromptForSelectedNode(app);
 
-        PromptState prompt = readPrompt(app);
+        PromptState prompt = app.testPrompt();
 
         assertEquals(PromptAction.DELETE_REPOSITORY, prompt.action);
         assertEquals("clean-repo", prompt.expectedConfirmation);
@@ -377,11 +373,11 @@ class InteractiveAppPostCreationFlowTest {
         repositoryService.add(localRepository.toString(), "file-based-repo");
 
         InteractiveApp app = createApp();
-        invokeReloadState(app);
-        setSelectedNode(app, NodeRef.repository("file-based-repo", localRepository));
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.repository("file-based-repo", localRepository));
         invokeOpenDeletePromptForSelectedNode(app);
 
-        PromptState prompt = readPrompt(app);
+        PromptState prompt = app.testPrompt();
 
         assertEquals(PromptAction.DELETE_REPOSITORY_FILE_BASED, prompt.action);
         assertEquals("file-based-repo", prompt.expectedConfirmation);
@@ -413,64 +409,8 @@ class InteractiveAppPostCreationFlowTest {
         );
     }
 
-    private static void invokeApplyPrompt(InteractiveApp app) throws Exception {
-        Method applyPrompt = InteractiveApp.class.getDeclaredMethod("applyPrompt");
-        applyPrompt.setAccessible(true);
-        applyPrompt.invoke(app);
-    }
-
-    private static void invokeMigrateSelectedRepository(InteractiveApp app) throws Exception {
-        Method migrateSelectedRepository = InteractiveApp.class.getDeclaredMethod("migrateSelectedRepository");
-        migrateSelectedRepository.setAccessible(true);
-        migrateSelectedRepository.invoke(app);
-    }
-
-    private static void invokeReloadState(InteractiveApp app) throws Exception {
-        Method reloadState = InteractiveApp.class.getDeclaredMethod("reloadState");
-        reloadState.setAccessible(true);
-        reloadState.invoke(app);
-    }
-
     private static void invokeOpenDeletePromptForSelectedNode(InteractiveApp app) throws Exception {
-        Class<?> promptShortcutClass = Class.forName(
-            "com.github.alvarosanchez.ocp.command.interactive.InteractiveApp$PromptShortcut"
-        );
-        @SuppressWarnings("unchecked")
-        Object shortcut = Enum.valueOf((Class<Enum>) promptShortcutClass.asSubclass(Enum.class), "DELETE");
-        Method method = InteractiveApp.class.getDeclaredMethod("openPromptForSelectedNode", promptShortcutClass);
-        method.setAccessible(true);
-        method.invoke(app, shortcut);
-    }
-
-    private static void setPrompt(InteractiveApp app, PromptState prompt) throws Exception {
-        Field promptField = InteractiveApp.class.getDeclaredField("prompt");
-        promptField.setAccessible(true);
-        promptField.set(app, prompt);
-    }
-
-    private static PromptState readPrompt(InteractiveApp app) throws Exception {
-        Field promptField = InteractiveApp.class.getDeclaredField("prompt");
-        promptField.setAccessible(true);
-        return (PromptState) promptField.get(app);
-    }
-
-    private static void setSelectedNode(InteractiveApp app, NodeRef nodeRef) throws Exception {
-        Field selectedNodeField = InteractiveApp.class.getDeclaredField("selectedNode");
-        selectedNodeField.setAccessible(true);
-        selectedNodeField.set(app, nodeRef);
-    }
-
-
-    private static NodeRef readSelectedNode(InteractiveApp app) throws Exception {
-        Field selectedNodeField = InteractiveApp.class.getDeclaredField("selectedNode");
-        selectedNodeField.setAccessible(true);
-        return (NodeRef) selectedNodeField.get(app);
-    }
-
-    private static String readStatus(InteractiveApp app) throws Exception {
-        Field statusField = InteractiveApp.class.getDeclaredField("status");
-        statusField.setAccessible(true);
-        return (String) statusField.get(app);
+        app.testOpenDeletePromptForSelectedNode();
     }
 
     private static void runCommand(List<String> command) throws Exception {
