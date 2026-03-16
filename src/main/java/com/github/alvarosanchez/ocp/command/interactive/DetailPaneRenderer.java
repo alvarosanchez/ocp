@@ -7,6 +7,7 @@ import dev.tamboui.text.Line;
 import dev.tamboui.text.Span;
 import dev.tamboui.text.Text;
 import dev.tamboui.toolkit.element.Element;
+import dev.tamboui.toolkit.element.StyledElement;
 import dev.tamboui.toolkit.event.KeyEventHandler;
 import dev.tamboui.widgets.input.TextAreaState;
 
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 import static dev.tamboui.toolkit.Toolkit.column;
+import static dev.tamboui.toolkit.Toolkit.panel;
 import static dev.tamboui.toolkit.Toolkit.richText;
 import static dev.tamboui.toolkit.Toolkit.richTextArea;
 import static dev.tamboui.toolkit.Toolkit.text;
@@ -25,7 +27,7 @@ final class DetailPaneRenderer {
     private DetailPaneRenderer() {
     }
 
-    static Element renderDetailPane(
+    static StyledElement<?> renderDetailPane(
         NodeRef selectedNode,
         boolean repositoryRefreshable,
         boolean repositoryMigratable,
@@ -45,13 +47,14 @@ final class DetailPaneRenderer {
         KeyEventHandler handlePreviewKeyEvent
     ) {
         if (selectedNode == null) {
-            return column(
-                text("Select a repository, profile, or file on the left.").dim(),
-                text("Files open here with syntax-colored preview.").dim()
-            )
-                .id(detailId)
-                .focusable()
-                .onKeyEvent(handleKeyEvent);
+            return detailsPane(
+                detailId,
+                handleKeyEvent,
+                column(
+                    text("Select a repository, profile, or file on the left.").dim(),
+                    text("Files open here with syntax-colored preview.").dim()
+                )
+            );
         }
 
         if (selectedNode.kind() == NodeKind.REPOSITORY) {
@@ -60,12 +63,7 @@ final class DetailPaneRenderer {
             repositoryElements.add(detailField("Name", selectedNode.repositoryName()));
             repositoryElements.add(detailField("Path", String.valueOf(selectedNode.path())));
             repositoryElements.add(detailField("Indicators", statusDescription(selectedNode, selectedRepositoryHasLocalChanges, selectedRepositoryInspectionFailed)));
-            return column(
-                repositoryElements.toArray(Element[]::new)
-            )
-                .id(detailId)
-                .focusable()
-                .onKeyEvent(handleKeyEvent);
+            return detailsPane(detailId, handleKeyEvent, column(repositoryElements.toArray(Element[]::new)));
         }
 
         if (selectedNode.kind() == NodeKind.PROFILE) {
@@ -94,23 +92,19 @@ final class DetailPaneRenderer {
             if (profile != null && profile.message() != null && !profile.message().isBlank()) {
                 profileElements.add(detailField("Message", profile.message()));
             }
-            return column(
-                profileElements.toArray(Element[]::new)
-            )
-                .id(detailId)
-                .focusable()
-                .onKeyEvent(handleKeyEvent);
+            return detailsPane(detailId, handleKeyEvent, column(profileElements.toArray(Element[]::new)));
         }
 
         if (selectedNode.kind() == NodeKind.DIRECTORY) {
-            return column(
-                text("Directory").bold().fg(Color.CYAN),
-                detailField("Path", String.valueOf(selectedNode.path())),
-                detailField("Indicators", statusDescription(selectedNode, selectedRepositoryHasLocalChanges, selectedRepositoryInspectionFailed))
-            )
-                .id(detailId)
-                .focusable()
-                .onKeyEvent(handleKeyEvent);
+            return detailsPane(
+                detailId,
+                handleKeyEvent,
+                column(
+                    text("Directory").bold().fg(Color.CYAN),
+                    detailField("Path", String.valueOf(selectedNode.path())),
+                    detailField("Indicators", statusDescription(selectedNode, selectedRepositoryHasLocalChanges, selectedRepositoryInspectionFailed))
+                )
+            );
         }
 
         if (selectedNode.kind() == NodeKind.FILE && editMode) {
@@ -137,6 +131,17 @@ final class DetailPaneRenderer {
             .id(detailId)
             .focusable()
             .onKeyEvent(handlePreviewKeyEvent)
+            .fill();
+    }
+
+    private static StyledElement<?> detailsPane(String detailId, KeyEventHandler handleKeyEvent, Element content) {
+        return panel("Details", content)
+            .rounded()
+            .borderColor(Color.CYAN)
+            .focusedBorderColor(Color.GREEN)
+            .id(detailId)
+            .focusable()
+            .onKeyEvent(handleKeyEvent)
             .fill();
     }
 
