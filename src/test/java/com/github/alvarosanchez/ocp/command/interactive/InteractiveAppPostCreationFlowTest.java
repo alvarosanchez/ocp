@@ -17,6 +17,7 @@ import io.micronaut.serde.ObjectMapper;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -323,6 +324,71 @@ class InteractiveAppPostCreationFlowTest {
         assertEquals("Deleted repository delete-me and local folder.", readStatus(app));
     }
 
+    @Test
+    void inspectDeleteForDirtyGitRepositoryRequiresForcePromptVariant() throws Exception {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
+        Path localRepository = tempDir.resolve("dirty-repo");
+        Files.createDirectories(localRepository);
+        runCommand(List.of("git", "init", localRepository.toString()));
+        Files.writeString(localRepository.resolve("dirty.txt"), "changes\n");
+
+        writeConfig(new RepositoryEntry("dirty-repo", "git@github.com:acme/dirty-repo.git", localRepository.toString()));
+
+        InteractiveApp app = createApp();
+        invokeReloadState(app);
+        setSelectedNode(app, NodeRef.repository("dirty-repo", localRepository));
+        invokeOpenDeletePromptForSelectedNode(app);
+
+        PromptState prompt = readPrompt(app);
+
+        assertEquals(PromptAction.DELETE_REPOSITORY_FORCE, prompt.action);
+        assertEquals("dirty-repo", prompt.expectedConfirmation);
+        assertEquals("Type repository name to force delete: dirty-repo", prompt.labels.getFirst());
+    }
+
+    @Test
+    void inspectDeleteForCleanGitRepositoryUsesSimpleDeletePromptVariant() throws Exception {
+        Assumptions.assumeTrue(isGitAvailable(), "git executable is required for this test");
+        Path localRepository = tempDir.resolve("clean-repo");
+        Files.createDirectories(localRepository);
+        runCommand(List.of("git", "init", localRepository.toString()));
+
+        writeConfig(new RepositoryEntry("clean-repo", "git@github.com:acme/clean-repo.git", localRepository.toString()));
+
+        InteractiveApp app = createApp();
+        invokeReloadState(app);
+        setSelectedNode(app, NodeRef.repository("clean-repo", localRepository));
+        invokeOpenDeletePromptForSelectedNode(app);
+
+        PromptState prompt = readPrompt(app);
+
+        assertEquals(PromptAction.DELETE_REPOSITORY, prompt.action);
+        assertEquals("clean-repo", prompt.expectedConfirmation);
+        assertEquals("Type repository name to confirm: clean-repo", prompt.labels.getFirst());
+    }
+
+    @Test
+    void inspectDeleteForFileBasedRepositoryUsesDeleteLocalFolderPromptVariant() throws Exception {
+        Path localRepository = tempDir.resolve("file-based-repo");
+        Files.createDirectories(localRepository);
+        Files.writeString(localRepository.resolve("repository.json"), "{\"profiles\":[]}");
+
+        RepositoryService repositoryService = applicationContext.getBean(RepositoryService.class);
+        repositoryService.add(localRepository.toString(), "file-based-repo");
+
+        InteractiveApp app = createApp();
+        invokeReloadState(app);
+        setSelectedNode(app, NodeRef.repository("file-based-repo", localRepository));
+        invokeOpenDeletePromptForSelectedNode(app);
+
+        PromptState prompt = readPrompt(app);
+
+        assertEquals(PromptAction.DELETE_REPOSITORY_FILE_BASED, prompt.action);
+        assertEquals("file-based-repo", prompt.expectedConfirmation);
+        assertEquals(List.of("no", "yes"), prompt.options.get(1));
+        assertEquals("Delete local folder as well?", prompt.labels.get(1));
+    }
+
     private InteractiveApp createApp() {
         return new InteractiveApp(
             applicationContext.getBean(ProfileService.class),
@@ -330,6 +396,20 @@ class InteractiveAppPostCreationFlowTest {
             applicationContext.getBean(OnboardingService.class),
             applicationContext.getBean(RepositoryPostCreationService.class),
             applicationContext.getBean(ObjectMapper.class)
+        );
+    }
+
+    private void writeConfig(RepositoryEntry repositoryEntry) throws IOException {
+        Path configDir = Path.of(System.getProperty("ocp.config.dir"));
+        Files.createDirectories(configDir);
+        Files.writeString(
+            configDir.resolve("config.json"),
+            applicationContext.getBean(ObjectMapper.class).writeValueAsString(
+                new com.github.alvarosanchez.ocp.config.OcpConfigFile(
+                    new com.github.alvarosanchez.ocp.config.OcpConfigFile.OcpConfigOptions(),
+                    List.of(repositoryEntry)
+                )
+            )
         );
     }
 
@@ -351,6 +431,17 @@ class InteractiveAppPostCreationFlowTest {
         reloadState.invoke(app);
     }
 
+    private static void invokeOpenDeletePromptForSelectedNode(InteractiveApp app) throws Exception {
+        Class<?> promptShortcutClass = Class.forName(
+            "com.github.alvarosanchez.ocp.command.interactive.InteractiveApp$PromptShortcut"
+        );
+        @SuppressWarnings("unchecked")
+        Object shortcut = Enum.valueOf((Class<Enum>) promptShortcutClass.asSubclass(Enum.class), "DELETE");
+        Method method = InteractiveApp.class.getDeclaredMethod("openPromptForSelectedNode", promptShortcutClass);
+        method.setAccessible(true);
+        method.invoke(app, shortcut);
+    }
+
     private static void setPrompt(InteractiveApp app, PromptState prompt) throws Exception {
         Field promptField = InteractiveApp.class.getDeclaredField("prompt");
         promptField.setAccessible(true);
@@ -368,6 +459,7 @@ class InteractiveAppPostCreationFlowTest {
         selectedNodeField.setAccessible(true);
         selectedNodeField.set(app, nodeRef);
     }
+
 
     private static NodeRef readSelectedNode(InteractiveApp app) throws Exception {
         Field selectedNodeField = InteractiveApp.class.getDeclaredField("selectedNode");

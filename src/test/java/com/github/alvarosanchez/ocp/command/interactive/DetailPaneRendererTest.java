@@ -151,6 +151,32 @@ class DetailPaneRendererTest {
         assertEquals("TextAreaElement", element.getClass().getSimpleName());
     }
 
+    @Test
+    void renderDetailPaneShowsDeepMergedTitleSuffix() {
+        Element element = DetailPaneRenderer.renderDetailPane(
+            NodeRef.deepMergedFile("repo", "profile", Path.of("opencode.json")),
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            Map.of(),
+            Map.of(),
+            DetailPaneRenderer.plainText("{}"),
+            0,
+            new TextAreaState(),
+            "detail",
+            "editor",
+            event -> null,
+            event -> null
+        );
+
+        RichTextAreaElement richTextArea = assertInstanceOf(RichTextAreaElement.class, element);
+        assertEquals("Preview: opencode.json (deep-merged)", richTextAreaTitle(richTextArea));
+    }
+
     private static Text richTextAreaText(RichTextAreaElement richTextArea) {
         try {
             Field textField = RichTextAreaElement.class.getDeclaredField("text");
@@ -158,6 +184,16 @@ class DetailPaneRendererTest {
             return (Text) textField.get(richTextArea);
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("Unable to inspect rich text area text", e);
+        }
+    }
+
+    private static String richTextAreaTitle(RichTextAreaElement richTextArea) {
+        try {
+            Field titleField = RichTextAreaElement.class.getDeclaredField("title");
+            titleField.setAccessible(true);
+            return (String) titleField.get(richTextArea);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to inspect rich text area title", e);
         }
     }
 }
