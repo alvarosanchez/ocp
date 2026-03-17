@@ -10,12 +10,65 @@ import dev.tamboui.text.Line;
 import dev.tamboui.text.Span;
 import dev.tamboui.text.Text;
 import dev.tamboui.toolkit.element.Element;
+import dev.tamboui.toolkit.elements.Panel;
 import dev.tamboui.widgets.input.TextAreaState;
 import java.nio.file.Path;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class DetailPaneRendererTest {
+
+    @Test
+    void renderDetailPaneWrapsNullSelectionInDetailsPanel() {
+        Element element = DetailPaneRenderer.renderDetailPane(
+            null,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            Map.of(),
+            Map.of(),
+            DetailPaneRenderer.plainText(""),
+            0,
+            new TextAreaState(),
+            "detail",
+            "editor",
+            event -> null,
+            event -> null
+        );
+
+        Panel panel = assertInstanceOf(Panel.class, element);
+        assertEquals("Details", panel.styleAttributes().get("title"));
+    }
+
+    @Test
+    void renderDetailPaneWrapsRepositorySelectionInDetailsPanel() {
+        Element element = DetailPaneRenderer.renderDetailPane(
+            NodeRef.repository("repo", Path.of("/tmp/repo")),
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            Map.of(),
+            Map.of(),
+            DetailPaneRenderer.plainText(""),
+            0,
+            new TextAreaState(),
+            "detail",
+            "editor",
+            event -> null,
+            event -> null
+        );
+
+        Panel panel = assertInstanceOf(Panel.class, element);
+        assertEquals("Details", panel.styleAttributes().get("title"));
+    }
 
     @Test
     void detailHintReturnsDefaultForNullSelection() {
