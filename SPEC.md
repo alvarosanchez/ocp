@@ -103,7 +103,7 @@
 103: - `profiles` defaults to an empty list.
 104: - Empty/blank profile names are ignored.
 105: - `description` is optional and may be omitted or null.
-106: - `extends_from` is optional. Canonical persisted shape is an ordered array of parent profile names, for example `"extends_from": ["base","company"]`. Legacy scalar values are accepted at read time and are migrated on process startup to a one-element array.
+106: - `extends_from` is optional. Canonical persisted shape is an ordered array of parent profile names, for example `"extends_from": ["base","company"]`. Legacy scalar values are accepted at read time and are migrated on process startup, on all invocations, to a one-element array.
 107: - Profile names must be globally unique across all configured repositories.
 108: 
 109: ## Repository structure
