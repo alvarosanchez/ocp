@@ -299,6 +299,7 @@ public final class InteractiveApp extends ToolkitApp {
 
         applyPendingSelectionRestore();
         syncActivePaneFromFocus();
+        hierarchyTree.borderColor(activePane == Pane.TREE ? Color.GREEN : Color.CYAN);
         syncSelectionAndPreview();
         TreeShortcutHints.ShortcutHints treeShortcutHints = TreeShortcutHints.forSelection(
             selectedNode,
@@ -309,9 +310,6 @@ public final class InteractiveApp extends ToolkitApp {
             editMode
         );
 
-        List<Element> treePaneContent = new ArrayList<>();
-        treePaneContent.add(hierarchyTree.fill());
-
         Element root = column(
             panel(
                 row(
@@ -321,13 +319,8 @@ public final class InteractiveApp extends ToolkitApp {
                 )
             ).rounded().borderColor(Color.CYAN).length(3),
             row(
-                panel(
-                    treePaneContent.toArray(Element[]::new)
-                ).rounded().borderColor(activePane == Pane.TREE ? Color.GREEN : Color.GRAY).percent(33),
-                panel(renderDetailPane())
-                    .rounded()
-                    .borderColor(activePane == Pane.DETAIL ? Color.GREEN : Color.GRAY)
-                    .percent(66)
+                hierarchyTree.fill().percent(33),
+                renderDetailPane().percent(66)
             ).fill(),
             renderShortcutPanel(treeShortcutHints),
             renderStatusPanel()
@@ -1698,7 +1691,7 @@ public final class InteractiveApp extends ToolkitApp {
             && Objects.equals(left.path(), right.path());
     }
 
-    private Element renderDetailPane() {
+    private StyledElement<?> renderDetailPane() {
         return DetailPaneRenderer.renderDetailPane(
             selectedNode,
             isSelectedRepositoryRefreshable(),
