@@ -93,7 +93,7 @@
 93: {
 94:   "profiles": [
 95:     { "name": "my-company", "description": "Company defaults" },
-96:     { "name": "oss", "description": "Open-source profile", "extends_from": "my-company" }
+96:     { "name": "oss", "description": "Open-source profile", "extends_from": ["my-company"] }
 97:   ]
 98: }
 99: ```
@@ -103,7 +103,7 @@
 103: - `profiles` defaults to an empty list.
 104: - Empty/blank profile names are ignored.
 105: - `description` is optional and may be omitted or null.
-106: - `extends_from` is optional and references another profile name.
+106: - `extends_from` is optional. Canonical persisted shape is an ordered array of parent profile names, for example `"extends_from": ["base","company"]`. Legacy scalar values are accepted at read time and are migrated on process startup to a one-element array.
 107: - Profile names must be globally unique across all configured repositories.
 108: 
 109: ## Repository structure
@@ -200,7 +200,7 @@
 199: - In interactive mode, repository deletion prompts are context-aware:
 200:   - Git-backed repos with local changes show a warning and require explicit force confirmation.
 201:   - File-based repos ask whether to also delete the local folder.
-202: - In interactive mode, `c` (create profile) creates the profile inside the currently selected repository context (repository, profile, or file node), and prompts for optional inheritance using a selectable list of all resolvable profile names across configured repositories.
+202: - In interactive mode, `c` (create profile) creates the profile inside the currently selected repository context (repository, profile, or file node), and prompts for optional inheritance using a selectable list of all resolvable profile names across configured repositories. The prompt allows repeated parent selection to build an ordered parent list; each non-blank selection appends another optional parent field so the final order reflects selection order.
 203: - In interactive mode, action keys are explicit: `r` refresh selected repository, `R` refresh all repositories, `u` use selected profile, `e` edit selected file, `o` edit the OCP registry config.json (respects `ocp.config.dir` when set), `y` copy the selected file's absolute path, and `p` jump to the selected profile's parent; `Enter` does not trigger these actions. Saving the OCP config file reloads the tree when repository entries change.
 204: - In interactive mode, selecting a file-based repository node also exposes `m` to migrate that repository into the shared Git/GitHub post-creation flow.
 205: - In interactive mode, selecting a git-backed repository node with local uncommitted changes also exposes `g` to prompt for a commit message, commit all local changes, and push them to the tracked remote branch.
@@ -238,8 +238,8 @@
 237: - Switching must be transactional at file level:
 238:   - If linking one file fails, already-processed files must be restored from backups.
 239: - Profile inheritance and merge behavior:
-240:   - `extends_from` profiles are resolved parent-first.
-241:   - Parent-only files are inherited as-is.
+240:   - `extends_from` profiles are resolved in declared order, parent-first. When multiple parents are declared, precedence is applied left-to-right: files contributed by earlier parents can be overridden by later parents and ultimately by the child.
+241:   - Parent-only files are inherited as read-only nodes. When multiple parents contribute the same logical JSON file, the resulting output is deep-merged and shown as a merged, read-only preview under resolved profiles.
 242:   - For overlapping JSON/JSONC files (`*.json` and `*.jsonc`), the resulting file is deep-merged recursively.
 243:   - Child values override parent values for matching keys at any nesting level.
 244:   - Arrays and non-object JSON values are replaced by the child value.
