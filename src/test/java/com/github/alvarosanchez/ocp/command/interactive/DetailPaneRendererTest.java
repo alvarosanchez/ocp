@@ -76,7 +76,6 @@ class DetailPaneRendererTest {
         assertEquals("Details", panel.styleAttributes().get("title"));
     }
 
-
     @Test
     void renderDetailPaneShowsCommaSeparatedParentsInOrder() {
         Element element = DetailPaneRenderer.renderDetailPane(
