@@ -441,7 +441,7 @@ class HierarchyTreeBuilderTest {
     }
 
     @Test
-    void buildHierarchyTreeMarksParentOnlyMergedJsonAsReadOnlyDeepMerged() throws IOException {
+    void buildHierarchyTreeKeepsSingleParentInheritedJsonAsReadOnlyWithoutDeepMergeFlag() throws IOException {
         Path repositoryPath = tempDir.resolve("repo-a");
         Path baseProfilePath = repositoryPath.resolve("base");
         Path childProfilePath = repositoryPath.resolve("child");
@@ -476,10 +476,32 @@ class HierarchyTreeBuilderTest {
 
         assertEquals(parentFile, mergedFileNode.data().path());
         assertTrue(mergedFileNode.data().inherited());
-        assertTrue(mergedFileNode.data().deepMerged());
+        assertFalse(mergedFileNode.data().deepMerged());
         assertTrue(mergedFileNode.data().readOnly());
         assertEquals("base", mergedFileNode.data().inheritedFromProfile());
         assertEquals(List.of("base"), mergedFileNode.data().contributorProfileNames());
+    }
+
+    @Test
+    void renderTreeNodeUsesLockIconForReadOnlyDeepMergedFileNodes() {
+        TreeNode<NodeRef> node = TreeNode.of(
+            "opencode.json",
+            NodeRef.mergedReadOnlyFile(
+                "repo-a",
+                "child",
+                Path.of("/tmp/repo-a/base/opencode.json"),
+                "base",
+                List.of("base"),
+                List.of(Path.of("/tmp/repo-a/base/opencode.json")),
+                true
+            )
+        );
+
+        StyledElement<?> rendered = HierarchyTreeBuilder.renderTreeNode(node, Map.of(), Map.of(), Map.of());
+
+        RichTextElement richText = assertInstanceOf(RichTextElement.class, rendered);
+        var spans = richText.text().lines().getFirst().spans();
+        assertEquals("🔒 ", spans.get(0).content());
     }
 
     @Test

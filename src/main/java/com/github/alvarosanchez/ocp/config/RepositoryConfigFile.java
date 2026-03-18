@@ -47,7 +47,12 @@ public record RepositoryConfigFile(List<ProfileEntry> profiles) {
             if (!(extendsFrom instanceof String extendsFromScalar)) {
                 continue;
             }
-            profile.put("extends_from", new ArrayList<>(List.of(extendsFromScalar)));
+            String normalizedParentProfileName = extendsFromScalar.trim();
+            if (normalizedParentProfileName.isBlank()) {
+                profile.remove("extends_from");
+            } else {
+                profile.put("extends_from", new ArrayList<>(List.of(normalizedParentProfileName)));
+            }
             migrated = true;
         }
         return migrated;

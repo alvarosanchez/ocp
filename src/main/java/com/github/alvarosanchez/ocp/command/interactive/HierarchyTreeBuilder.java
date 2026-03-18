@@ -110,7 +110,7 @@ final class HierarchyTreeBuilder {
             case REPOSITORY -> "📦 ";
             case PROFILE -> "👤 ";
             case DIRECTORY -> "📁 ";
-            case FILE -> data.deepMerged() ? "⛙ " : data.readOnly() ? "🔒 " : "📄 ";
+            case FILE -> data.readOnly() ? "🔒 " : data.deepMerged() ? "⛙ " : "📄 ";
         };
 
         Color iconColor = switch (data.kind()) {
@@ -458,7 +458,7 @@ final class HierarchyTreeBuilder {
                             file,
                             inherited,
                             inherited ? profileName : null,
-                            inherited && isMergeableJsonFile(relativePath),
+                            false,
                             inherited,
                             false,
                             java.util.List.of(profileName),
