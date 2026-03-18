@@ -8,7 +8,8 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 jobs:
   build:
@@ -28,6 +29,21 @@ jobs:
 
       - name: Run build
         run: ./gradlew --no-daemon build
+
+      - name: Generate JaCoCo badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: cicirello/jacoco-badge-generator@v2.11.0
+        with:
+          generate-branches-badge: false
+          jacoco-csv-file: build/reports/jacoco/test/jacocoTestReport.csv
+          badges-directory: .github/badges
+
+      - name: Commit coverage badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: stefanzweifel/git-auto-commit-action@v6
+        with:
+          commit_message: 'docs: update coverage badge'
+          file_pattern: .github/badges/jacoco.svg
 
       - name: Run native tests
         run: ./gradlew --no-daemon nativeTest

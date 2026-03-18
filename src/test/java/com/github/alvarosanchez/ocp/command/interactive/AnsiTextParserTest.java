@@ -41,7 +41,7 @@ class AnsiTextParserTest {
     }
     @Test
     void parseSupportsExtendedColorsAndStyleToggles() {
-        Text parsed = parser.parse("[1;3;4;38;5;196;48;2;12;34;56mstyled[22;23;24;39;49mplain");
+        Text parsed = parser.parse("\u001B[1;3;4;38;5;196;48;2;12;34;56mstyled\u001B[22;23;24;39;49mplain");
 
         var styledSpan = parsed.lines().getFirst().spans().get(0);
         var plainSpan = parsed.lines().getFirst().spans().get(1);
@@ -58,15 +58,15 @@ class AnsiTextParserTest {
 
     @Test
     void parseTreatsInvalidOrIncompleteEscapeSequencesAsLiteralText() {
-        Text parsed = parser.parse("prefix[38;2;1;2brokennot-sgr");
+        Text parsed = parser.parse("prefix\u001B[38;2;1;2broken\u001Bnot-sgr");
 
         assertEquals(1, parsed.lines().size());
-        assertEquals("prefix[38;2;1;2brokennot-sgr", parsed.lines().getFirst().spans().getFirst().content());
+        assertEquals("prefix\u001B[38;2;1;2broken\u001Bnot-sgr", parsed.lines().getFirst().spans().getFirst().content());
     }
 
     @Test
     void parseSupportsBrightAndResettableModifiers() {
-        Text parsed = parser.parse("[90;100;5;7;8;9mbright[25;27;28;29mclear");
+        Text parsed = parser.parse("\u001B[90;100;5;7;8;9mbright\u001B[25;27;28;29mclear");
 
         var brightSpan = parsed.lines().getFirst().spans().get(0);
         var clearSpan = parsed.lines().getFirst().spans().get(1);
