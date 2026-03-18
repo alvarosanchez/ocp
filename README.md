@@ -11,12 +11,12 @@
 
 <p align="center">
   <a href="https://github.com/alvarosanchez/ocp/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/alvarosanchez/ocp?style=flat-square" /></a>
+  <a href="https://github.com/alvarosanchez/ocp/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/alvarosanchez/ocp?style=flat-square" /></a>
   <a href="https://github.com/alvarosanchez/ocp/releases"><img alt="GitHub downloads" src="https://img.shields.io/github/downloads/alvarosanchez/ocp/total?style=flat-square" /></a>
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" /></a>
   <img alt="Java 25" src="https://img.shields.io/badge/java-25-f89820" />
   <img alt="Micronaut 4.x" src="https://img.shields.io/badge/micronaut-4.x-5e81f4" />
   <img alt="Native image" src="https://img.shields.io/badge/native-graalvm-7c3aed" />
-  <img alt="Release status" src="https://img.shields.io/badge/release-approaching%201.0-16a34a" />
 </p>
 
 <p align="center">
@@ -108,12 +108,13 @@ The README is intentionally a landing page. Full documentation is published sepa
 
 `ocp` is built as a modern CLI with a strong behavior contract and a native-distribution path in mind.
 
-- Java 25
-- Micronaut 4.x
-- Picocli
-- Gradle Kotlin DSL
-- JUnit 5
-- GraalVM native image
+- [Java 25](https://www.oracle.com/java/)
+- [Micronaut 4.x](https://micronaut.io/)
+- [Picocli](https://picocli.info/)
+- [TamboUI](https://github.com/tamboui/tamboui)
+- [Gradle Kotlin DSL](https://docs.gradle.org/current/userguide/kotlin_dsl.html)
+- [JUnit 5](https://junit.org/junit5/)
+- [GraalVM native image](https://www.graalvm.org/)
 
 ## Development
 
