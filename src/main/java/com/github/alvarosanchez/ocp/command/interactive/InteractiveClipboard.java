@@ -41,7 +41,7 @@ final class InteractiveClipboard {
     }
 
 
-    private static String clipboardUnavailableMessage(String operatingSystem) {
+    static String clipboardUnavailableMessage(String operatingSystem) {
         if (operatingSystem.contains("mac")) {
             return "Clipboard is unavailable. Install or enable pbcopy, or use a desktop session with clipboard support.";
         }
