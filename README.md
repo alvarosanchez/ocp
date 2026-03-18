@@ -26,7 +26,7 @@
   ·
   <a href="https://github.com/alvarosanchez/ocp/stargazers"><strong>Star on GitHub</strong></a>
   ·
-  <a href="#development"><strong>Contribute</strong></a>
+  <a href="#contributing"><strong>Contribute</strong></a>
 </p>
 
 <p align="center">
@@ -98,9 +98,9 @@ brew install alvarosanchez/tap/ocp
 
 ## Documentation
 
-The README is intentionally a landing page. Full documentation is published separately on GitHub Pages.
+The README is intentionally a landing page. Detailed documentation is planned for GitHub Pages and, until it is published, the product specification remains the best source of detailed behavior and contract information.
 
-- **Docs site:** _GitHub Pages link to be added_
+- **Docs site:** _Planned for GitHub Pages_
 - **Product spec:** [`SPEC.md`](SPEC.md)
 - **License:** [`LICENSE`](LICENSE)
 
