@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.tamboui.style.Color;
+import dev.tamboui.style.Modifier;
 import dev.tamboui.text.Text;
 import org.junit.jupiter.api.Test;
 
@@ -48,9 +49,9 @@ class AnsiTextParserTest {
         assertEquals("styled", styledSpan.content());
         assertEquals(Color.indexed(196), styledSpan.style().fg().orElseThrow());
         assertTrue(styledSpan.style().bg().isPresent());
-        assertTrue(styledSpan.style().effectiveModifiers().toString().contains("BOLD"));
-        assertTrue(styledSpan.style().effectiveModifiers().toString().contains("ITALIC"));
-        assertTrue(styledSpan.style().effectiveModifiers().toString().contains("UNDERLINED"));
+        assertTrue(styledSpan.style().effectiveModifiers().contains(Modifier.BOLD));
+        assertTrue(styledSpan.style().effectiveModifiers().contains(Modifier.ITALIC));
+        assertTrue(styledSpan.style().effectiveModifiers().contains(Modifier.UNDERLINED));
         assertEquals("plain", plainSpan.content());
         assertTrue(plainSpan.style().fg().isEmpty());
         assertTrue(plainSpan.style().bg().isEmpty());
@@ -73,15 +74,15 @@ class AnsiTextParserTest {
         assertEquals("bright", brightSpan.content());
         assertEquals(Color.indexed(8), brightSpan.style().fg().orElseThrow());
         assertEquals(Color.indexed(8), brightSpan.style().bg().orElseThrow());
-        assertTrue(brightSpan.style().effectiveModifiers().toString().contains("SLOW_BLINK"));
-        assertTrue(brightSpan.style().effectiveModifiers().toString().contains("REVERSED"));
-        assertTrue(brightSpan.style().effectiveModifiers().toString().contains("HIDDEN"));
-        assertTrue(brightSpan.style().effectiveModifiers().toString().contains("CROSSED_OUT"));
+        assertTrue(brightSpan.style().effectiveModifiers().contains(Modifier.SLOW_BLINK));
+        assertTrue(brightSpan.style().effectiveModifiers().contains(Modifier.REVERSED));
+        assertTrue(brightSpan.style().effectiveModifiers().contains(Modifier.HIDDEN));
+        assertTrue(brightSpan.style().effectiveModifiers().contains(Modifier.CROSSED_OUT));
         assertEquals("clear", clearSpan.content());
-        assertFalse(clearSpan.style().effectiveModifiers().toString().contains("SLOW_BLINK"));
-        assertFalse(clearSpan.style().effectiveModifiers().toString().contains("REVERSED"));
-        assertFalse(clearSpan.style().effectiveModifiers().toString().contains("HIDDEN"));
-        assertFalse(clearSpan.style().effectiveModifiers().toString().contains("CROSSED_OUT"));
+        assertFalse(clearSpan.style().effectiveModifiers().contains(Modifier.SLOW_BLINK));
+        assertFalse(clearSpan.style().effectiveModifiers().contains(Modifier.REVERSED));
+        assertFalse(clearSpan.style().effectiveModifiers().contains(Modifier.HIDDEN));
+        assertFalse(clearSpan.style().effectiveModifiers().contains(Modifier.CROSSED_OUT));
     }
 
 }

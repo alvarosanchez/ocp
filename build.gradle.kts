@@ -73,6 +73,7 @@ jacoco {
 val jacocoTestReport by tasks.existing(JacocoReport::class) {
     dependsOn(tasks.test)
     reports {
+        csv.required.set(true)
         xml.required.set(true)
         html.required.set(true)
     }

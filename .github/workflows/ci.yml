@@ -8,8 +8,7 @@ on:
   pull_request:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   build:
@@ -30,8 +29,31 @@ jobs:
       - name: Run build
         run: ./gradlew --no-daemon build
 
+      - name: Run native tests
+        run: ./gradlew --no-daemon nativeTest
+
+  coverage-badge:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+
+      - name: Set up Oracle GraalVM for JDK 25
+        uses: graalvm/setup-graalvm@v1
+        with:
+          distribution: "graalvm"
+          java-version: "25"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: gradle
+
+      - name: Run tests and JaCoCo report
+        run: ./gradlew --no-daemon test jacocoTestReport
+
       - name: Generate JaCoCo badge
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: cicirello/jacoco-badge-generator@v2.11.0
         with:
           generate-branches-badge: false
@@ -39,11 +61,7 @@ jobs:
           badges-directory: .github/badges
 
       - name: Commit coverage badge
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: stefanzweifel/git-auto-commit-action@v6
         with:
           commit_message: 'docs: update coverage badge'
           file_pattern: .github/badges/jacoco.svg
-
-      - name: Run native tests
-        run: ./gradlew --no-daemon nativeTest
