@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.github.alvarosanchez.ocp.config.OcpConfigFile.OcpConfigOptions;
 import com.github.alvarosanchez.ocp.config.OcpConfigFile.RepositoryEntry;
@@ -361,4 +362,32 @@ class VersionCheckServiceTest {
             return HttpClient.Version.HTTP_1_1;
         }
     }
+
+
+    @Test
+    void normalizeVersionRemovesLeadingVAndTrimsWhitespace() {
+        assertEquals("1.2.3", VersionCheckService.normalizeVersion("  v1.2.3  "));
+        assertEquals("2.0.0", VersionCheckService.normalizeVersion("V2.0.0"));
+    }
+
+    @Test
+    void versionCheckResultFromTreatsBlankLatestVersionAsNoUpdate() {
+        VersionCheckService.VersionCheckResult result = VersionCheckService.VersionCheckResult.from("1.0.0", "   ");
+
+        assertFalse(result.updateAvailable());
+        assertEquals("", result.latestVersion());
+        assertNull(result.noticeMessage());
+    }
+
+    @Test
+    void compareVersionsTreatsReleaseAsNewerThanQualifiedBuild() {
+        assertTrue(VersionCheckService.compareVersions("1.2.3", "1.2.3-rc1") > 0);
+        assertTrue(VersionCheckService.compareVersions("1.2.3-rc2", "1.2.3-rc1") > 0);
+    }
+
+    @Test
+    void compareVersionsTreatsBlankSegmentsAsZero() {
+        assertEquals(0, VersionCheckService.compareVersions("1..0", "1.0.0"));
+    }
+
 }

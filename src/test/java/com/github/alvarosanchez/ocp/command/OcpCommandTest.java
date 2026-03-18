@@ -205,6 +205,35 @@ class OcpCommandTest {
     }
 
     @Test
+    void startupMetadataMigrationFailureMessageFallsBackToBaseMessageWhenDetailIsMissing() {
+        assertEquals(
+            "Could not migrate legacy repository metadata before startup.",
+            OcpCommand.startupMetadataMigrationFailureMessage(new RuntimeException())
+        );
+        assertEquals(
+            "Could not migrate legacy repository metadata before startup.",
+            OcpCommand.startupMetadataMigrationFailureMessage(null)
+        );
+    }
+
+    @Test
+    void startupMetadataMigrationFailureMessageAppendsExceptionDetailWhenPresent() {
+        assertEquals(
+            "Could not migrate legacy repository metadata before startup. Details: broken metadata",
+            OcpCommand.startupMetadataMigrationFailureMessage(new RuntimeException("broken metadata"))
+        );
+    }
+
+    @Test
+    void presentStartupVersionNoticeIgnoresBlankMessages() {
+        Cli.init();
+
+        OcpCommand.presentStartupVersionNotice(new String[] {"profile", "list"}, "   ", false);
+
+        assertNull(Cli.consumeStartupNotice());
+    }
+
+    @Test
     void startupFailureMessageAppendsExceptionDetailWhenPresent() {
         String message = OcpCommand.startupVersionCheckFailureMessage(new RuntimeException("simulated failure"));
 

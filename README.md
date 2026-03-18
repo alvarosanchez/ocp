@@ -1,6 +1,7 @@
 # ocp - OpenCode Configuration Profiles
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+![Coverage](assets/badges/coverage.svg)
 
 `ocp` (OpenCode Configuration Profiles) is a CLI to manage OpenCode config profiles stored in Git repositories.
 
@@ -111,6 +112,12 @@ Optional JVM system property overrides:
 - `ocp.cache.dir` (legacy storage override)
 - `ocp.opencode.config.dir`
 - `ocp.working.dir`
+
+## Code coverage
+
+- Run `./gradlew test jacocoTestReport` to generate coverage reports.
+- Open the HTML report at `build/reports/jacoco/test/html/index.html`.
+- Run `./gradlew generateCoverageBadge` after generating the JaCoCo XML report to refresh `assets/badges/coverage.svg` for the README badge.
 
 ## Exit codes
 
