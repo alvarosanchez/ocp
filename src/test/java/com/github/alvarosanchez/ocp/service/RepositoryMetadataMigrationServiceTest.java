@@ -1,6 +1,7 @@
 package com.github.alvarosanchez.ocp.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.alvarosanchez.ocp.config.OcpConfigFile;
@@ -61,7 +62,7 @@ class RepositoryMetadataMigrationServiceTest {
 
         String migrated = Files.readString(repositoryPath.resolve("repository.json"));
         assertTrue(migrated.contains("base"));
-        assertTrue(RepositoryConfigFile.normalizeLegacyExtendsFromScalars(migrated, objectMapper).migrated() == false);
+        assertFalse(RepositoryConfigFile.normalizeLegacyExtendsFromScalars(migrated, objectMapper).migrated());
     }
 
     @Test
