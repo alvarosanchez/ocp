@@ -2,9 +2,6 @@
   <img alt="ocp" src="https://img.shields.io/badge/ocp-OpenCode%20Configuration%20Profiles-111827?style=for-the-badge" />
 </p>
 
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-![Coverage](.github/badges/jacoco.svg)
-
 <h1 align="center">Switch OpenCode setups like code, not chaos.</h1>
 
 <p align="center">
@@ -16,7 +13,7 @@
   <a href="https://github.com/alvarosanchez/ocp/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/alvarosanchez/ocp?style=flat-square" /></a>
   <a href="https://github.com/alvarosanchez/ocp/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/alvarosanchez/ocp?style=flat-square" /></a>
   <a href="https://github.com/alvarosanchez/ocp/releases"><img alt="GitHub downloads" src="https://img.shields.io/github/downloads/alvarosanchez/ocp/total?style=flat-square" /></a>
-  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" /></a>
+  <img alt="Coverage" src=".github/badges/jacoco.svg" />
   <img alt="Java 25" src="https://img.shields.io/badge/java-25-f89820" />
   <img alt="Micronaut 4.x" src="https://img.shields.io/badge/micronaut-4.x-5e81f4" />
 </p>
