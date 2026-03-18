@@ -1,125 +1,132 @@
-# ocp - OpenCode Configuration Profiles
+<p align="center">
+  <img alt="ocp" src="https://img.shields.io/badge/ocp-OpenCode%20Configuration%20Profiles-111827?style=for-the-badge" />
+</p>
 
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+<h1 align="center">Switch OpenCode setups like code, not chaos.</h1>
 
-`ocp` (OpenCode Configuration Profiles) is a CLI to manage OpenCode config profiles stored in Git repositories.
+<p align="center">
+  <strong>ocp</strong> is a developer-first CLI for managing OpenCode profiles in Git,
+  so work, personal, OSS, and experimental environments stay clean, reproducible, and one command away.
+</p>
 
-It helps you switch between different OpenCode setups (for example, work vs personal) by linking the selected profile files into your OpenCode config directory.
+<p align="center">
+  <a href="https://github.com/alvarosanchez/ocp/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/alvarosanchez/ocp?style=flat-square" /></a>
+  <a href="https://github.com/alvarosanchez/ocp/releases"><img alt="GitHub downloads" src="https://img.shields.io/github/downloads/alvarosanchez/ocp/total?style=flat-square" /></a>
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" /></a>
+  <img alt="Java 25" src="https://img.shields.io/badge/java-25-f89820" />
+  <img alt="Micronaut 4.x" src="https://img.shields.io/badge/micronaut-4.x-5e81f4" />
+  <img alt="Native image" src="https://img.shields.io/badge/native-graalvm-7c3aed" />
+  <img alt="Release status" src="https://img.shields.io/badge/release-approaching%201.0-16a34a" />
+</p>
 
-## Installation
+<p align="center">
+  <a href="#get-started"><strong>Get started</strong></a>
+  ·
+  <a href="#documentation"><strong>Read the docs</strong></a>
+  ·
+  <a href="https://github.com/alvarosanchez/ocp/stargazers"><strong>Star on GitHub</strong></a>
+  ·
+  <a href="#development"><strong>Contribute</strong></a>
+</p>
 
-### Homebrew (recommended)
+<p align="center">
+  If <strong>ocp</strong> is useful to you, please consider <a href="https://github.com/alvarosanchez/ocp/stargazers">starring the repository</a>. It helps more developers discover the project.
+</p>
 
-```bash
-brew install alvarosanchez/tap/ocp
-```
+---
 
-Requirements:
+## Why developers use `ocp`
 
-- `git` available in your `PATH`
-- `bat` (optional, for syntax-highlighted file previews in interactive mode; falls back to plain text when unavailable)
+OpenCode configuration tends to drift into local state: copied files, one-off edits, and fragile “don’t touch this” setups that nobody wants to revisit.
 
-## Quick start
+`ocp` turns that into a versioned workflow. Profiles live in repositories, changes are reviewable, switching contexts is fast, and your active setup becomes explicit instead of accidental.
+
+<table>
+  <tr>
+    <td valign="top" width="33%">
+      <strong>⚡ Fast context switching</strong><br />
+      Move between work, personal, OSS, and experiment setups without manually rewriting config files.
+    </td>
+    <td valign="top" width="33%">
+      <strong>🧬 Configuration in Git</strong><br />
+      Treat OpenCode profiles like code: version them, review them, share them, and keep them reproducible.
+    </td>
+    <td valign="top" width="33%">
+      <strong>🛡️ Safer local changes</strong><br />
+      `ocp` links active profile files into your OpenCode directory and creates backups when replacing existing files.
+    </td>
+  </tr>
+</table>
+
+## What `ocp` feels like
 
 ```bash
 # Add a profile repository
 ocp repository add git@github.com:my-org/opencode-profiles.git --name my-org-opencode-profiles
 
-# Add a local repository directly (no Git remote required)
-ocp repository add /absolute/path/to/opencode-profiles --name local-profiles
-
-# Add current folder as repository
-ocp repository add . --name local-current
-
-# List configured repositories and discovered profiles
+# See what is available
 ocp repository list
-
-# List profiles discovered across configured repositories
 ocp profile list
 
-# Switch active profile
+# Switch your active OpenCode setup
 ocp profile use my-company
-
-# Show current active profile and metadata
-ocp profile
-
-# Refresh repository data
-ocp repository refresh
 ```
 
-## How it works
+That is the core idea: store configuration intentionally, discover it easily, and switch without friction.
 
-- `ocp` keeps a local registry of added repositories.
-- Each repository provides profile metadata in `repository.json`.
-- Each profile is a folder containing files to link into `~/.config/opencode`.
-- On `ocp profile use <name>`, `ocp` updates symlinks to the selected profile.
-- Existing non-symlink target files are backed up before linking.
-- Repository names are provided explicitly when adding a repository (`--name`).
+## What you get
 
-## Repository format
+- **Repository-backed profiles** for OpenCode configuration
+- **Simple switching** between named environments
+- **Interactive terminal UI** for day-to-day workflows
+- **Profile inheritance** for layered configuration setups
+- **Backup-aware file replacement** when applying profiles
+- **Native-image distribution target** for a fast CLI experience
 
-Each profile repository should look like:
+## Get started
 
-```text
-repository.json
-my-company/opencode.json
-my-company/oh-my-opencode.json
-oss/opencode.json
+### Install with Homebrew
+
+```bash
+brew install alvarosanchez/tap/ocp
 ```
 
-`repository.json` example:
+### Requirements
 
-```json
-{
-  "profiles": [
-    { "name": "my-company", "description": "Company defaults" },
-    { "name": "oss", "description": "Open-source profile", "extends_from": ["my-company"] }
-  ]
-}
+- `git` in your `PATH`
+- `bat` optional for syntax-highlighted previews in interactive mode
+
+## Documentation
+
+The README is intentionally a landing page. Full documentation is published separately on GitHub Pages.
+
+- **Docs site:** _GitHub Pages link to be added_
+- **Product spec:** [`SPEC.md`](SPEC.md)
+- **License:** [`LICENSE`](LICENSE)
+
+## Built for developers
+
+`ocp` is built as a modern CLI with a strong behavior contract and a native-distribution path in mind.
+
+- Java 25
+- Micronaut 4.x
+- Picocli
+- Gradle Kotlin DSL
+- JUnit 5
+- GraalVM native image
+
+## Development
+
+```bash
+./gradlew test
+./gradlew check
+./gradlew build
 ```
 
-When `extends_from` is set, parent profiles are resolved in declared order. Shared JSON/JSONC files are deep-merged recursively, while parent-only files are kept unchanged from the parent profile. When multiple parents are declared, left-to-right precedence applies: earlier parents can be overridden by later parents and by the child. Child values take precedence for matching keys at any nesting level; arrays and non-object JSON values are replaced by the child value. If a child and a parent provide the same logical JSON file, they must use the same extension (`.json` vs `.jsonc`) or `profile use` fails.
+If you are contributing, start with [`SPEC.md`](SPEC.md). It is the source of truth for product behavior and acceptance criteria.
 
-## Commands
+## Contributing
 
-- `ocp` - start interactive mode (when run in an interactive terminal) or print usage/help.
-- `ocp help <command>` - print command help.
-- `ocp profile list` - list discovered profiles.
-- `ocp profile` - show active profile metadata.
-- `ocp profile create [name] [--extends-from <parent-1,parent-2,...>]` - create a profile in the current repository (`default` if omitted), optionally extending from existing profiles. Use a comma-separated list to declare ordered parents.
-- `ocp profile use <name>` - switch to profile by name.
-- `ocp repository add <uri-or-path> --name <name>` - add and register a repository from a Git URI or local path.
-- `ocp repository list` - list configured repositories with URI, local path, and resolved profiles.
-- `ocp repository delete <name> [--force] [--delete-local-path]` - remove repository from registry; `--force` is required for dirty git repos, and `--delete-local-path` removes local folders for file-based repos.
-- `ocp repository create <name> [--profile-name <profile>]` - scaffold a new profile repository.
-- `ocp repository refresh [name]` - pull latest changes for git-backed repositories; for file-based repositories this is a no-op with a message.
+Issues and pull requests are welcome as `ocp` moves toward its 1.0 release.
 
-## File locations
-
-Default paths:
-
-- Registry: `~/.config/ocp/config.json`
-- Repository storage root: `~/.config/ocp`
-- Local clones: `~/.config/ocp/repositories/<repo-name>` (using the configured repository name)
-- Resolved merged profiles: `~/.config/ocp/resolved-profiles/<profile-name>/`
-- Backups: `~/.config/ocp/backups/<timestamp>/...`
-- OpenCode config target: `~/.config/opencode`
-
-Optional JVM system property overrides:
-
-- `ocp.config.dir`
-- `ocp.cache.dir` (legacy storage override)
-- `ocp.opencode.config.dir`
-- `ocp.working.dir`
-
-## Exit codes
-
-- `0` success
-- `1` runtime/validation error
-- `2` command usage error
-
-## Common errors
-
-- `Missing required dependency git`: install Git and ensure it is in your `PATH`.
-- `duplicate profile names found`: profile names must be unique across all added repositories.
-- `No active profile selected yet`: run `ocp profile use <name>` first.
+If you want to help, the highest-value contributions are the ones that improve developer experience, reliability, and the clarity of the configuration workflow.
