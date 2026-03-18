@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -108,7 +109,7 @@ public final class ProfileService {
      * @return {@code true} when the profile is created
      */
     public boolean createProfile(String profileName) {
-        return createProfileInRepository(profileName, workingDirectory(), null);
+        return createProfileInRepository(profileName, workingDirectory(), List.of());
     }
 
     /**
@@ -119,7 +120,11 @@ public final class ProfileService {
      * @return {@code true} when the profile is created
      */
     public boolean createProfileWithParent(String profileName, String parentProfileName) {
-        return createProfileInRepository(profileName, workingDirectory(), parentProfileName);
+        return createProfileInRepository(profileName, workingDirectory(), normalizeOptionalParentProfileNames(parentProfileName));
+    }
+
+    public boolean createProfileWithParents(String profileName, List<String> parentProfileNames) {
+        return createProfileInRepository(profileName, workingDirectory(), parentProfileNames);
     }
 
     /**
@@ -130,22 +135,26 @@ public final class ProfileService {
      * @return {@code true} when the profile is created
      */
     public boolean createProfile(String profileName, String repositoryName) {
-        return createProfile(profileName, repositoryName, null);
+        return createProfile(profileName, repositoryName, List.of());
+    }
+
+    public boolean createProfile(String profileName, String repositoryName, String parentProfileName) {
+        return createProfile(profileName, repositoryName, normalizeOptionalParentProfileNames(parentProfileName));
     }
 
     /**
-     * Creates a profile scaffold in a configured repository with optional inheritance.
+     * Creates a profile scaffold in a configured repository with ordered inheritance.
      *
      * @param profileName profile name to create
      * @param repositoryName configured repository name
-     * @param parentProfileName optional parent profile name to extend from
+     * @param parentProfileNames optional ordered parent profile names
      * @return {@code true} when the profile is created
      */
-    public boolean createProfile(String profileName, String repositoryName, String parentProfileName) {
+    public boolean createProfile(String profileName, String repositoryName, List<String> parentProfileNames) {
         String normalizedRepositoryName = normalizeRepositoryName(repositoryName);
         RepositoryEntry repositoryEntry = findRepositoryEntry(normalizedRepositoryName);
 
-        return createProfileInRepository(profileName, Path.of(repositoryEntry.localPath()), parentProfileName);
+        return createProfileInRepository(profileName, Path.of(repositoryEntry.localPath()), parentProfileNames);
     }
 
     /**
@@ -205,7 +214,7 @@ public final class ProfileService {
             Path logicalRelativePath = logicalRelativePath(relativePath);
             EffectiveProfileFile mappedEffectiveFile = effectiveFiles.get(logicalRelativePath);
             if (mappedEffectiveFile != null) {
-                if (!normalizedSourceFilePath.equals(mappedEffectiveFile.sourcePath().toAbsolutePath().normalize())) {
+                if (!mappedEffectiveFile.hasContributorSourcePath(normalizedSourceFilePath)) {
                     throw new IllegalStateException(
                         "File `" + normalizedSourceFilePath + "` is shadowed by another profile file in `" + normalizedProfileName + "`."
                     );
@@ -215,7 +224,7 @@ public final class ProfileService {
         }
         if (effectiveFile == null) {
             for (EffectiveProfileFile candidate : effectiveFiles.values()) {
-                if (normalizedSourceFilePath.equals(candidate.sourcePath().toAbsolutePath().normalize())) {
+                if (candidate.hasContributorSourcePath(normalizedSourceFilePath)) {
                     effectiveFile = candidate;
                     break;
                 }
@@ -275,9 +284,9 @@ public final class ProfileService {
         return true;
     }
 
-    private boolean createProfileInRepository(String profileName, Path repositoryPath, String parentProfileName) {
+    private boolean createProfileInRepository(String profileName, Path repositoryPath, List<String> parentProfileNames) {
         String normalizedProfileName = normalizeProfileName(profileName);
-        String normalizedParentProfileName = normalizeOptionalProfileName(parentProfileName);
+        List<String> normalizedParentProfileNames = normalizeParentProfileNames(parentProfileNames);
         Path metadataFile = repositoryPath.resolve("repository.json");
         RepositoryConfigFile repositoryConfigFile = readRepositoryConfigFile(metadataFile);
 
@@ -296,16 +305,18 @@ public final class ProfileService {
 
         Set<String> resolvableProfileNames = new HashSet<>(existingProfileNames);
         resolvableProfileNames.addAll(discoverProfilesByName().keySet());
-        if (normalizedParentProfileName != null && !resolvableProfileNames.contains(normalizedParentProfileName)) {
-            throw new IllegalStateException(
-                "Parent profile `" + normalizedParentProfileName + "` was not found among resolvable profiles."
-            );
+        for (String normalizedParentProfileName : normalizedParentProfileNames) {
+            if (!resolvableProfileNames.contains(normalizedParentProfileName)) {
+                throw new IllegalStateException(
+                    "Parent profile `" + normalizedParentProfileName + "` was not found among resolvable profiles."
+                );
+            }
         }
 
         try {
             Files.createDirectories(repositoryPath.resolve(normalizedProfileName));
             List<ProfileEntry> profiles = new ArrayList<>(repositoryConfigFile.profiles());
-            profiles.add(new ProfileEntry(normalizedProfileName, null, normalizedParentProfileName));
+            profiles.add(new ProfileEntry(normalizedProfileName, null, normalizedParentProfileNames));
             writeRepositoryConfigFile(metadataFile, new RepositoryConfigFile(profiles));
             return true;
         } catch (IOException e) {
@@ -782,19 +793,45 @@ public final class ProfileService {
                     Object parentJson = existing.jsonValue() != null ? existing.jsonValue() : parseJsonFile(existing.sourcePath());
                     Object childJson = parseJsonFile(sourceFile);
                     Object merged = mergeJsonValues(parentJson, childJson);
+                    List<EffectiveFileContributor> contributors = new ArrayList<>(existing.contributors());
+                    contributors.add(new EffectiveFileContributor(discoveredProfile.name(), sourceFile));
                     filesByLogicalRelativePath.put(
                         logicalRelativePath,
-                        new EffectiveProfileFile(relativePath, sourceFile, true, merged, true)
+                        new EffectiveProfileFile(
+                            relativePath,
+                            sourceFile,
+                            true,
+                            merged,
+                            true,
+                            existing.hasResolvedProfileContribution() || discoveredProfile.name().equals(profileName),
+                            contributors
+                        )
                     );
                 } else if (currentIsJson) {
                     filesByLogicalRelativePath.put(
                         logicalRelativePath,
-                        new EffectiveProfileFile(relativePath, sourceFile, true, null, false)
+                        new EffectiveProfileFile(
+                            relativePath,
+                            sourceFile,
+                            true,
+                            null,
+                            false,
+                            discoveredProfile.name().equals(profileName),
+                            List.of(new EffectiveFileContributor(discoveredProfile.name(), sourceFile))
+                        )
                     );
                 } else {
                     filesByLogicalRelativePath.put(
                         logicalRelativePath,
-                        new EffectiveProfileFile(relativePath, sourceFile, false, null, false)
+                        new EffectiveProfileFile(
+                            relativePath,
+                            sourceFile,
+                            false,
+                            null,
+                            false,
+                            discoveredProfile.name().equals(profileName),
+                            List.of(new EffectiveFileContributor(discoveredProfile.name(), sourceFile))
+                        )
                     );
                 }
             }
@@ -808,7 +845,14 @@ public final class ProfileService {
         Map<String, DiscoveredProfile> profilesByName
     ) {
         List<DiscoveredProfile> lineage = new ArrayList<>();
-        collectProfileLineage(profileName, profilesByName, new ArrayList<>(), new HashSet<>(), lineage);
+        collectProfileLineage(
+            profileName,
+            profilesByName,
+            new ArrayList<>(),
+            new HashSet<>(),
+            new HashSet<>(),
+            lineage
+        );
         return lineage;
     }
 
@@ -817,8 +861,13 @@ public final class ProfileService {
         Map<String, DiscoveredProfile> profilesByName,
         List<String> traversalPath,
         Set<String> visiting,
+        Set<String> appended,
         List<DiscoveredProfile> lineage
     ) {
+        if (appended.contains(profileName)) {
+            return;
+        }
+
         DiscoveredProfile discoveredProfile = profilesByName.get(profileName);
         if (discoveredProfile == null) {
             throw new IllegalStateException("Profile `" + profileName + "` was not found.");
@@ -830,8 +879,7 @@ public final class ProfileService {
         }
 
         traversalPath.add(profileName);
-        String parentProfileName = discoveredProfile.extendsFrom();
-        if (parentProfileName != null) {
+        for (String parentProfileName : discoveredProfile.extendsFromProfiles()) {
             if (parentProfileName.equals(profileName)) {
                 throw new IllegalStateException("Profile `" + profileName + "` cannot extend itself.");
             }
@@ -840,10 +888,12 @@ public final class ProfileService {
                     "Profile `" + profileName + "` extends unknown profile `" + parentProfileName + "`."
                 );
             }
-            collectProfileLineage(parentProfileName, profilesByName, traversalPath, visiting, lineage);
+            collectProfileLineage(parentProfileName, profilesByName, traversalPath, visiting, appended, lineage);
         }
 
-        lineage.add(discoveredProfile);
+        if (appended.add(profileName)) {
+            lineage.add(discoveredProfile);
+        }
         traversalPath.remove(traversalPath.size() - 1);
         visiting.remove(profileName);
     }
@@ -1013,6 +1063,36 @@ public final class ProfileService {
         return PathSegmentValidator.requireSinglePathSegment(normalizedProfileName, "Parent profile name");
     }
 
+    private List<String> normalizeOptionalParentProfileNames(String parentProfileName) {
+        String normalizedParentProfileName = normalizeOptionalProfileName(parentProfileName);
+        if (normalizedParentProfileName == null) {
+            return List.of();
+        }
+        return List.of(normalizedParentProfileName);
+    }
+
+    private List<String> normalizeParentProfileNames(List<String> parentProfileNames) {
+        if (parentProfileNames == null || parentProfileNames.isEmpty()) {
+            return List.of();
+        }
+
+        List<String> normalizedParentProfileNames = new ArrayList<>(parentProfileNames.size());
+        Set<String> seenParentProfileNames = new LinkedHashSet<>();
+        for (String parentProfileName : parentProfileNames) {
+            String normalizedParentProfileName = normalizeOptionalProfileName(parentProfileName);
+            if (normalizedParentProfileName == null) {
+                throw new IllegalStateException("Parent profile names cannot contain blank entries.");
+            }
+            if (!seenParentProfileNames.add(normalizedParentProfileName)) {
+                throw new IllegalStateException(
+                    "Parent profile `" + normalizedParentProfileName + "` is listed more than once."
+                );
+            }
+            normalizedParentProfileNames.add(normalizedParentProfileName);
+        }
+        return List.copyOf(normalizedParentProfileNames);
+    }
+
     private RepositoryEntry findRepositoryEntry(String normalizedRepositoryName) {
         return repositoryService
             .load()
@@ -1066,7 +1146,7 @@ public final class ProfileService {
                     profileEntry.name(),
                     profileEntry.description(),
                     repositoryEntry,
-                    profileEntry.extendsFrom()
+                    profileEntry.extendsFromProfiles()
                 );
                 DiscoveredProfile existing = profilesByName.putIfAbsent(profileEntry.name(), discoveredProfile);
                 if (existing != null) {
@@ -1219,7 +1299,7 @@ public final class ProfileService {
             .profiles()
             .stream()
             .filter(entry -> entry.name() != null && !entry.name().isBlank())
-            .map(entry -> new ProfileEntry(entry.name().trim(), entry.description(), entry.extendsFrom()))
+            .map(entry -> new ProfileEntry(entry.name().trim(), entry.description(), entry.extendsFromProfiles()))
             .toList();
     }
 
@@ -1296,8 +1376,12 @@ public final class ProfileService {
         String name,
         String description,
         RepositoryEntry repositoryEntry,
-        String extendsFrom
+        List<String> extendsFromProfiles
     ) {
+
+        private DiscoveredProfile {
+            extendsFromProfiles = extendsFromProfiles == null ? List.of() : List.copyOf(extendsFromProfiles);
+        }
     }
 
     private record EffectiveProfileFile(
@@ -1305,8 +1389,27 @@ public final class ProfileService {
         Path sourcePath,
         boolean jsonMergeCandidate,
         Object jsonValue,
-        boolean mergedJson
+        boolean mergedJson,
+        boolean hasResolvedProfileContribution,
+        List<EffectiveFileContributor> contributors
     ) {
+
+        private EffectiveProfileFile {
+            contributors = contributors == null ? List.of() : List.copyOf(contributors);
+        }
+
+        boolean hasContributorSourcePath(Path sourcePath) {
+            Path normalizedSourcePath = sourcePath.toAbsolutePath().normalize();
+            for (EffectiveFileContributor contributor : contributors) {
+                if (normalizedSourcePath.equals(contributor.sourcePath().toAbsolutePath().normalize())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    private record EffectiveFileContributor(String profileName, Path sourcePath) {
     }
 
     private record ResolvedProfileFile(Path relativePath, Path sourcePath) {

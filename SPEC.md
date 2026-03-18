@@ -93,7 +93,7 @@ Rules:
 {
   "profiles": [
     { "name": "my-company", "description": "Company defaults" },
-    { "name": "oss", "description": "Open-source profile", "extends_from": "my-company" }
+    { "name": "oss", "description": "Open-source profile", "extends_from": ["my-company"] }
   ]
 }
 ```
@@ -103,7 +103,7 @@ Rules:
 - `profiles` defaults to an empty list.
 - Empty/blank profile names are ignored.
 - `description` is optional and may be omitted or null.
-- `extends_from` is optional and references another profile name.
+- `extends_from` is optional. Canonical persisted shape is an ordered array of parent profile names, for example `"extends_from": ["base","company"]`. Legacy scalar values are accepted at read time and are migrated on process startup, on all invocations, to a one-element array.
 - Profile names must be globally unique across all configured repositories.
 
 ## Repository structure
@@ -146,7 +146,7 @@ oss/opencode.json
 | `ocp help <command>` | Implemented | Print help for command/subcommand. |
 | `ocp profile list` | Implemented | Print a table of profiles with name, description, local commit metadata, and non-fatal remote update hints; include repository name when width budget allows. |
 | `ocp profile` | Implemented | Print currently active profile with repository/version metadata and update hints. |
-| `ocp profile create [name] [--extends-from <parent>]` | Implemented | Create profile folder and register it in repository metadata, optionally extending from an existing profile. Defaults to `default` when no name is provided. |
+| `ocp profile create [name] [--extends-from <parent-1,parent-2,...>]` | Implemented | Create profile folder and register it in repository metadata, optionally extending from existing profiles. Defaults to `default` when no name is provided. |
 | `ocp profile use <name>` | Implemented | Switch active profile by linking profile files to OpenCode config location. |
 | `ocp repository add <uri-or-path> --name <name>` | Implemented | Add a repository from a Git URI or local path; Git URIs are cloned into local storage and local paths are registered directly. |
 | `ocp repository list` | Implemented | Print configured repositories as rounded CLI boxes with name, URI, local clone path, and resolved profile names from each repository metadata file. |
@@ -195,11 +195,12 @@ oss/opencode.json
 
 - Running `ocp` without a subcommand starts an interactive full-screen terminal UI when `System.console()` is available and `TERM` is not `dumb`.
 - Interactive mode exposes profile and repository operations (`use`, `create`, `add`, `delete`, and refresh actions) and uses the same service layer semantics as subcommands.
+- In interactive mode, profile create prompts for optional inheritance using a selectable list of all resolvable profile names across configured repositories; the prompt allows adding multiple parents in order by repeatedly selecting additional parents.
 - In interactive mode, `d` (delete) is context-sensitive: on repository nodes it deletes the repository, and on profile/file/directory nodes it deletes the selected profile.
 - In interactive mode, repository deletion prompts are context-aware:
   - Git-backed repos with local changes show a warning and require explicit force confirmation.
   - File-based repos ask whether to also delete the local folder.
-- In interactive mode, `c` (create profile) creates the profile inside the currently selected repository context (repository, profile, or file node), and prompts for optional inheritance using a selectable list of all resolvable profile names across configured repositories.
+- In interactive mode, `c` (create profile) creates the profile inside the currently selected repository context (repository, profile, or file node), and prompts for optional inheritance using a selectable list of all resolvable profile names across configured repositories. The prompt allows repeated parent selection to build an ordered parent list; each non-blank selection appends another optional parent field so the final order reflects selection order.
 - In interactive mode, action keys are explicit: `r` refresh selected repository, `R` refresh all repositories, `u` use selected profile, `e` edit selected file, `o` edit the OCP registry config.json (respects `ocp.config.dir` when set), `y` copy the selected file's absolute path, and `p` jump to the selected profile's parent; `Enter` does not trigger these actions. Saving the OCP config file reloads the tree when repository entries change.
 - In interactive mode, selecting a file-based repository node also exposes `m` to migrate that repository into the shared Git/GitHub post-creation flow.
 - In interactive mode, selecting a git-backed repository node with local uncommitted changes also exposes `g` to prompt for a commit message, commit all local changes, and push them to the tracked remote branch.
@@ -207,8 +208,10 @@ oss/opencode.json
 - In interactive mode, refresh (`r`) is shown only when the selected repository context is git-backed; file-based repositories do not offer refresh actions.
 - In interactive mode, the tree/detail content split favors the detail pane at roughly one-third / two-thirds width.
 - In interactive mode, keyboard shortcuts are rendered in a dedicated full-width shortcuts pane above the status bar instead of being split between the tree and detail panes.
-- Interactive tree profile nodes visually show inheritance using a relationship marker (`👤 child ⇢ 👤 parent`).
+- Interactive tree profile nodes visually show inheritance using a relationship marker (`👤 child ⇢ 👤 parent`). Multiple parents are rendered inline (for example `👤 child ⇢ 👤 parent-a, parent-b`) so users can see every parent contribution in order.
 - Interactive tree includes inherited parent-only files under child profiles as read-only file nodes with subdued styling; inherited files cannot be edited.
+- The `p` action on multi-parent profile nodes jumps to the most immediate parent (the last parent declared in `extends_from`).
+- Selecting a read-only parent-only node and pressing `p` jumps to the most immediate contributing parent profile/file that owns that node, ensuring navigation stays within the parent chain that introduced the file.
 - When an inherited file node is selected, `p` jumps to the corresponding file in the parent profile instead of only selecting the parent profile root.
 - Interactive tree shows overlapping inherited JSON/JSONC files that resolve via deep merge with a distinct `⛙` icon and subdued styling; selecting them previews the resolved merged contents with a `(deep-merged)` title suffix, while editing still opens the child profile file.
 - In interactive mode, repository scaffold creation prompts for directory name, location path, and optional initial profile name; after scaffolding, the repository is automatically added to the registry as a file-based repository.
@@ -237,8 +240,8 @@ oss/opencode.json
 - Switching must be transactional at file level:
   - If linking one file fails, already-processed files must be restored from backups.
 - Profile inheritance and merge behavior:
-  - `extends_from` profiles are resolved parent-first.
-  - Parent-only files are inherited as-is.
+  - `extends_from` profiles are resolved in declared order, parent-first. When multiple parents are declared, precedence is applied left-to-right: files contributed by earlier parents can be overridden by later parents and ultimately by the child.
+  - Parent-only files are inherited as read-only nodes. When multiple parents contribute the same logical JSON file, the resulting output is deep-merged and shown as a merged, read-only preview under resolved profiles.
   - For overlapping JSON/JSONC files (`*.json` and `*.jsonc`), the resulting file is deep-merged recursively.
   - Child values override parent values for matching keys at any nesting level.
   - Arrays and non-object JSON values are replaced by the child value.

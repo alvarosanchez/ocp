@@ -137,6 +137,37 @@ class InteractiveAppSaveFocusTest {
     }
 
     @Test
+    void savingParentFileReappliesActiveDependentProfileToOpencodeConfig() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path baseProfilePath = repositoryPath.resolve("base");
+        Path childProfilePath = repositoryPath.resolve("child");
+        Path baseFilePath = baseProfilePath.resolve("opencode.json");
+        Files.createDirectories(baseProfilePath);
+        Files.createDirectories(childProfilePath);
+        Files.writeString(repositoryPath.resolve("repository.json"), "{\"profiles\":[{\"name\":\"base\"},{\"name\":\"child\",\"extends_from\":\"base\"}]}");
+        Files.writeString(baseFilePath, "{\"base\":1,\"shared\":1}");
+        Files.writeString(childProfilePath.resolve("opencode.json"), "{\"child\":1,\"shared\":2}");
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        ProfileService profileService = applicationContext.getBean(ProfileService.class);
+        profileService.useProfile("child");
+
+        InteractiveApp app = createApp();
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.file("repo-a", "base", baseFilePath));
+        app.testSetEditMode(true);
+        app.testEditorState().setText("{\"base\":2,\"shared\":1}");
+
+        app.testSaveSelectedFile();
+
+        Path opencodeFile = Path.of(System.getProperty("ocp.opencode.config.dir")).resolve("opencode.json");
+        assertEquals(
+            objectMapper.readValue("{\"base\":2,\"shared\":2,\"child\":1}", Object.class),
+            objectMapper.readValue(Files.readString(opencodeFile), Object.class)
+        );
+    }
+
+    @Test
     void editOcpConfigFileEntersEditModeForConfigJson() throws Exception {
         Path repositoryPath = tempDir.resolve("repo-a");
         Files.createDirectories(repositoryPath.resolve("default"));

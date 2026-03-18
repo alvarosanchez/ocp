@@ -56,26 +56,30 @@ record NodeRef(
     Path path,
     boolean inherited,
     String inheritedFromProfile,
-    boolean deepMerged
+    boolean deepMerged,
+    boolean readOnly,
+    boolean parentOnlyMerged,
+    java.util.List<String> contributorProfileNames,
+    java.util.List<Path> contributorSourcePaths
 ) {
     static NodeRef repository(String repositoryName, Path path) {
-        return new NodeRef(NodeKind.REPOSITORY, repositoryName, null, path, false, null, false);
+        return new NodeRef(NodeKind.REPOSITORY, repositoryName, null, path, false, null, false, false, false, java.util.List.of(), java.util.List.of());
     }
 
     static NodeRef profile(String repositoryName, String profileName, Path path) {
-        return new NodeRef(NodeKind.PROFILE, repositoryName, profileName, path, false, null, false);
+        return new NodeRef(NodeKind.PROFILE, repositoryName, profileName, path, false, null, false, false, false, java.util.List.of(), java.util.List.of());
     }
 
     static NodeRef directory(String repositoryName, String profileName, Path path) {
-        return new NodeRef(NodeKind.DIRECTORY, repositoryName, profileName, path, false, null, false);
+        return new NodeRef(NodeKind.DIRECTORY, repositoryName, profileName, path, false, null, false, false, false, java.util.List.of(), java.util.List.of());
     }
 
     static NodeRef file(String repositoryName, String profileName, Path path) {
-        return new NodeRef(NodeKind.FILE, repositoryName, profileName, path, false, null, false);
+        return new NodeRef(NodeKind.FILE, repositoryName, profileName, path, false, null, false, false, false, java.util.List.of(), java.util.List.of());
     }
 
     static NodeRef deepMergedFile(String repositoryName, String profileName, Path path) {
-        return new NodeRef(NodeKind.FILE, repositoryName, profileName, path, false, null, true);
+        return new NodeRef(NodeKind.FILE, repositoryName, profileName, path, false, null, true, false, false, java.util.List.of(profileName), java.util.List.of(path));
     }
 
     static NodeRef inheritedFile(
@@ -84,7 +88,43 @@ record NodeRef(
         Path path,
         String inheritedFromProfile
     ) {
-        return new NodeRef(NodeKind.FILE, repositoryName, profileName, path, true, inheritedFromProfile, false);
+        return new NodeRef(
+            NodeKind.FILE,
+            repositoryName,
+            profileName,
+            path,
+            true,
+            inheritedFromProfile,
+            false,
+            true,
+            false,
+            java.util.List.of(inheritedFromProfile),
+            java.util.List.of(path)
+        );
+    }
+
+    static NodeRef mergedReadOnlyFile(
+        String repositoryName,
+        String profileName,
+        Path path,
+        String inheritedFromProfile,
+        java.util.List<String> contributorProfileNames,
+        java.util.List<Path> contributorSourcePaths,
+        boolean parentOnlyMerged
+    ) {
+        return new NodeRef(
+            NodeKind.FILE,
+            repositoryName,
+            profileName,
+            path,
+            true,
+            inheritedFromProfile,
+            true,
+            true,
+            parentOnlyMerged,
+            contributorProfileNames == null ? java.util.List.of() : java.util.List.copyOf(contributorProfileNames),
+            contributorSourcePaths == null ? java.util.List.of() : java.util.List.copyOf(contributorSourcePaths)
+        );
     }
 }
 

@@ -13,11 +13,12 @@ final class PromptState {
     String expectedConfirmation;
     String contextRepositoryName;
     PostCreationFlowState postCreationFlowState;
+    List<String> baseParentOptions = List.of();
 
     private PromptState(PromptAction action, String title, List<String> labels, List<List<String>> options) {
         this.action = action;
         this.title = title;
-        this.labels = List.copyOf(labels);
+        this.labels = new ArrayList<>(labels);
         if (options.size() != labels.size()) {
             throw new IllegalArgumentException("Prompt options size must match labels size.");
         }
@@ -25,7 +26,7 @@ final class PromptState {
         for (List<String> fieldOptions : options) {
             normalizedOptions.add(fieldOptions == null ? List.of() : List.copyOf(fieldOptions));
         }
-        this.options = List.copyOf(normalizedOptions);
+        this.options = new ArrayList<>(normalizedOptions);
         this.values = new ArrayList<>();
         for (int index = 0; index < labels.size(); index++) {
             List<String> fieldOptions = this.options.get(index);
@@ -124,5 +125,25 @@ final class PromptState {
         }
         currentField++;
         return true;
+    }
+
+    void appendOptionField(String label, List<String> fieldOptions) {
+        labels.add(label);
+        List<String> normalizedFieldOptions = fieldOptions == null ? List.of() : List.copyOf(fieldOptions);
+        options.add(normalizedFieldOptions);
+        values.add(normalizedFieldOptions.isEmpty() ? "" : normalizedFieldOptions.getFirst());
+    }
+
+    void updateOptions(int fieldIndex, List<String> fieldOptions) {
+        List<String> normalizedFieldOptions = fieldOptions == null ? List.of() : List.copyOf(fieldOptions);
+        options.set(fieldIndex, normalizedFieldOptions);
+        String currentValue = values.get(fieldIndex);
+        if (normalizedFieldOptions.isEmpty()) {
+            values.set(fieldIndex, "");
+            return;
+        }
+        if (!normalizedFieldOptions.contains(currentValue)) {
+            values.set(fieldIndex, normalizedFieldOptions.getFirst());
+        }
     }
 }

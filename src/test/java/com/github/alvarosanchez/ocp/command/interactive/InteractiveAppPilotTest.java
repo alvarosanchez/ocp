@@ -159,6 +159,176 @@ class InteractiveAppPilotTest {
     }
 
     @Test
+    void navigateToParentFromReadOnlyMergedFileSelectsLastContributingParentFile() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path baseOneRootPath = repositoryPath.resolve("base-one-root");
+        Path baseOnePath = repositoryPath.resolve("base-one");
+        Path baseTwoRootPath = repositoryPath.resolve("base-two-root");
+        Path baseTwoPath = repositoryPath.resolve("base-two");
+        Path childProfilePath = repositoryPath.resolve("child");
+        Files.createDirectories(baseOneRootPath);
+        Files.createDirectories(baseOnePath);
+        Files.createDirectories(baseTwoRootPath);
+        Files.createDirectories(baseTwoPath);
+        Files.createDirectories(childProfilePath);
+        Path baseOneRootFile = baseOneRootPath.resolve("opencode.json");
+        Path baseTwoRootFile = baseTwoRootPath.resolve("opencode.json");
+        Files.writeString(baseOneRootFile, "{\"baseOne\":true}\n");
+        Files.writeString(baseTwoRootFile, "{\"baseTwo\":true}\n");
+        Files.writeString(
+            repositoryPath.resolve("repository.json"),
+            "{\"profiles\":["
+                + "{\"name\":\"base-one-root\"},"
+                + "{\"name\":\"base-one\",\"extends_from\":\"base-one-root\"},"
+                + "{\"name\":\"base-two-root\"},"
+                + "{\"name\":\"base-two\",\"extends_from\":\"base-two-root\"},"
+                + "{\"name\":\"child\",\"extends_from\":[\"base-one\",\"base-two\"]}"
+                + "]}"
+        );
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = createApp();
+        app.onStart();
+
+        try (ToolkitTestRunner test = ToolkitTestRunner.runTest(app::render)) {
+            Pilot pilot = test.pilot();
+
+            boolean selected = app.testSelectTreeNodeAndSync(node ->
+                node.kind() == NodeKind.FILE
+                    && "child".equals(node.profileName())
+                    && node.readOnly()
+                    && node.parentOnlyMerged()
+            );
+            assertTrue(selected, "Expected merged child file to be selected");
+            NodeRef childMergedNode = readSelectedNode(app);
+            assertEquals("child", childMergedNode.profileName());
+            assertTrue(childMergedNode.readOnly());
+            assertTrue(childMergedNode.parentOnlyMerged());
+            assertEquals(
+                List.of("base-one-root", "base-two-root"),
+                childMergedNode.contributorProfileNames(),
+                "Contributor order should track full declared parent branch precedence"
+            );
+
+            pilot.press('p');
+            pilot.pause();
+
+            NodeRef parentNode = readSelectedNode(app);
+            assertEquals("base-two-root", parentNode.profileName());
+            assertEquals(baseTwoRootFile, parentNode.path());
+            assertFalse(parentNode.readOnly());
+            assertFalse(parentNode.parentOnlyMerged());
+            assertEquals("Selected inherited parent file from profile base-two-root.", readStatus(app));
+        }
+    }
+
+    @Test
+    void navigateToParentFromNestedReadOnlyMergedFileSelectsLastDeclaredParentBranchContributor() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path baseOneRootPath = repositoryPath.resolve("base-one-root");
+        Path baseOnePath = repositoryPath.resolve("base-one");
+        Path baseTwoRootPath = repositoryPath.resolve("base-two-root");
+        Path baseTwoPath = repositoryPath.resolve("base-two");
+        Path childProfilePath = repositoryPath.resolve("child");
+        Files.createDirectories(baseOneRootPath);
+        Files.createDirectories(baseOnePath);
+        Files.createDirectories(baseTwoRootPath);
+        Files.createDirectories(baseTwoPath);
+        Files.createDirectories(childProfilePath);
+        Path baseOneRootFile = baseOneRootPath.resolve("opencode.json");
+        Path baseTwoRootFile = baseTwoRootPath.resolve("opencode.json");
+        Files.writeString(baseOneRootFile, "{\"baseOne\":true}\n");
+        Files.writeString(baseTwoRootFile, "{\"baseTwo\":true}\n");
+        Files.writeString(
+            repositoryPath.resolve("repository.json"),
+            "{\"profiles\":["
+                + "{\"name\":\"base-one-root\"},"
+                + "{\"name\":\"base-one\",\"extends_from\":\"base-one-root\"},"
+                + "{\"name\":\"base-two-root\"},"
+                + "{\"name\":\"base-two\",\"extends_from\":\"base-two-root\"},"
+                + "{\"name\":\"child\",\"extends_from\":[\"base-one\",\"base-two\"]}"
+                + "]}"
+        );
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = createApp();
+        app.onStart();
+
+        try (ToolkitTestRunner test = ToolkitTestRunner.runTest(app::render)) {
+            Pilot pilot = test.pilot();
+
+            boolean selected = app.testSelectTreeNodeAndSync(node ->
+                node.kind() == NodeKind.FILE
+                    && "child".equals(node.profileName())
+                    && node.readOnly()
+                    && node.parentOnlyMerged()
+            );
+            assertTrue(selected, "Expected nested merged child file to be selected");
+            NodeRef childMergedNode = readSelectedNode(app);
+            assertEquals("child", childMergedNode.profileName());
+            assertTrue(childMergedNode.readOnly());
+            assertTrue(childMergedNode.parentOnlyMerged());
+
+            assertEquals(
+                List.of("base-one-root", "base-two-root"),
+                childMergedNode.contributorProfileNames(),
+                "Contributor order should track declared parent branch precedence"
+            );
+
+            pilot.press('p');
+            pilot.pause();
+
+            NodeRef parentNode = readSelectedNode(app);
+            assertEquals("base-two-root", parentNode.profileName());
+            assertEquals(baseTwoRootFile, parentNode.path());
+            assertFalse(parentNode.readOnly());
+            assertFalse(parentNode.parentOnlyMerged());
+            assertEquals("Selected inherited parent file from profile base-two-root.", readStatus(app));
+        }
+    }
+
+    @Test
+    void deepMergedChildFileNavigatingParentFallsBackToProfileSelection() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path baseProfilePath = repositoryPath.resolve("base");
+        Path childProfilePath = repositoryPath.resolve("child");
+        Path parentFile = baseProfilePath.resolve("opencode.json");
+        Path childFile = childProfilePath.resolve("opencode.json");
+        Files.createDirectories(baseProfilePath);
+        Files.createDirectories(childProfilePath);
+        Files.writeString(parentFile, "{\"base\":true}\n");
+        Files.writeString(childFile, "{\"child\":true}\n");
+        Files.writeString(
+            repositoryPath.resolve("repository.json"),
+            "{\"profiles\":[{\"name\":\"base\"},{\"name\":\"child\",\"extends_from\":\"base\"}]}"
+        );
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = createApp();
+        app.onStart();
+
+        try (ToolkitTestRunner test = ToolkitTestRunner.runTest(app::render)) {
+            Pilot pilot = test.pilot();
+
+            boolean selected = app.testSelectTreeNodeAndSync(node ->
+                node.kind() == NodeKind.FILE
+                    && "child".equals(node.profileName())
+                    && node.deepMerged()
+                    && !node.readOnly()
+            );
+            assertTrue(selected, "Expected deep-merged child file to be selected");
+
+            pilot.press('p');
+            pilot.pause();
+
+            NodeRef parentProfileNode = readSelectedNode(app);
+            assertEquals(NodeKind.PROFILE, parentProfileNode.kind());
+            assertEquals("base", parentProfileNode.profileName());
+            assertEquals("Selected parent profile base.", readStatus(app));
+        }
+    }
+
+    @Test
     void fileBasedRepositorySupportsRefreshShortcut() throws Exception {
         Path repositoryPath = tempDir.resolve("repo-a");
         Files.createDirectories(repositoryPath.resolve("default"));

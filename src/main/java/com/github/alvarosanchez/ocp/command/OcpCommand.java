@@ -3,6 +3,7 @@ package com.github.alvarosanchez.ocp.command;
 import com.github.alvarosanchez.ocp.command.interactive.InteractiveApp;
 import com.github.alvarosanchez.ocp.service.OnboardingService;
 import com.github.alvarosanchez.ocp.service.ProfileService;
+import com.github.alvarosanchez.ocp.service.RepositoryMetadataMigrationService;
 import com.github.alvarosanchez.ocp.service.RepositoryPostCreationService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
 import com.github.alvarosanchez.ocp.service.VersionCheckService;
@@ -60,23 +61,47 @@ public class OcpCommand implements Runnable {
      * @param args command-line arguments
      */
     public static void main(String[] args) {
+        int exitCode = execute(args);
+        System.exit(exitCode);
+    }
+
+    static int execute(String[] args) {
         Cli.init();
         try {
             SystemDependencies.verifyAll();
         } catch (IllegalStateException e) {
             Cli.error(e.getMessage());
-            System.exit(1);
-            return;
+            return 1;
         }
 
         ApplicationContextBuilder builder = ApplicationContext.builder(OcpCommand.class, Environment.CLI)
             .propertySources(new CommandLinePropertySource(io.micronaut.core.cli.CommandLine.parse(args)));
-        int exitCode;
         try (ApplicationContext context = builder.start()) {
+            try {
+                runStartupMetadataMigration(context);
+            } catch (RuntimeException e) {
+                Cli.error(e.getMessage());
+                return 1;
+            }
             runStartupVersionCheck(context, args);
-            exitCode = new CommandLine(OcpCommand.class, new MicronautFactory(context)).execute(args);
+            return new CommandLine(OcpCommand.class, new MicronautFactory(context)).execute(args);
         }
-        System.exit(exitCode);
+    }
+
+    static void runStartupMetadataMigration(ApplicationContext context) {
+        try {
+            context.getBean(RepositoryMetadataMigrationService.class).migrateLegacyExtendsFromScalars();
+        } catch (RuntimeException e) {
+            throw new IllegalStateException(startupMetadataMigrationFailureMessage(e), e);
+        }
+    }
+
+    static String startupMetadataMigrationFailureMessage(RuntimeException exception) {
+        String baseMessage = "Could not migrate legacy repository metadata before startup.";
+        if (exception == null || exception.getMessage() == null || exception.getMessage().isBlank()) {
+            return baseMessage;
+        }
+        return baseMessage + " Details: " + exception.getMessage();
     }
 
     static void runStartupVersionCheck(ApplicationContext context, String[] args) {

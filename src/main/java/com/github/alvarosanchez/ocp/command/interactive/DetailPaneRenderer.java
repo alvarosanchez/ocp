@@ -37,7 +37,7 @@ final class DetailPaneRenderer {
         boolean selectedRepositoryHasLocalChanges,
         boolean selectedRepositoryInspectionFailed,
         Map<String, Profile> profilesByName,
-        Map<String, String> profileParentByName,
+        Map<String, List<String>> profileParentByName,
         Text selectedFilePreview,
         int previewScrollOffset,
         TextAreaState editorState,
@@ -69,7 +69,7 @@ final class DetailPaneRenderer {
         if (selectedNode.kind() == NodeKind.PROFILE) {
             String profileKey = profileKey(selectedNode.repositoryName(), selectedNode.profileName());
             Profile profile = profilesByName.get(profileKey);
-            String parentProfileName = profileParentByName.get(profileKey);
+            List<String> parentProfileNames = profileParentByName.get(profileKey);
             List<Element> profileElements = new ArrayList<>();
             profileElements.add(text("Profile").bold().fg(Color.CYAN));
             profileElements.add(detailField("Name", selectedNode.profileName()));
@@ -77,7 +77,7 @@ final class DetailPaneRenderer {
             profileElements.add(detailField("Path", String.valueOf(selectedNode.path())));
             profileElements.add(detailField("Indicators", statusDescription(selectedNode, selectedRepositoryHasLocalChanges, selectedRepositoryInspectionFailed)));
             profileElements.add(detailField("Description", profile == null || profile.description() == null || profile.description().isBlank() ? "none" : profile.description()));
-            profileElements.add(detailField("Inherits from", parentProfileName == null ? "none" : parentProfileName));
+            profileElements.add(detailField("Inherits from", parentProfileNames == null || parentProfileNames.isEmpty() ? "none" : String.join(", ", parentProfileNames)));
             profileElements.add(detailField("Status", profile != null && profile.active() ? "active" : "inactive"));
             profileElements.add(detailField("Updates", profile != null && profile.updateAvailable() ? "available" : "up to date"));
             if (profile != null && profile.repository() != null && !profile.repository().isBlank()) {
@@ -150,8 +150,12 @@ final class DetailPaneRenderer {
             return "none";
         }
         List<String> statuses = new ArrayList<>();
-        if (selectedNode.inherited()) {
-            statuses.add("inherited from parent profile (read-only)");
+        if (selectedNode.readOnly()) {
+            if (selectedNode.parentOnlyMerged()) {
+                statuses.add("merged from parent profile only (read-only)");
+            } else {
+                statuses.add("inherited from parent profile (read-only)");
+            }
         }
         if (selectedNode.deepMerged()) {
             statuses.add("preview shows deep-merged content");
@@ -172,6 +176,9 @@ final class DetailPaneRenderer {
         if (selectedNode.kind() == NodeKind.FILE) {
             if (editMode) {
                 return "Editing mode: Ctrl+S save, Esc exit";
+            }
+            if (selectedNode.readOnly() && selectedNode.parentOnlyMerged()) {
+                return "Merged parent file preview (read-only). Press p to open the parent file | f creates a new file in this profile | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview";
             }
             if (selectedNode.inherited()) {
                 return "Inherited file (read-only). Press p to open the parent file | f creates a new file in this profile | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview";

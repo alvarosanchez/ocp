@@ -18,6 +18,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -33,7 +34,7 @@ final class HierarchyTreeBuilder {
     static List<TreeNode<NodeRef>> buildHierarchyTree(
         List<ConfiguredRepository> repositories,
         List<Profile> profiles,
-        Map<String, String> profileParentByName,
+        Map<String, List<String>> profileParentByName,
         int treeMaxDepth,
         int treeMaxChildren
     ) {
@@ -97,7 +98,7 @@ final class HierarchyTreeBuilder {
     static StyledElement<?> renderTreeNode(
         TreeNode<NodeRef> node,
         Map<String, Profile> profilesByName,
-        Map<String, String> profileParentByName,
+        Map<String, List<String>> profileParentByName,
         Map<String, RepositoryDirtyState> repositoryDirtyStateByName
     ) {
         NodeRef data = node.data();
@@ -109,7 +110,7 @@ final class HierarchyTreeBuilder {
             case REPOSITORY -> "📦 ";
             case PROFILE -> "👤 ";
             case DIRECTORY -> "📁 ";
-            case FILE -> data.inherited() ? "🔒 " : data.deepMerged() ? "⛙ " : "📄 ";
+            case FILE -> data.readOnly() ? "🔒 " : data.deepMerged() ? "⛙ " : "📄 ";
         };
 
         Color iconColor = switch (data.kind()) {
@@ -136,21 +137,21 @@ final class HierarchyTreeBuilder {
             if (profile != null && profile.updateAvailable()) {
                 hasUpdates = true;
             }
-            String parentProfileName = profileParentByName.get(profileKey(data.repositoryName(), data.profileName()));
-            if (parentProfileName != null && !parentProfileName.isBlank()) {
+            List<String> parentProfileNames = profileParentByName.get(profileKey(data.repositoryName(), data.profileName()));
+            if (parentProfileNames != null && !parentProfileNames.isEmpty()) {
                 labelStyle = labelStyle.fg(Color.BRIGHT_WHITE);
             }
         }
-        if (data.kind() == NodeKind.FILE && (data.inherited() || data.deepMerged())) {
+        if (data.kind() == NodeKind.FILE && (data.readOnly() || data.deepMerged())) {
             labelStyle = labelStyle.fg(Color.GRAY).dim();
         }
 
         List<Span> spans = new ArrayList<>();
         spans.add(Span.styled(icon, Style.EMPTY.bold().fg(iconColor)));
         if (data.kind() == NodeKind.PROFILE) {
-            String parentProfileName = profileParentByName.get(profileKey(data.repositoryName(), data.profileName()));
-            if (parentProfileName != null && !parentProfileName.isBlank()) {
-                spans.add(Span.styled(node.label() + " ⇢ 👤 " + parentProfileName, labelStyle));
+            List<String> parentProfileNames = profileParentByName.get(profileKey(data.repositoryName(), data.profileName()));
+            if (parentProfileNames != null && !parentProfileNames.isEmpty()) {
+                spans.add(Span.styled(node.label() + " ⇢ 👤 " + String.join(", ", parentProfileNames), labelStyle));
             } else {
                 spans.add(Span.styled(node.label(), labelStyle));
             }
@@ -182,7 +183,7 @@ final class HierarchyTreeBuilder {
         String profileName,
         Path profilePath,
         Map<String, Path> profilePathByName,
-        Map<String, String> profileParentByName,
+        Map<String, List<String>> profileParentByName,
         int treeMaxDepth,
         int treeMaxChildren
     ) {
@@ -276,11 +277,21 @@ final class HierarchyTreeBuilder {
                 return children;
             }
             ResolvedProfileFile file = directory.files.get(fileName);
-            NodeRef fileNodeRef = file.inherited()
-                ? NodeRef.inheritedFile(repositoryName, profileName, file.sourcePath(), file.inheritedFromProfile())
-                : file.deepMerged()
-                    ? NodeRef.deepMergedFile(repositoryName, profileName, file.sourcePath())
-                    : NodeRef.file(repositoryName, profileName, file.sourcePath());
+            NodeRef fileNodeRef = file.readOnly() && file.deepMerged()
+                ? NodeRef.mergedReadOnlyFile(
+                    repositoryName,
+                    profileName,
+                    file.sourcePath(),
+                    file.inheritedFromProfile(),
+                    file.contributorProfileNames(),
+                    file.contributorSourcePaths(),
+                    file.parentOnlyMerged()
+                )
+                : file.inherited()
+                    ? NodeRef.inheritedFile(repositoryName, profileName, file.sourcePath(), file.inheritedFromProfile())
+                    : file.deepMerged()
+                        ? NodeRef.deepMergedFile(repositoryName, profileName, file.sourcePath())
+                        : NodeRef.file(repositoryName, profileName, file.sourcePath());
             children.add(
                 TreeNode.of(
                     fileName,
@@ -297,30 +308,128 @@ final class HierarchyTreeBuilder {
         String repositoryName,
         String profileName,
         Map<String, Path> profilePathByName,
-        Map<String, String> profileParentByName
+        Map<String, List<String>> profileParentByName
     ) {
         Map<Path, ResolvedProfileFile> filesByRelativePath = new LinkedHashMap<>();
         Map<String, String> profileKeyByProfileName = profileKeyByProfileName(profilePathByName);
 
         Set<String> visitedProfiles = new HashSet<>();
-        String currentParent = profileParentByName.get(profileKey(repositoryName, profileName));
-        while (currentParent != null && !currentParent.isBlank() && visitedProfiles.add(currentParent)) {
-            String parentProfileKey = profileKeyByProfileName.get(currentParent);
-            collectOwnFiles(
-                profilePathByName.get(parentProfileKey),
-                currentParent,
-                true,
+        List<String> parentProfileNames = profileParentByName.getOrDefault(profileKey(repositoryName, profileName), List.of());
+        for (int parentIndex = parentProfileNames.size() - 1; parentIndex >= 0; parentIndex--) {
+            collectParentFiles(
+                parentProfileNames.get(parentIndex),
+                profilePathByName,
+                profileParentByName,
+                profileKeyByProfileName,
+                visitedProfiles,
                 filesByRelativePath
             );
-            currentParent = parentProfileKey == null ? null : profileParentByName.get(parentProfileKey);
         }
 
         Path profilePath = profilePathByName.get(profileKey(repositoryName, profileName));
         collectOwnFiles(profilePath, profileName, false, filesByRelativePath);
 
+        List<String> declaredParentOrder = profileParentByName.getOrDefault(
+            profileKey(repositoryName, profileName),
+            List.of()
+        );
+        Map<String, Integer> contributorBranchPrecedence = contributorBranchPrecedence(
+            declaredParentOrder,
+            profileParentByName,
+            profileKeyByProfileName
+        );
         return filesByRelativePath.values().stream()
+            .map(file -> reorderContributors(file, declaredParentOrder, contributorBranchPrecedence))
             .sorted(Comparator.comparing(file -> file.relativePath().toString().toLowerCase()))
             .toList();
+    }
+
+    private static Map<String, Integer> contributorBranchPrecedence(
+        List<String> declaredParentOrder,
+        Map<String, List<String>> profileParentByName,
+        Map<String, String> profileKeyByProfileName
+    ) {
+        if (declaredParentOrder == null || declaredParentOrder.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<String, Integer> precedenceByProfileName = new HashMap<>();
+        for (int parentIndex = 0; parentIndex < declaredParentOrder.size(); parentIndex++) {
+            String parentProfileName = declaredParentOrder.get(parentIndex);
+            collectBranchPrecedence(
+                parentProfileName,
+                parentIndex,
+                profileParentByName,
+                profileKeyByProfileName,
+                new HashSet<>(),
+                precedenceByProfileName
+            );
+        }
+        return Map.copyOf(precedenceByProfileName);
+    }
+
+    private static void collectBranchPrecedence(
+        String profileName,
+        int parentIndex,
+        Map<String, List<String>> profileParentByName,
+        Map<String, String> profileKeyByProfileName,
+        Set<String> visitedProfiles,
+        Map<String, Integer> precedenceByProfileName
+    ) {
+        if (profileName == null || profileName.isBlank() || !visitedProfiles.add(profileName)) {
+            return;
+        }
+        precedenceByProfileName.merge(profileName, parentIndex, Math::max);
+
+        String profileKey = profileKeyByProfileName.get(profileName);
+        if (profileKey == null) {
+            return;
+        }
+        for (String parentProfileName : profileParentByName.getOrDefault(profileKey, List.of())) {
+            collectBranchPrecedence(
+                parentProfileName,
+                parentIndex,
+                profileParentByName,
+                profileKeyByProfileName,
+                visitedProfiles,
+                precedenceByProfileName
+            );
+        }
+    }
+
+    private static void collectParentFiles(
+        String profileName,
+        Map<String, Path> profilePathByName,
+        Map<String, List<String>> profileParentByName,
+        Map<String, String> profileKeyByProfileName,
+        Set<String> visitedProfiles,
+        Map<Path, ResolvedProfileFile> filesByRelativePath
+    ) {
+        if (profileName == null || profileName.isBlank() || !visitedProfiles.add(profileName)) {
+            return;
+        }
+
+        String parentProfileKey = profileKeyByProfileName.get(profileName);
+        if (parentProfileKey != null) {
+            List<String> parentProfileNames = profileParentByName.getOrDefault(parentProfileKey, List.of());
+            for (int parentIndex = parentProfileNames.size() - 1; parentIndex >= 0; parentIndex--) {
+                collectParentFiles(
+                    parentProfileNames.get(parentIndex),
+                    profilePathByName,
+                    profileParentByName,
+                    profileKeyByProfileName,
+                    visitedProfiles,
+                    filesByRelativePath
+                );
+            }
+        }
+
+        collectOwnFiles(
+            profilePathByName.get(parentProfileKey),
+            profileName,
+            true,
+            filesByRelativePath
+        );
     }
 
     private static void collectOwnFiles(
@@ -344,7 +453,35 @@ final class HierarchyTreeBuilder {
                 if (existing == null) {
                     filesByRelativePath.put(
                         relativePath,
-                        new ResolvedProfileFile(relativePath, file, inherited, inherited ? profileName : null, false)
+                        new ResolvedProfileFile(
+                            relativePath,
+                            file,
+                            inherited,
+                            inherited ? profileName : null,
+                            false,
+                            inherited,
+                            false,
+                            java.util.List.of(profileName),
+                            java.util.List.of(file)
+                        )
+                    );
+                    continue;
+                }
+                if (inherited && existing.inherited()) {
+                    boolean deepMerged = isMergeableJsonFile(relativePath);
+                    filesByRelativePath.put(
+                        relativePath,
+                        new ResolvedProfileFile(
+                            relativePath,
+                            file,
+                            true,
+                            existing.inheritedFromProfile(),
+                            deepMerged,
+                            true,
+                            true,
+                            mergeContributorProfileNames(existing.contributorProfileNames(), profileName),
+                            mergeContributorSourcePaths(existing.contributorSourcePaths(), file)
+                        )
                     );
                     continue;
                 }
@@ -352,7 +489,17 @@ final class HierarchyTreeBuilder {
                     boolean deepMerged = isMergeableJsonFile(relativePath);
                     filesByRelativePath.put(
                         relativePath,
-                        new ResolvedProfileFile(relativePath, file, false, null, deepMerged)
+                        new ResolvedProfileFile(
+                            relativePath,
+                            file,
+                            false,
+                            existing.inheritedFromProfile(),
+                            deepMerged,
+                            false,
+                            false,
+                            mergeContributorProfileNames(existing.contributorProfileNames(), profileName),
+                            mergeContributorSourcePaths(existing.contributorSourcePaths(), file)
+                        )
                     );
                 }
             }
@@ -403,12 +550,114 @@ final class HierarchyTreeBuilder {
         return profileName;
     }
 
+    private static List<String> mergeContributorProfileNames(List<String> existingContributorProfileNames, String profileName) {
+        LinkedHashSet<String> merged = new LinkedHashSet<>();
+        if (existingContributorProfileNames != null) {
+            merged.addAll(existingContributorProfileNames);
+        }
+        if (profileName != null && !profileName.isBlank()) {
+            merged.add(profileName);
+        }
+        return List.copyOf(merged);
+    }
+
+    private static List<Path> mergeContributorSourcePaths(List<Path> existingContributorSourcePaths, Path contributorPath) {
+        ArrayList<Path> merged = new ArrayList<>();
+        if (existingContributorSourcePaths != null) {
+            merged.addAll(existingContributorSourcePaths);
+        }
+        if (contributorPath != null) {
+            merged.add(contributorPath);
+        }
+        return List.copyOf(merged);
+    }
+
+    private static ResolvedProfileFile reorderContributors(
+        ResolvedProfileFile file,
+        List<String> declaredParentOrder,
+        Map<String, Integer> contributorBranchPrecedence
+    ) {
+        if (!file.readOnly()) {
+            return file;
+        }
+        if ((declaredParentOrder == null || declaredParentOrder.isEmpty())
+            && (contributorBranchPrecedence == null || contributorBranchPrecedence.isEmpty())) {
+            return file;
+        }
+        List<String> names = file.contributorProfileNames();
+        List<Path> paths = file.contributorSourcePaths();
+        if (names == null || names.isEmpty() || paths == null || paths.isEmpty()) {
+            return file;
+        }
+
+        LinkedHashMap<String, Path> contributorMap = new LinkedHashMap<>();
+        for (int index = 0; index < names.size(); index++) {
+            contributorMap.put(names.get(index), paths.get(index));
+        }
+
+        Map<String, Integer> precedenceByContributor = new HashMap<>();
+        if (declaredParentOrder != null) {
+            for (int parentIndex = 0; parentIndex < declaredParentOrder.size(); parentIndex++) {
+                precedenceByContributor.putIfAbsent(declaredParentOrder.get(parentIndex), parentIndex);
+            }
+        }
+        if (contributorBranchPrecedence != null) {
+            for (Map.Entry<String, Integer> entry : contributorBranchPrecedence.entrySet()) {
+                precedenceByContributor.merge(entry.getKey(), entry.getValue(), Math::max);
+            }
+        }
+
+        LinkedHashMap<String, Path> ordered = new LinkedHashMap<>();
+        for (String name : names) {
+            if (!precedenceByContributor.containsKey(name)) {
+                ordered.put(name, contributorMap.get(name));
+            }
+        }
+
+        int maxPrecedence = precedenceByContributor.values().stream()
+            .max(Integer::compareTo)
+            .orElse(-1);
+        for (int precedence = 0; precedence <= maxPrecedence; precedence++) {
+            for (String name : names) {
+                if (Integer.valueOf(precedence).equals(precedenceByContributor.get(name))) {
+                    ordered.put(name, contributorMap.get(name));
+                }
+            }
+        }
+
+        for (String name : names) {
+            ordered.putIfAbsent(name, contributorMap.get(name));
+        }
+
+        List<String> reorderedNames = List.copyOf(ordered.keySet());
+        if (reorderedNames.equals(names)) {
+            return file;
+        }
+        List<Path> reorderedPaths = List.copyOf(ordered.values());
+        Path newSourcePath = reorderedPaths.isEmpty() ? file.sourcePath() : reorderedPaths.get(reorderedPaths.size() - 1);
+        return new ResolvedProfileFile(
+            file.relativePath(),
+            newSourcePath,
+            file.inherited(),
+            file.inheritedFromProfile(),
+            file.deepMerged(),
+            file.readOnly(),
+            file.parentOnlyMerged(),
+            reorderedNames,
+            reorderedPaths
+        );
+    }
+
     private record ResolvedProfileFile(
         Path relativePath,
         Path sourcePath,
         boolean inherited,
         String inheritedFromProfile,
-        boolean deepMerged
+        boolean deepMerged,
+        boolean readOnly,
+        boolean parentOnlyMerged,
+        List<String> contributorProfileNames,
+        List<Path> contributorSourcePaths
     ) {
     }
 

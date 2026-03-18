@@ -1,6 +1,7 @@
 package com.github.alvarosanchez.ocp.command.interactive;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -9,10 +10,15 @@ import dev.tamboui.style.Style;
 import dev.tamboui.text.Line;
 import dev.tamboui.text.Span;
 import dev.tamboui.text.Text;
+import dev.tamboui.toolkit.element.ContainerElement;
 import dev.tamboui.toolkit.element.Element;
+import dev.tamboui.toolkit.elements.Column;
 import dev.tamboui.toolkit.elements.Panel;
+import dev.tamboui.toolkit.elements.RichTextElement;
 import dev.tamboui.widgets.input.TextAreaState;
+import java.lang.reflect.Field;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -68,6 +74,39 @@ class DetailPaneRendererTest {
 
         Panel panel = assertInstanceOf(Panel.class, element);
         assertEquals("Details", panel.styleAttributes().get("title"));
+    }
+
+    @Test
+    void renderDetailPaneShowsCommaSeparatedParentsInOrder() {
+        Element element = DetailPaneRenderer.renderDetailPane(
+            NodeRef.profile("repo", "child", Path.of("/tmp/repo/child")),
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            Map.of(),
+            Map.of("repo/child", List.of("parent-a", "parent-b")),
+            DetailPaneRenderer.plainText(""),
+            0,
+            new TextAreaState(),
+            "detail",
+            "editor",
+            event -> null,
+            event -> null
+        );
+
+        Panel panel = assertInstanceOf(Panel.class, element);
+        List<Element> panelChildren = childrenOf(panel);
+        assertFalse(panelChildren.isEmpty());
+        Column column = assertInstanceOf(Column.class, panelChildren.get(0));
+        RichTextElement inheritsField = detailField(childrenOf(column), "Inherits from");
+        Line line = inheritsField.text().lines().getFirst();
+        List<Span> spans = line.spans();
+        assertEquals("Inherits from: ", spans.getFirst().content());
+        assertEquals("parent-a, parent-b", spans.get(1).content());
     }
 
     @Test
@@ -227,4 +266,62 @@ class DetailPaneRendererTest {
         assertInstanceOf(dev.tamboui.toolkit.elements.RichTextAreaElement.class, element);
         assertEquals("Preview: opencode.json (deep-merged)", DetailPaneRenderer.previewTitleFor(NodeRef.deepMergedFile("repo", "profile", Path.of("opencode.json"))));
     }
+
+    private static final Field CONTAINER_CHILDREN_FIELD;
+
+    static {
+        try {
+            Field field = ContainerElement.class.getDeclaredField("children");
+            field.setAccessible(true);
+            CONTAINER_CHILDREN_FIELD = field;
+        } catch (ReflectiveOperationException e) {
+            throw new ExceptionInInitializerError(e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Element> childrenOf(ContainerElement<?> container) {
+        try {
+            return (List<Element>) CONTAINER_CHILDREN_FIELD.get(container);
+        } catch (IllegalAccessException e) {
+            throw new AssertionError("Unable to access container children", e);
+        }
+    }
+
+    private static RichTextElement detailField(List<Element> candidates, String label) {
+        for (Element candidate : candidates) {
+            if (candidate instanceof RichTextElement richText) {
+                Line line = richText.text().lines().getFirst();
+                if (line != null && !line.spans().isEmpty()) {
+                    if (line.spans().getFirst().content().equals(label + ": ")) {
+                        return richText;
+                    }
+                }
+            }
+        }
+        throw new AssertionError("Detail field '" + label + "' not found");
+    }
+
+    @Test
+    void detailHintDisablesEditForParentOnlyMergedNode() {
+        NodeRef mergedReadOnlyFile = NodeRef.mergedReadOnlyFile(
+            "repo",
+            "profile",
+            Path.of("config.jsonc"),
+            "base",
+            List.of("base"),
+            List.of(Path.of("config.jsonc")),
+            true
+        );
+
+        assertEquals(
+            "Merged parent file preview (read-only). Press p to open the parent file | f creates a new file in this profile | y copies the absolute path | Up/Down/PgUp/PgDn/Home/End scroll preview",
+            DetailPaneRenderer.detailHint(mergedReadOnlyFile, false)
+        );
+        assertEquals(
+            "merged from parent profile only (read-only); preview shows deep-merged content",
+            DetailPaneRenderer.statusDescription(mergedReadOnlyFile, false, false)
+        );
+    }
+
 }

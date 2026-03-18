@@ -157,7 +157,7 @@ class ProfileServiceTest {
     }
 
     @Test
-    void createProfileStoresParentWhenInheritanceIsConfigured() throws IOException {
+    void createProfileStoresOrderedParentListWhenInheritanceIsConfigured() throws IOException {
         Path selectedRepository = tempDir.resolve("selected-repository");
         Files.createDirectories(selectedRepository);
         Files.writeString(
@@ -167,14 +167,14 @@ class ProfileServiceTest {
         writeConfig(List.of(new RepositoryEntry("selected", null, selectedRepository.toString())));
         profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
 
-        assertTrue(profileService.createProfile("child", "selected", "base"));
+        assertTrue(profileService.createProfile("child", "selected", List.of("base")));
 
         RepositoryConfigFile metadata = objectMapper.readValue(
             Files.readString(selectedRepository.resolve("repository.json")),
             RepositoryConfigFile.class
         );
         ProfileEntry child = metadata.profiles().stream().filter(profile -> profile.name().equals("child")).findFirst().orElseThrow();
-        assertEquals("base", child.extendsFrom());
+        assertEquals(List.of("base"), child.extendsFromProfiles());
     }
 
     @Test
@@ -292,7 +292,7 @@ class ProfileServiceTest {
     }
 
     @Test
-    void createProfileAllowsParentFromAnotherRepository() throws IOException {
+    void createProfileAllowsOrderedParentsFromMultipleRepositories() throws IOException {
         Path targetRepository = tempDir.resolve("target-repository");
         Files.createDirectories(targetRepository);
         Files.writeString(
@@ -313,14 +313,38 @@ class ProfileServiceTest {
         ));
         profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
 
-        assertTrue(profileService.createProfile("child", "target", "shared-base"));
+        assertTrue(profileService.createProfile("child", "target", List.of("shared-base", "target-base")));
 
         RepositoryConfigFile targetMetadata = objectMapper.readValue(
             Files.readString(targetRepository.resolve("repository.json")),
             RepositoryConfigFile.class
         );
         ProfileEntry child = targetMetadata.profiles().stream().filter(profile -> profile.name().equals("child")).findFirst().orElseThrow();
-        assertEquals("shared-base", child.extendsFrom());
+        assertEquals(List.of("shared-base", "target-base"), child.extendsFromProfiles());
+    }
+
+    @Test
+    void createProfileRejectsBlankOrDuplicateParentsAfterTrim() throws IOException {
+        Path selectedRepository = tempDir.resolve("selected-repository");
+        Files.createDirectories(selectedRepository);
+        Files.writeString(
+            selectedRepository.resolve("repository.json"),
+            objectMapper.writeValueAsString(new RepositoryConfigFile(List.of(new ProfileEntry("base"), new ProfileEntry("extra"))))
+        );
+        writeConfig(List.of(new RepositoryEntry("selected", null, selectedRepository.toString())));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        IllegalStateException blankParentThrown = assertThrows(
+            IllegalStateException.class,
+            () -> profileService.createProfile("child", "selected", List.of("base", "   "))
+        );
+        assertTrue(blankParentThrown.getMessage().contains("blank entries"));
+
+        IllegalStateException duplicateParentThrown = assertThrows(
+            IllegalStateException.class,
+            () -> profileService.createProfile("child", "selected", List.of("base", " base "))
+        );
+        assertTrue(duplicateParentThrown.getMessage().contains("listed more than once"));
     }
 
     @Test
@@ -457,6 +481,235 @@ class ProfileServiceTest {
         assertEquals("foo", merged.get("some_other_config"));
         assertEquals("bar", merged.get("another_config"));
         assertEquals(parentDir.resolve("oh-my-opencode.json").toAbsolutePath(), Files.readSymbolicLink(ohMyFile));
+    }
+
+    @Test
+    void useProfileResolvesParentsLeftToRightAcrossNestedBranches() throws IOException {
+        writeRepositoryMetadata(
+            "repo-local",
+            new RepositoryConfigFile(
+                List.of(
+                    new ProfileEntry("shared"),
+                    new ProfileEntry("left-base"),
+                    new ProfileEntry("right-base"),
+                    new ProfileEntry("left", null, List.of("shared", "left-base")),
+                    new ProfileEntry("right", null, List.of("shared", "right-base")),
+                    new ProfileEntry("child", null, List.of("left", "right"))
+                )
+            )
+        );
+        Path repositoryDir = repositoriesRootDirectory().resolve("repo-local");
+        Path sharedDir = repositoryDir.resolve("shared");
+        Path leftBaseDir = repositoryDir.resolve("left-base");
+        Path rightBaseDir = repositoryDir.resolve("right-base");
+        Path leftDir = repositoryDir.resolve("left");
+        Path rightDir = repositoryDir.resolve("right");
+        Path childDir = repositoryDir.resolve("child");
+        Files.createDirectories(sharedDir);
+        Files.createDirectories(leftBaseDir);
+        Files.createDirectories(rightBaseDir);
+        Files.createDirectories(leftDir);
+        Files.createDirectories(rightDir);
+        Files.createDirectories(childDir);
+
+        Files.writeString(sharedDir.resolve("opencode.json"), "{\"sharedKey\":\"shared\",\"parentPriority\":\"shared\"}");
+        Files.writeString(leftBaseDir.resolve("opencode.json"), "{\"leftBaseKey\":\"left-base\",\"parentPriority\":\"left-base\"}");
+        Files.writeString(leftDir.resolve("opencode.json"), "{\"leftKey\":\"left\",\"parentPriority\":\"left\"}");
+        Files.writeString(rightBaseDir.resolve("opencode.json"), "{\"rightBaseKey\":\"right-base\",\"parentPriority\":\"right-base\"}");
+        Files.writeString(rightDir.resolve("opencode.json"), "{\"rightKey\":\"right\",\"parentPriority\":\"right\"}");
+        Files.writeString(childDir.resolve("opencode.json"), "{\"childKey\":\"child\"}");
+
+        writeConfig(List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null)));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        assertTrue(profileService.useProfile("child"));
+
+        Path opencodeFile = Path.of(System.getProperty("ocp.opencode.config.dir")).resolve("opencode.json");
+        assertTrue(Files.isSymbolicLink(opencodeFile));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> merged = objectMapper.readValue(Files.readString(opencodeFile), Map.class);
+        assertEquals("shared", merged.get("sharedKey"));
+        assertEquals("left-base", merged.get("leftBaseKey"));
+        assertEquals("left", merged.get("leftKey"));
+        assertEquals("right-base", merged.get("rightBaseKey"));
+        assertEquals("right", merged.get("rightKey"));
+        assertEquals("child", merged.get("childKey"));
+        assertEquals("right", merged.get("parentPriority"));
+    }
+
+    @Test
+    void useProfileDeepMergesParentOnlySharedJsonAcrossMultipleParents() throws IOException {
+        writeRepositoryMetadata(
+            "repo-local",
+            new RepositoryConfigFile(
+                List.of(
+                    new ProfileEntry("parent-left"),
+                    new ProfileEntry("parent-right"),
+                    new ProfileEntry("child", null, List.of("parent-left", "parent-right"))
+                )
+            )
+        );
+        Path repositoryDir = repositoriesRootDirectory().resolve("repo-local");
+        Path parentLeftDir = repositoryDir.resolve("parent-left");
+        Path parentRightDir = repositoryDir.resolve("parent-right");
+        Path childDir = repositoryDir.resolve("child");
+        Files.createDirectories(parentLeftDir);
+        Files.createDirectories(parentRightDir);
+        Files.createDirectories(childDir);
+
+        Files.writeString(
+            parentLeftDir.resolve("opencode.json"),
+            "{\"shared\":{\"leftOnly\":\"yes\",\"priority\":\"left\"},\"left\":true}"
+        );
+        Files.writeString(
+            parentRightDir.resolve("opencode.json"),
+            "{\"shared\":{\"rightOnly\":\"yes\",\"priority\":\"right\"},\"right\":true}"
+        );
+
+        writeConfig(List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null)));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        assertTrue(profileService.useProfile("child"));
+
+        Path opencodeFile = Path.of(System.getProperty("ocp.opencode.config.dir")).resolve("opencode.json");
+        assertTrue(Files.isSymbolicLink(opencodeFile));
+        Path resolvedTarget = Files.readSymbolicLink(opencodeFile);
+        assertTrue(resolvedTarget.toString().contains("resolved-profiles/child"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> merged = objectMapper.readValue(Files.readString(opencodeFile), Map.class);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> shared = (Map<String, Object>) merged.get("shared");
+        assertEquals("yes", shared.get("leftOnly"));
+        assertEquals("yes", shared.get("rightOnly"));
+        assertEquals("right", shared.get("priority"));
+        assertEquals(true, merged.get("left"));
+        assertEquals(true, merged.get("right"));
+    }
+
+    @Test
+    void useProfileLetsLaterParentWinForParentOnlyNonJsonConflicts() throws IOException {
+        writeRepositoryMetadata(
+            "repo-local",
+            new RepositoryConfigFile(
+                List.of(
+                    new ProfileEntry("parent-left"),
+                    new ProfileEntry("parent-right"),
+                    new ProfileEntry("child", null, List.of("parent-left", "parent-right"))
+                )
+            )
+        );
+        Path repositoryDir = repositoriesRootDirectory().resolve("repo-local");
+        Path parentLeftDir = repositoryDir.resolve("parent-left");
+        Path parentRightDir = repositoryDir.resolve("parent-right");
+        Path childDir = repositoryDir.resolve("child");
+        Files.createDirectories(parentLeftDir);
+        Files.createDirectories(parentRightDir);
+        Files.createDirectories(childDir);
+
+        Files.writeString(parentLeftDir.resolve("settings.yaml"), "theme: left\n");
+        Files.writeString(parentRightDir.resolve("settings.yaml"), "theme: right\n");
+
+        writeConfig(List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null)));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        assertTrue(profileService.useProfile("child"));
+
+        Path settingsFile = Path.of(System.getProperty("ocp.opencode.config.dir")).resolve("settings.yaml");
+        assertTrue(Files.isSymbolicLink(settingsFile));
+        assertEquals(parentRightDir.resolve("settings.yaml").toAbsolutePath(), Files.readSymbolicLink(settingsFile));
+    }
+
+    @Test
+    void resolvedFilePreviewReturnsMergedContentForParentOnlyMergedJson() throws IOException {
+        writeRepositoryMetadata(
+            "repo-local",
+            new RepositoryConfigFile(
+                List.of(
+                    new ProfileEntry("parent-left"),
+                    new ProfileEntry("parent-right"),
+                    new ProfileEntry("child", null, List.of("parent-left", "parent-right"))
+                )
+            )
+        );
+        Path repositoryDir = repositoriesRootDirectory().resolve("repo-local");
+        Path parentLeftDir = repositoryDir.resolve("parent-left");
+        Path parentRightDir = repositoryDir.resolve("parent-right");
+        Path childDir = repositoryDir.resolve("child");
+        Files.createDirectories(parentLeftDir);
+        Files.createDirectories(parentRightDir);
+        Files.createDirectories(childDir);
+
+        Path leftSource = parentLeftDir.resolve("opencode.jsonc");
+        Files.writeString(leftSource, "{\"plugin\":{\"left\":true},\"priority\":\"left\"}");
+        Files.writeString(parentRightDir.resolve("opencode.jsonc"), "{\"plugin\":{\"right\":true},\"priority\":\"right\"}");
+
+        writeConfig(List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null)));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        ProfileService.ResolvedFilePreview preview = profileService.resolvedFilePreview("child", leftSource);
+
+        assertEquals(Path.of("opencode.jsonc"), preview.relativePath());
+        assertEquals(true, preview.deepMerged());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> merged = objectMapper.readValue(preview.content(), Map.class);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> plugin = (Map<String, Object>) merged.get("plugin");
+        assertEquals(true, plugin.get("left"));
+        assertEquals(true, plugin.get("right"));
+        assertEquals("right", merged.get("priority"));
+    }
+
+    @Test
+    void useProfileRejectsCyclesAcrossMultipleParents() throws IOException {
+        writeRepositoryMetadata(
+            "repo-local",
+            new RepositoryConfigFile(
+                List.of(
+                    new ProfileEntry("base"),
+                    new ProfileEntry("child", null, List.of("base", "other")),
+                    new ProfileEntry("other", null, List.of("child"))
+                )
+            )
+        );
+        Path repositoryDir = repositoriesRootDirectory().resolve("repo-local");
+        Files.createDirectories(repositoryDir.resolve("base"));
+        Files.createDirectories(repositoryDir.resolve("other"));
+        Files.createDirectories(repositoryDir.resolve("child"));
+        Files.writeString(repositoryDir.resolve("base").resolve("opencode.json"), "{}");
+        Files.writeString(repositoryDir.resolve("other").resolve("opencode.json"), "{}");
+        Files.writeString(repositoryDir.resolve("child").resolve("opencode.json"), "{}");
+
+        writeConfig(List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null)));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        IllegalStateException thrown = assertThrows(IllegalStateException.class, () -> profileService.useProfile("child"));
+        assertTrue(thrown.getMessage().contains("Profile inheritance cycle detected"));
+        assertTrue(thrown.getMessage().contains("child -> other -> child"));
+    }
+
+    @Test
+    void useProfileRejectsUnknownParentInParentArray() throws IOException {
+        writeRepositoryMetadata(
+            "repo-local",
+            new RepositoryConfigFile(
+                List.of(
+                    new ProfileEntry("base"),
+                    new ProfileEntry("child", null, List.of("base", "missing"))
+                )
+            )
+        );
+        Path repositoryDir = repositoriesRootDirectory().resolve("repo-local");
+        Files.createDirectories(repositoryDir.resolve("base"));
+        Files.createDirectories(repositoryDir.resolve("child"));
+        Files.writeString(repositoryDir.resolve("base").resolve("opencode.json"), "{}");
+        Files.writeString(repositoryDir.resolve("child").resolve("opencode.json"), "{}");
+
+        writeConfig(List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null)));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        IllegalStateException thrown = assertThrows(IllegalStateException.class, () -> profileService.useProfile("child"));
+        assertTrue(thrown.getMessage().contains("Profile `child` extends unknown profile `missing`."));
     }
 
     @Test
