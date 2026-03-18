@@ -16,7 +16,6 @@
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" /></a>
   <img alt="Java 25" src="https://img.shields.io/badge/java-25-f89820" />
   <img alt="Micronaut 4.x" src="https://img.shields.io/badge/micronaut-4.x-5e81f4" />
-  <img alt="Native image" src="https://img.shields.io/badge/native-graalvm-7c3aed" />
 </p>
 
 <p align="center">
