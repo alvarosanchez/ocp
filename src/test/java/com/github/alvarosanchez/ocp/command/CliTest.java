@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import dev.tamboui.text.Text;
 import java.io.ByteArrayOutputStream;
@@ -81,6 +82,7 @@ class CliTest {
 
     @Test
     void beginTransientInfoReturnsFalseWithoutConsole() {
+        assumeTrue(System.console() == null);
         assertFalse(Cli.beginTransientInfo("Checking latest versions..."));
     }
 
