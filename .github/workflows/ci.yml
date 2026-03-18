@@ -33,7 +33,7 @@ jobs:
         run: ./gradlew --no-daemon nativeTest
 
   coverage-badge:
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: write
