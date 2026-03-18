@@ -18,6 +18,7 @@ import io.micronaut.serde.ObjectMapper;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -71,13 +72,7 @@ class InteractiveAppCreateProfileTest {
         app.testReloadState();
         app.testSetSelectedNode(NodeRef.repository("repo-a", repositoryPath));
 
-        PromptState prompt = PromptState.multiWithOptions(
-            PromptAction.CREATE_PROFILE,
-            "Create profile",
-            List.of("Profile name", "Extends from profile (optional)"),
-            List.of(List.of(), List.of("", "default"))
-        );
-        prompt.contextRepositoryName = "repo-a";
+        PromptState prompt = createProfilePrompt("repo-a", List.of("default"));
         prompt.values.set(0, "child");
         prompt.values.set(1, "");
         app.testSetPrompt(prompt);
@@ -106,13 +101,7 @@ class InteractiveAppCreateProfileTest {
         app.testReloadState();
         app.testSetSelectedNode(NodeRef.repository("repo-a", repositoryPath));
 
-        PromptState prompt = PromptState.multiWithOptions(
-            PromptAction.CREATE_PROFILE,
-            "Create profile",
-            List.of("Profile name", "Extends from profile (optional)"),
-            List.of(List.of(), List.of("", "default"))
-        );
-        prompt.contextRepositoryName = "repo-a";
+        PromptState prompt = createProfilePrompt("repo-a", List.of("default"));
         prompt.values.set(0, "child");
         prompt.values.set(1, "default");
         app.testSetPrompt(prompt);
@@ -124,8 +113,48 @@ class InteractiveAppCreateProfileTest {
             .filter(profile -> "child".equals(profile.name()))
             .findFirst()
             .orElseThrow();
-        assertEquals("default", created.extendsFrom());
+        assertEquals(List.of("default"), created.extendsFromProfiles());
         assertEquals("Created profile child in repository repo-a extending from default.", app.testStatus());
+    }
+
+    @Test
+    void applyPromptCreatesProfileWithOrderedParents() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Files.createDirectories(repositoryPath.resolve("base"));
+        Files.createDirectories(repositoryPath.resolve("shared"));
+        Files.createDirectories(repositoryPath.resolve("default"));
+        Files.writeString(
+            repositoryPath.resolve("repository.json"),
+            "{\"profiles\":[{\"name\":\"base\"},{\"name\":\"shared\"},{\"name\":\"default\"}]}"
+        );
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = createApp();
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.repository("repo-a", repositoryPath));
+
+        app.testSetPrompt(createProfilePrompt("repo-a", List.of("base", "default", "shared")));
+        PromptState prompt = app.testPrompt();
+        prompt.values.set(0, "child");
+        prompt.currentField = 1;
+        prompt.values.set(1, "shared");
+        assertTrue(app.testAdvanceCreateProfilePromptIfNeeded());
+        prompt.values.set(2, "base");
+        assertTrue(app.testAdvanceCreateProfilePromptIfNeeded());
+        prompt.values.set(3, "");
+
+        app.testApplyPrompt();
+
+        RepositoryConfigFile repositoryConfig = readRepositoryConfig(repositoryPath);
+        RepositoryConfigFile.ProfileEntry created = repositoryConfig.profiles().stream()
+            .filter(profile -> "child".equals(profile.name()))
+            .findFirst()
+            .orElseThrow();
+        assertEquals(List.of("shared", "base"), created.extendsFromProfiles());
+        assertEquals(
+            "Created profile child in repository repo-a extending from shared, base.",
+            app.testStatus()
+        );
     }
 
     @Test
@@ -157,6 +186,67 @@ class InteractiveAppCreateProfileTest {
         assertEquals(List.of("", "base", "default"), storedPrompt.options.get(1));
     }
 
+    @Test
+    void createProfilePromptRepeatsParentSelectionUntilBlank() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Files.createDirectories(repositoryPath.resolve("base"));
+        Files.createDirectories(repositoryPath.resolve("default"));
+        Files.createDirectories(repositoryPath.resolve("shared"));
+        Files.writeString(
+            repositoryPath.resolve("repository.json"),
+            "{\"profiles\":[{\"name\":\"base\"},{\"name\":\"default\"},{\"name\":\"shared\"}]}"
+        );
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = createApp();
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.repository("repo-a", repositoryPath));
+        invokeOpenCreateProfilePromptForSelectedNode(app);
+
+        PromptState prompt = app.testPrompt();
+        prompt.values.set(0, "child");
+        assertTrue(prompt.nextField());
+        prompt.values.set(1, "shared");
+
+        assertTrue(app.testAdvanceCreateProfilePromptIfNeeded());
+        assertEquals(2, prompt.currentField);
+        assertEquals(3, prompt.labels.size());
+        assertEquals(List.of("shared"), prompt.values.subList(1, 2));
+
+        prompt.values.set(2, "");
+        assertTrue(!app.testAdvanceCreateProfilePromptIfNeeded());
+    }
+
+    @Test
+    void createProfilePromptExcludesAlreadySelectedParents() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Files.createDirectories(repositoryPath.resolve("base"));
+        Files.createDirectories(repositoryPath.resolve("default"));
+        Files.createDirectories(repositoryPath.resolve("shared"));
+        Files.writeString(
+            repositoryPath.resolve("repository.json"),
+            "{\"profiles\":[{\"name\":\"base\"},{\"name\":\"default\"},{\"name\":\"shared\"}]}"
+        );
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = createApp();
+        app.testReloadState();
+        app.testSetSelectedNode(NodeRef.repository("repo-a", repositoryPath));
+        invokeOpenCreateProfilePromptForSelectedNode(app);
+
+        PromptState prompt = app.testPrompt();
+        prompt.values.set(0, "child");
+        assertTrue(prompt.nextField());
+        prompt.values.set(1, "base");
+
+        assertTrue(app.testAdvanceCreateProfilePromptIfNeeded());
+        assertEquals(List.of("", "default", "shared"), prompt.options.get(2));
+
+        prompt.values.set(2, "shared");
+        assertTrue(app.testAdvanceCreateProfilePromptIfNeeded());
+        assertEquals(List.of("", "default"), prompt.options.get(3));
+    }
+
     private InteractiveApp createApp() {
         return new InteractiveApp(
             applicationContext.getBean(ProfileService.class),
@@ -178,6 +268,21 @@ class InteractiveAppCreateProfileTest {
 
     private RepositoryConfigFile readRepositoryConfig(Path repositoryPath) throws IOException {
         return objectMapper.readValue(Files.readString(repositoryPath.resolve("repository.json")), RepositoryConfigFile.class);
+    }
+
+    private static PromptState createProfilePrompt(String repositoryName, List<String> resolvableProfileNames) {
+        List<String> parentOptions = new ArrayList<>();
+        parentOptions.add("");
+        parentOptions.addAll(resolvableProfileNames);
+        PromptState prompt = PromptState.multiWithOptions(
+            PromptAction.CREATE_PROFILE,
+            "Create profile",
+            new ArrayList<>(List.of("Profile name", "Extends from profile (optional)")),
+            new ArrayList<>(List.of(List.of(), parentOptions))
+        );
+        prompt.contextRepositoryName = repositoryName;
+        prompt.baseParentOptions = List.copyOf(resolvableProfileNames);
+        return prompt;
     }
 
     private static void invokeOpenCreateProfilePromptForSelectedNode(InteractiveApp app) throws Exception {

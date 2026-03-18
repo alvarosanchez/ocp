@@ -73,20 +73,20 @@ oss/opencode.json
 {
   "profiles": [
     { "name": "my-company", "description": "Company defaults" },
-    { "name": "oss", "description": "Open-source profile", "extends_from": "my-company" }
+    { "name": "oss", "description": "Open-source profile", "extends_from": ["my-company"] }
   ]
 }
 ```
 
-When `extends_from` is set, parent profiles are resolved first. Shared JSON/JSONC files are deep-merged recursively, while parent-only files are kept unchanged from the parent profile.
+When `extends_from` is set, parent profiles are resolved in declared order. Shared JSON/JSONC files are deep-merged recursively, while parent-only files are kept unchanged from the parent profile. When multiple parents are declared, left-to-right precedence applies: earlier parents can be overridden by later parents and by the child. Child values take precedence for matching keys at any nesting level; arrays and non-object JSON values are replaced by the child value. If a child and a parent provide the same logical JSON file, they must use the same extension (`.json` vs `.jsonc`) or `profile use` fails.
 
 ## Commands
 
-- `ocp` - print root help.
+- `ocp` - start interactive mode (when run in an interactive terminal) or print usage/help.
 - `ocp help <command>` - print command help.
 - `ocp profile list` - list discovered profiles.
 - `ocp profile` - show active profile metadata.
-- `ocp profile create [name] [--extends-from <parent>]` - create a profile in the current repository (`default` if omitted), optionally extending from an existing profile.
+- `ocp profile create [name] [--extends-from <parent-1,parent-2,...>]` - create a profile in the current repository (`default` if omitted), optionally extending from existing profiles. Use a comma-separated list to declare ordered parents.
 - `ocp profile use <name>` - switch to profile by name.
 - `ocp repository add <uri-or-path> --name <name>` - add and register a repository from a Git URI or local path.
 - `ocp repository list` - list configured repositories with URI, local path, and resolved profiles.

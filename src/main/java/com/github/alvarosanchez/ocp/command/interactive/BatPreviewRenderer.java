@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -24,7 +25,16 @@ class BatPreviewRenderer {
     private static final Duration BAT_AVAILABILITY_TIMEOUT = Duration.ofSeconds(1);
 
     private final AnsiTextParser ansiTextParser = new AnsiTextParser();
+    private final String configuredBatExecutableOverride;
     private volatile String cachedBatExecutable;
+
+    BatPreviewRenderer() {
+        this(null);
+    }
+
+    BatPreviewRenderer(String configuredBatExecutableOverride) {
+        this.configuredBatExecutableOverride = configuredBatExecutableOverride;
+    }
 
     Text highlight(Path filePath) {
         if (filePath == null) {
@@ -85,8 +95,13 @@ class BatPreviewRenderer {
         if (content == null) {
             commandParts.add(filePath.toString());
         } else {
+            String languageOverride = languageOverrideFor(filePath);
+            if (languageOverride != null) {
+                commandParts.add("--language");
+                commandParts.add(languageOverride);
+            }
             commandParts.add("--file-name");
-            commandParts.add(String.valueOf(filePath.getFileName()));
+            commandParts.add(filePath.toAbsolutePath().normalize().toString());
             commandParts.add("-");
         }
 
@@ -160,6 +175,13 @@ class BatPreviewRenderer {
         if (cachedBatExecutable != null) {
             return cachedBatExecutable;
         }
+        if (configuredBatExecutableOverride != null && !configuredBatExecutableOverride.isBlank()) {
+            Path configuredOverride = Paths.get(configuredBatExecutableOverride);
+            if (Files.isRegularFile(configuredOverride) && Files.isExecutable(configuredOverride)) {
+                cachedBatExecutable = configuredOverride.toString();
+                return cachedBatExecutable;
+            }
+        }
         String configuredBatPath = System.getenv(BAT_PATH_ENV);
         if (configuredBatPath != null && !configuredBatPath.isBlank()) {
             Path configuredCandidate = Paths.get(configuredBatPath);
@@ -195,5 +217,13 @@ class BatPreviewRenderer {
             return new String[] {"bat.exe", "bat.cmd", "bat.bat", "bat"};
         }
         return new String[] {"bat"};
+    }
+
+    private String languageOverrideFor(Path filePath) {
+        String fileName = String.valueOf(filePath.getFileName()).toLowerCase(Locale.ROOT);
+        if (fileName.endsWith(".json") || fileName.endsWith(".jsonc")) {
+            return "json";
+        }
+        return null;
     }
 }

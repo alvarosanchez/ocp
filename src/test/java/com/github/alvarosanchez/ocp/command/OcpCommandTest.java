@@ -7,6 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.alvarosanchez.ocp.command.interactive.InteractiveApp;
+import com.github.alvarosanchez.ocp.config.OcpConfigFile;
+import com.github.alvarosanchez.ocp.config.OcpConfigFile.OcpConfigOptions;
+import com.github.alvarosanchez.ocp.config.OcpConfigFile.RepositoryEntry;
 import com.github.alvarosanchez.ocp.service.OnboardingService;
 import com.github.alvarosanchez.ocp.service.ProfileService;
 import com.github.alvarosanchez.ocp.service.RepositoryPostCreationService;
@@ -19,9 +22,14 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledInNativeImage;
+import org.junit.jupiter.api.io.TempDir;
 
 class OcpCommandTest {
 
@@ -228,6 +236,42 @@ class OcpCommandTest {
         }
     }
 
+    @Test
+    @DisabledInNativeImage
+    void helpInvocationMigratesLegacyExtendsFromBeforeExecution(@TempDir Path tempDir) throws Exception {
+        Path repositoryMetadata = prepareLegacyStartupMigrationScenario(tempDir, "{\"profiles\":[{\"name\":\"child\",\"extends_from\":\"base\"}]}");
+
+        CommandResult result = executeMainWithStartup(tempDir, "help");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("Usage: ocp"));
+        assertTrue(metadataContainsCanonicalArray(repositoryMetadata));
+    }
+
+    @Test
+    @DisabledInNativeImage
+    void versionInvocationMigratesLegacyExtendsFromBeforeExecution(@TempDir Path tempDir) throws Exception {
+        Path repositoryMetadata = prepareLegacyStartupMigrationScenario(tempDir, "{\"profiles\":[{\"name\":\"child\",\"extends_from\":\"base\"}]}");
+
+        CommandResult result = executeMainWithStartup(tempDir, "--version");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains(readExpectedVersion()));
+        assertTrue(metadataContainsCanonicalArray(repositoryMetadata));
+    }
+
+    @Test
+    @DisabledInNativeImage
+    void startupMigrationFailsFastBeforeCommandExecutionWhenRepositoryMetadataRewriteFails(@TempDir Path tempDir) throws Exception {
+        prepareLegacyStartupMigrationScenario(tempDir, "{\"profiles\":[{\"name\":\"child\",\"extends_from\":\"base\"}");
+
+        CommandResult result = executeMainWithStartup(tempDir, "help");
+
+        assertEquals(1, result.exitCode());
+        assertTrue(result.stderr().contains("Could not migrate legacy repository metadata before startup."));
+        assertFalse(result.stdout().contains("Usage: ocp"));
+    }
+
     private static String readExpectedVersion() {
         try (var inputStream = OcpCommandTest.class.getResourceAsStream("/META-INF/ocp/version.txt")) {
             assertNotNull(inputStream);
@@ -236,4 +280,86 @@ class OcpCommandTest {
             throw new UncheckedIOException("Cannot read version resource", e);
         }
     }
+
+    private static Path prepareLegacyStartupMigrationScenario(Path tempDir, String repositoryJsonContent) throws IOException {
+        Path configDir = tempDir.resolve("ocp-config");
+        Path repositoryPath = tempDir.resolve("repository");
+        Files.createDirectories(configDir);
+        Files.createDirectories(repositoryPath);
+        Path repositoryMetadata = repositoryPath.resolve("repository.json");
+        Files.writeString(repositoryMetadata, repositoryJsonContent);
+
+        OcpConfigFile configFile = new OcpConfigFile(
+            new OcpConfigOptions(),
+            List.of(new RepositoryEntry("demo", null, repositoryPath.toString()))
+        );
+        Files.writeString(configDir.resolve("config.json"), serializeAsJson(configFile));
+        return repositoryMetadata;
+    }
+
+    private static CommandResult executeMainWithStartup(Path tempDir, String... args) throws IOException, InterruptedException {
+        if (System.getProperty("org.graalvm.nativeimage.imagecode") != null) {
+            throw new UnsupportedOperationException("Subprocess startup migration assertions are not supported inside native test images");
+        }
+
+        List<String> command = new java.util.ArrayList<>();
+        command.add(javaBinaryPath());
+        command.add("-Docp.config.dir=" + tempDir.resolve("ocp-config"));
+        command.add("-Docp.cache.dir=" + tempDir.resolve("ocp-cache"));
+        command.add("-Duser.home=" + tempDir.resolve("home"));
+        command.add("-cp");
+        command.add(System.getProperty("java.class.path"));
+        command.add(OcpCommand.class.getName());
+        command.addAll(List.of(args));
+
+        Process process = new ProcessBuilder(command).start();
+        String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
+        int exitCode = process.waitFor();
+        return new CommandResult(exitCode, stdout, stderr);
+    }
+
+    private static String javaBinaryPath() {
+        String javaHome = System.getProperty("java.home");
+        if (javaHome != null && !javaHome.isBlank()) {
+            return Path.of(javaHome, "bin", "java").toString();
+        }
+
+        String javaCommand = ProcessHandle.current()
+            .info()
+            .command()
+            .orElseThrow(() -> new IllegalStateException("Cannot resolve current Java executable path"));
+        return Path.of(javaCommand).toString();
+    }
+
+    private static String serializeAsJson(Object value) throws IOException {
+        try (ApplicationContext context = ApplicationContext.run()) {
+            ObjectMapper objectMapper = context.getBean(ObjectMapper.class);
+            return objectMapper.writeValueAsString(value);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static boolean metadataContainsCanonicalArray(Path repositoryMetadata) throws IOException {
+        try (ApplicationContext context = ApplicationContext.run()) {
+            ObjectMapper objectMapper = context.getBean(ObjectMapper.class);
+            Map<String, Object> parsed = objectMapper.readValue(Files.readString(repositoryMetadata), Map.class);
+            Object profilesObject = parsed.get("profiles");
+            if (!(profilesObject instanceof List<?> profiles) || profiles.isEmpty()) {
+                return false;
+            }
+            Object profileObject = profiles.getFirst();
+            if (!(profileObject instanceof Map<?, ?> profileMap)) {
+                return false;
+            }
+            Object extendsFrom = profileMap.get("extends_from");
+            return extendsFrom instanceof List<?> extendsFromArray
+                && extendsFromArray.size() == 1
+                && "base".equals(extendsFromArray.getFirst());
+        }
+    }
+
+    private record CommandResult(int exitCode, String stdout, String stderr) {
+    }
+
 }

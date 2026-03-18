@@ -13,6 +13,7 @@ import com.github.alvarosanchez.ocp.config.RepositoryConfigFile.ProfileEntry;
 import com.github.sparsick.testcontainers.gitserver.http.GitHttpServerContainer;
 import io.micronaut.configuration.picocli.PicocliRunner;
 import io.micronaut.context.ApplicationContext;
+import io.micronaut.core.type.Argument;
 import io.micronaut.serde.ObjectMapper;
 import java.io.ByteArrayOutputStream;
 import java.io.ByteArrayInputStream;
@@ -170,6 +171,59 @@ class ProfileCommandTest {
         RepositoryConfigFile metadata = readRepositoryMetadata(repositoryRoot.resolve("repository.json"));
         ProfileEntry child = metadata.profiles().stream().filter(profile -> profile.name().equals("child")).findFirst().orElseThrow();
         assertEquals("base", child.extendsFrom());
+    }
+
+    @Test
+    void createSupportsCommaSeparatedExtendsFromParameter() throws IOException {
+        Path repositoryRoot = Path.of(System.getProperty("ocp.working.dir"));
+        Files.createDirectories(repositoryRoot.resolve("base"));
+        Files.createDirectories(repositoryRoot.resolve("common"));
+        Files.writeString(
+            repositoryRoot.resolve("repository.json"),
+            serializeAsJson(new RepositoryConfigFile(List.of(new ProfileEntry("base"), new ProfileEntry("common"))))
+        );
+
+        CommandResult result = execute("profile", "create", "child", "--extends-from", " base ,common ");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("Created profile `child` extending from `base, common`"));
+        assertTrue(Files.isDirectory(repositoryRoot.resolve("child")));
+
+        RepositoryConfigFile metadata = readRepositoryMetadata(repositoryRoot.resolve("repository.json"));
+        ProfileEntry child = metadata.profiles().stream().filter(profile -> profile.name().equals("child")).findFirst().orElseThrow();
+        assertEquals(List.of("base", "common"), child.extendsFromProfiles());
+    }
+
+    @Test
+    void createRejectsBlankOrDuplicateCsvParents() throws IOException {
+        Path repositoryRoot = Path.of(System.getProperty("ocp.working.dir"));
+        Files.createDirectories(repositoryRoot);
+
+        CommandResult blankResult = execute("profile", "create", "child", "--extends-from", "base,,common");
+
+        assertEquals(1, blankResult.exitCode());
+        assertTrue(blankResult.stderr().contains("Parent profile names cannot contain blank entries."));
+
+        CommandResult duplicateResult = execute("profile", "create", "child", "--extends-from", "base, base");
+
+        assertEquals(1, duplicateResult.exitCode());
+        assertTrue(duplicateResult.stderr().contains("Parent profile `base` is listed more than once."));
+    }
+
+    @Test
+    void createRejectsExplicitBlankExtendsFromParameter() throws IOException {
+        Path repositoryRoot = Path.of(System.getProperty("ocp.working.dir"));
+        Files.createDirectories(repositoryRoot);
+        Files.writeString(
+            repositoryRoot.resolve("repository.json"),
+            serializeAsJson(new RepositoryConfigFile(List.of()))
+        );
+
+        CommandResult result = execute("profile", "create", "child", "--extends-from", "");
+
+        assertEquals(1, result.exitCode());
+        assertTrue(result.stderr().contains("Parent profile names cannot contain blank entries."));
+        assertTrue(Files.notExists(repositoryRoot.resolve("child")));
     }
 
     @Test
@@ -774,6 +828,93 @@ class ProfileCommandTest {
         assertEquals("child", refreshed.get("shared"));
     }
 
+
+    @Test
+    void refreshReappliesActiveProfileWhenAffectedByLaterParentBranch() throws IOException, InterruptedException {
+        RemoteRepositoryState state = createRemoteMultiParentProfileRepository();
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-refresh-multi-parent", state.remoteUri(), null))
+            )
+        );
+
+        runCommand(List.of("git", "clone", state.remoteUri(), state.localClone().toString()));
+
+        CommandResult useResult = execute("profile", "use", "child");
+        assertEquals(0, useResult.exitCode());
+
+        Path opencodeFile = Path.of(System.getProperty("ocp.opencode.config.dir")).resolve("opencode.json");
+        Map<String, Object> initial = readJsonMap(opencodeFile);
+        assertEquals("a1", initial.get("alpha"));
+        assertEquals("b1", initial.get("beta"));
+        assertEquals("child", initial.get("shared"));
+
+        Path updateWorktree = tempDir.resolve("update-worktree-multi-parent-refresh");
+        runCommand(List.of("git", "clone", state.remoteUri(), updateWorktree.toString()));
+        Files.writeString(
+            updateWorktree.resolve("parent-b").resolve("opencode.json"),
+            "{\"beta\":\"b2\",\"branch_added\":\"yes\",\"shared\":\"parent-b\"}"
+        );
+        runCommand(List.of("git", "-C", updateWorktree.toString(), "add", "parent-b/opencode.json"));
+        runCommand(List.of(
+            "git",
+            "-C",
+            updateWorktree.toString(),
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "user.name=test",
+            "commit",
+            "-m",
+            "update-parent-b"
+        ));
+        runCommand(List.of("git", "-C", updateWorktree.toString(), "push", "origin", "HEAD"));
+
+        CommandResult refreshResult = execute("repository", "refresh", "repo-refresh-multi-parent");
+
+        assertEquals(0, refreshResult.exitCode());
+        assertTrue(refreshResult.stdout().contains("Updated user configuration files in"));
+        assertTrue(refreshResult.stdout().contains("Refreshed repository `repo-refresh-multi-parent`"));
+        Map<String, Object> refreshed = readJsonMap(opencodeFile);
+        assertEquals("a1", refreshed.get("alpha"));
+        assertEquals("b2", refreshed.get("beta"));
+        assertEquals("yes", refreshed.get("branch_added"));
+        assertEquals("child", refreshed.get("shared"));
+    }
+
+    @Test
+    void refreshPreservesMergedFileConflictDetectionForMultiParentProfile() throws IOException, InterruptedException {
+        RemoteRepositoryState state = createRemoteMultiParentProfileRepository();
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-refresh-multi-parent", state.remoteUri(), null))
+            )
+        );
+
+        runCommand(List.of("git", "clone", state.remoteUri(), state.localClone().toString()));
+
+        CommandResult useResult = execute("profile", "use", "child");
+        assertEquals(0, useResult.exitCode());
+
+        Path opencodeFile = Path.of(System.getProperty("ocp.opencode.config.dir")).resolve("opencode.json");
+        Files.writeString(opencodeFile, "{\"alpha\":\"a1\",\"beta\":\"drift\",\"shared\":\"child\",\"local\":\"edit\"}");
+
+        CommandResult refreshResult = executeWithInput("2\n", "repository", "refresh", "repo-refresh-multi-parent");
+
+        assertEquals(1, refreshResult.exitCode());
+        assertTrue(refreshResult.stdout().contains("Local changes detected in merged active profile files for profile `child`"));
+        assertTrue(refreshResult.stderr().contains("Refresh cancelled"));
+        Map<String, Object> unchanged = readJsonMap(opencodeFile);
+        assertEquals("a1", unchanged.get("alpha"));
+        assertEquals("drift", unchanged.get("beta"));
+        assertEquals("child", unchanged.get("shared"));
+        assertEquals("edit", unchanged.get("local"));
+    }
+
     @Test
     void repositoryRefreshAllPromptsWhenMergedActiveProfileFilesHaveLocalChangesAndCanDiscardThenRefresh() throws IOException, InterruptedException {
         RemoteRepositoryState state = createRemoteInheritedProfileRepository("oca", "oca-personal");
@@ -1314,7 +1455,10 @@ class ProfileCommandTest {
     private Map<String, Object> readJsonMap(Path jsonPath) throws IOException {
         try (ApplicationContext context = ApplicationContext.run()) {
             ObjectMapper objectMapper = context.getBean(ObjectMapper.class);
-            return objectMapper.readValue(Files.readString(jsonPath), Map.class);
+            return objectMapper.readValue(
+                Files.readString(jsonPath),
+                Argument.mapOf(String.class, Object.class)
+            );
         }
     }
 
@@ -1378,6 +1522,65 @@ class ProfileCommandTest {
         runCommand(List.of("git", "-C", seedRepository.toString(), "push", "origin", "HEAD"));
 
         return new RemoteRepositoryState(remoteRepository.toUri().toString(), repositoriesCacheDir().resolve("repo-refresh"));
+    }
+
+
+    private RemoteRepositoryState createRemoteMultiParentProfileRepository() throws IOException, InterruptedException {
+        Path seedRepository = tempDir.resolve("seed-refresh-multi-parent");
+        runCommand(List.of("git", "init", seedRepository.toString()));
+        Files.createDirectories(seedRepository.resolve("parent-a"));
+        Files.createDirectories(seedRepository.resolve("parent-b"));
+        Files.createDirectories(seedRepository.resolve("child"));
+        Files.writeString(
+            seedRepository.resolve("repository.json"),
+            serializeAsJson(
+                new RepositoryConfigFile(
+                    List.of(
+                        new ProfileEntry("parent-a"),
+                        new ProfileEntry("parent-b"),
+                        new ProfileEntry("child", null, List.of("parent-a", "parent-b"))
+                    )
+                )
+            )
+        );
+        Files.writeString(seedRepository.resolve("parent-a").resolve("opencode.json"), "{\"alpha\":\"a1\"}");
+        Files.writeString(
+            seedRepository.resolve("parent-b").resolve("opencode.json"),
+            "{\"beta\":\"b1\",\"shared\":\"parent-b\"}"
+        );
+        Files.writeString(seedRepository.resolve("child").resolve("opencode.json"), "{\"shared\":\"child\"}");
+        runCommand(List.of(
+            "git",
+            "-C",
+            seedRepository.toString(),
+            "add",
+            "repository.json",
+            "parent-a/opencode.json",
+            "parent-b/opencode.json",
+            "child/opencode.json"
+        ));
+        runCommand(List.of(
+            "git",
+            "-C",
+            seedRepository.toString(),
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "user.name=test",
+            "commit",
+            "-m",
+            "seed"
+        ));
+
+        Path remoteRepository = tempDir.resolve("repo-refresh-multi-parent.git");
+        runCommand(List.of("git", "init", "--bare", remoteRepository.toString()));
+        runCommand(List.of("git", "-C", seedRepository.toString(), "remote", "add", "origin", remoteRepository.toString()));
+        runCommand(List.of("git", "-C", seedRepository.toString(), "push", "origin", "HEAD"));
+
+        return new RemoteRepositoryState(
+            remoteRepository.toUri().toString(),
+            repositoriesCacheDir().resolve("repo-refresh-multi-parent")
+        );
     }
 
     private RemoteRepositoryState createRemoteInheritedProfileRepository(String parent, String child) throws IOException, InterruptedException {

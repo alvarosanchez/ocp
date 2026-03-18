@@ -140,7 +140,7 @@ class HierarchyTreeBuilderTest {
         StyledElement<?> rendered = HierarchyTreeBuilder.renderTreeNode(
             node,
             Map.of("repo-a/active-profile", profile),
-            Map.of("repo-a/active-profile", "base-profile"),
+            Map.of("repo-a/active-profile", List.of("base-profile")),
             Map.of()
         );
 
@@ -157,6 +157,29 @@ class HierarchyTreeBuilderTest {
         assertEquals(Color.GREEN, spans.get(2).style().fg().orElseThrow());
         assertEquals(" \u2744", spans.get(3).content());
         assertEquals(Color.YELLOW, spans.get(3).style().fg().orElseThrow());
+    }
+
+
+    @Test
+    void renderTreeNodeRendersCommaSeparatedParentsInOrder() {
+        TreeNode<NodeRef> node = TreeNode.of(
+            "child",
+            NodeRef.profile("repo-a", "child", Path.of("/tmp/repo-a/child"))
+        );
+
+        StyledElement<?> rendered = HierarchyTreeBuilder.renderTreeNode(
+            node,
+            Map.of(),
+            Map.of("repo-a/child", List.of("parent-a", "parent-b")),
+            Map.of()
+        );
+
+        RichTextElement richText = assertInstanceOf(RichTextElement.class, rendered);
+        var spans = richText.text().lines().getFirst().spans();
+        assertEquals(2, spans.size());
+        assertEquals("👤 ", spans.get(0).content());
+        assertEquals("child ⇢ 👤 parent-a, parent-b", spans.get(1).content());
+        assertEquals(Color.BRIGHT_WHITE, spans.get(1).style().fg().orElseThrow());
     }
 
     @Test
@@ -263,7 +286,7 @@ class HierarchyTreeBuilderTest {
         List<TreeNode<NodeRef>> roots = HierarchyTreeBuilder.buildHierarchyTree(
             List.of(repository),
             List.of(),
-            Map.of("repo-a/child", "base"),
+            Map.of("repo-a/child", List.of("base")),
             4,
             20
         );
@@ -306,7 +329,7 @@ class HierarchyTreeBuilderTest {
         List<TreeNode<NodeRef>> roots = HierarchyTreeBuilder.buildHierarchyTree(
             List.of(repository),
             List.of(),
-            Map.of("repo-a/child", "base"),
+            Map.of("repo-a/child", List.of("base")),
             4,
             20
         );
@@ -349,7 +372,7 @@ class HierarchyTreeBuilderTest {
         List<TreeNode<NodeRef>> roots = HierarchyTreeBuilder.buildHierarchyTree(
             List.of(repository),
             List.of(),
-            Map.of("repo-a/child", "base"),
+            Map.of("repo-a/child", List.of("base")),
             4,
             20
         );
@@ -395,7 +418,7 @@ class HierarchyTreeBuilderTest {
         List<TreeNode<NodeRef>> roots = HierarchyTreeBuilder.buildHierarchyTree(
             List.of(childRepository, parentRepository),
             List.of(),
-            Map.of("repo-child/child", "base"),
+            Map.of("repo-child/child", List.of("base")),
             4,
             20
         );
@@ -416,4 +439,141 @@ class HierarchyTreeBuilderTest {
         assertEquals("base", inheritedFileNode.data().inheritedFromProfile());
         assertEquals(inheritedFile, inheritedFileNode.data().path());
     }
+
+    @Test
+    void buildHierarchyTreeMarksParentOnlyMergedJsonAsReadOnlyDeepMerged() throws IOException {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path baseProfilePath = repositoryPath.resolve("base");
+        Path childProfilePath = repositoryPath.resolve("child");
+        Path parentFile = baseProfilePath.resolve("opencode.jsonc");
+        Files.createDirectories(baseProfilePath);
+        Files.createDirectories(childProfilePath);
+        Files.writeString(parentFile, "{\"base\":true}");
+
+        ConfiguredRepository repository = new ConfiguredRepository(
+            "repo-a",
+            "git@example/repo-a.git",
+            repositoryPath.toString(),
+            List.of("base", "child")
+        );
+
+        List<TreeNode<NodeRef>> roots = HierarchyTreeBuilder.buildHierarchyTree(
+            List.of(repository),
+            List.of(),
+            Map.of("repo-a/child", List.of("base")),
+            4,
+            20
+        );
+
+        TreeNode<NodeRef> childProfileNode = roots.getFirst().children().stream()
+            .filter(node -> "child".equals(node.label()))
+            .findFirst()
+            .orElseThrow();
+        TreeNode<NodeRef> mergedFileNode = childProfileNode.children().stream()
+            .filter(node -> "opencode.jsonc".equals(node.label()))
+            .findFirst()
+            .orElseThrow();
+
+        assertEquals(parentFile, mergedFileNode.data().path());
+        assertTrue(mergedFileNode.data().inherited());
+        assertTrue(mergedFileNode.data().deepMerged());
+        assertTrue(mergedFileNode.data().readOnly());
+        assertEquals("base", mergedFileNode.data().inheritedFromProfile());
+        assertEquals(List.of("base"), mergedFileNode.data().contributorProfileNames());
+    }
+
+    @Test
+    void buildHierarchyTreePreservesDeclaredParentOrderInContributorList() throws IOException {
+        Path repositoryPath = tempDir.resolve("repo-order");
+        Path baseOnePath = repositoryPath.resolve("base-one");
+        Path baseTwoPath = repositoryPath.resolve("base-two");
+        Path childProfilePath = repositoryPath.resolve("child");
+        Path firstParentFile = baseOnePath.resolve("opencode.json");
+        Path secondParentFile = baseTwoPath.resolve("opencode.json");
+        Files.createDirectories(baseOnePath);
+        Files.createDirectories(baseTwoPath);
+        Files.createDirectories(childProfilePath);
+        Files.writeString(firstParentFile, "{}\n");
+        Files.writeString(secondParentFile, "{}\n");
+
+        ConfiguredRepository repository = new ConfiguredRepository(
+            "repo-order",
+            "git@example/repo-order.git",
+            repositoryPath.toString(),
+            List.of("base-one", "base-two", "child")
+        );
+
+        List<TreeNode<NodeRef>> roots = HierarchyTreeBuilder.buildHierarchyTree(
+            List.of(repository),
+            List.of(),
+            Map.of("repo-order/child", List.of("base-one", "base-two")),
+            4,
+            20
+        );
+
+        TreeNode<NodeRef> childProfileNode = roots.getFirst().children().stream()
+            .filter(node -> "child".equals(node.label()))
+            .findFirst()
+            .orElseThrow();
+        TreeNode<NodeRef> mergedFileNode = childProfileNode.children().stream()
+            .filter(node -> "opencode.json".equals(node.label()))
+            .findFirst()
+            .orElseThrow();
+
+        assertEquals(List.of("base-one", "base-two"), mergedFileNode.data().contributorProfileNames());
+        assertEquals("base-two", mergedFileNode.data().contributorProfileNames().get(1));
+    }
+
+    @Test
+    void buildHierarchyTreeOrdersNestedAncestorContributorsByDeclaredParentBranches() throws IOException {
+        Path repositoryPath = tempDir.resolve("repo-nested-order");
+        Path baseOneRootPath = repositoryPath.resolve("base-one-root");
+        Path baseOnePath = repositoryPath.resolve("base-one");
+        Path baseTwoRootPath = repositoryPath.resolve("base-two-root");
+        Path baseTwoPath = repositoryPath.resolve("base-two");
+        Path childPath = repositoryPath.resolve("child");
+        Path firstBranchContributor = baseOneRootPath.resolve("opencode.json");
+        Path secondBranchContributor = baseTwoRootPath.resolve("opencode.json");
+        Files.createDirectories(baseOneRootPath);
+        Files.createDirectories(baseOnePath);
+        Files.createDirectories(baseTwoRootPath);
+        Files.createDirectories(baseTwoPath);
+        Files.createDirectories(childPath);
+        Files.writeString(firstBranchContributor, "{}\n");
+        Files.writeString(secondBranchContributor, "{}\n");
+
+        ConfiguredRepository repository = new ConfiguredRepository(
+            "repo-nested-order",
+            "git@example/repo-nested-order.git",
+            repositoryPath.toString(),
+            List.of("base-one-root", "base-one", "base-two-root", "base-two", "child")
+        );
+
+        List<TreeNode<NodeRef>> roots = HierarchyTreeBuilder.buildHierarchyTree(
+            List.of(repository),
+            List.of(),
+            Map.of(
+                "repo-nested-order/base-one", List.of("base-one-root"),
+                "repo-nested-order/base-two", List.of("base-two-root"),
+                "repo-nested-order/child", List.of("base-one", "base-two")
+            ),
+            4,
+            20
+        );
+
+        TreeNode<NodeRef> childProfileNode = roots.getFirst().children().stream()
+            .filter(node -> "child".equals(node.label()))
+            .findFirst()
+            .orElseThrow();
+        TreeNode<NodeRef> mergedFileNode = childProfileNode.children().stream()
+            .filter(node -> "opencode.json".equals(node.label()))
+            .findFirst()
+            .orElseThrow();
+
+        assertTrue(mergedFileNode.data().readOnly());
+        assertTrue(mergedFileNode.data().parentOnlyMerged());
+        assertEquals(List.of("base-one-root", "base-two-root"), mergedFileNode.data().contributorProfileNames());
+        assertEquals(secondBranchContributor, mergedFileNode.data().path());
+    }
+
 }

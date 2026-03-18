@@ -17,7 +17,7 @@ final class TreeShortcutHints {
         boolean repositoryCommitPushAvailable,
         boolean editMode
     ) {
-        if (editMode && selectedNode != null && selectedNode.kind() == NodeKind.FILE && !selectedNode.inherited()) {
+        if (editMode && selectedNode != null && selectedNode.kind() == NodeKind.FILE && !selectedNode.readOnly()) {
             return new ShortcutHints(
                 NAVIGATION_SHORTCUTS,
                 List.of(Shortcut.SAVE_FILE, Shortcut.EXIT_EDIT_MODE)
@@ -90,7 +90,7 @@ final class TreeShortcutHints {
 
     private static List<Shortcut> fileActions(NodeRef selectedNode) {
         List<Shortcut> actions = new java.util.ArrayList<>();
-        if (!selectedNode.inherited()) {
+        if (!selectedNode.readOnly()) {
             actions.add(Shortcut.EDIT_FILE);
             actions.add(Shortcut.CREATE_FILE);
             actions.add(Shortcut.DELETE_FILE);

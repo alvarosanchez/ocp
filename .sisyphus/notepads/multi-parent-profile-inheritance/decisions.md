@@ -39,3 +39,8 @@
 39: - Kept the TUI change scoped to PromptState dynamic option fields plus InteractiveApp prompt advancement, leaving rendering/navigation untouched while delegating persistence to the existing list-based ProfileService API.
 40: - Interactive node metadata now preserves contributor profile names from tree resolution so later parent-navigation work can choose among immediate contributors without recomputing provenance in the UI layer.
 41: - Kept read-only edit blocking/status behavior unchanged; only shortcut visibility/gating was updated so deep-merged child-local files stay editable while inherited and parent-only merged file nodes hide/block edit.
+
+## 2026-03-17 — Task 13 verification sweep decisions
+
+- Kept the startup-migration subprocess assertions as JVM-only coverage with `@DisabledInNativeImage` instead of weakening their assertions or broadening production changes.
+- Added a defensive fallback in `OcpCommandTest.javaBinaryPath()` to resolve the current executable from `ProcessHandle` when `java.home` is unavailable, preserving robustness for JVM subprocess runs.

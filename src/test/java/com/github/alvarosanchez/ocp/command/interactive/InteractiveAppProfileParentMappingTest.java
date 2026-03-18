@@ -11,18 +11,18 @@ import org.junit.jupiter.api.Test;
 class InteractiveAppProfileParentMappingTest {
 
     @Test
-    void profileParentByNameSkipsBlankNamesAndTrimsValues() {
+    void profileParentByNameReturnsTrimmedOrderedParentLists() {
         RepositoryConfigFile repositoryConfig = new RepositoryConfigFile(
             List.of(
-                new ProfileEntry(null, null, " base "),
-                new ProfileEntry("   ", null, "base"),
-                new ProfileEntry("child", null, "   "),
-                new ProfileEntry(" child ", null, " parent ")
+                new ProfileEntry(null, null, List.of(" base ")),
+                new ProfileEntry("   ", null, List.of("base")),
+                new ProfileEntry("child", null, List.of()),
+                new ProfileEntry(" child ", null, List.of(" parent-a ", "parent-b "))
             )
         );
 
-        Map<String, String> parentByName = InteractiveApp.profileParentByName("repo-a", repositoryConfig);
+        Map<String, List<String>> parentByName = InteractiveApp.profileParentByName("repo-a", repositoryConfig);
 
-        assertEquals(Map.of("repo-a/child", "parent"), parentByName);
+        assertEquals(Map.of("repo-a/child", List.of("parent-a", "parent-b")), parentByName);
     }
 }

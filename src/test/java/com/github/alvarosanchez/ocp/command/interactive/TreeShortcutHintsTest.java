@@ -169,6 +169,60 @@ class TreeShortcutHintsTest {
     }
 
     @Test
+    void shortcutHintsOmitEditForReadOnlyMergedNode() {
+        TreeShortcutHints.ShortcutHints hints = TreeShortcutHints.forSelection(
+            NodeRef.mergedReadOnlyFile(
+                "repo",
+                "profile",
+                Path.of("/tmp/repo/parent.json"),
+                "parent",
+                List.of("base", "parent"),
+                List.of(Path.of("/tmp/repo/parent.json")),
+                true
+            ),
+            true,
+            true,
+            false,
+            false,
+            false
+        );
+
+        assertEquals(
+            List.of(
+                new TreeShortcutHints.Shortcut("y", "copy path"),
+                new TreeShortcutHints.Shortcut("u", "use profile"),
+                new TreeShortcutHints.Shortcut("p", "go parent"),
+                new TreeShortcutHints.Shortcut("r", "refresh repository")
+            ),
+            hints.actions()
+        );
+    }
+
+    @Test
+    void shortcutHintsKeepEditForChildLocalDeepMergedNode() {
+        TreeShortcutHints.ShortcutHints hints = TreeShortcutHints.forSelection(
+            NodeRef.deepMergedFile("repo", "profile", Path.of("/tmp/repo/profile/file.json")),
+            true,
+            false,
+            false,
+            false,
+            false
+        );
+
+        assertEquals(
+            List.of(
+                new TreeShortcutHints.Shortcut("e", "edit file"),
+                new TreeShortcutHints.Shortcut("f", "create file"),
+                new TreeShortcutHints.Shortcut("d", "delete file"),
+                new TreeShortcutHints.Shortcut("y", "copy path"),
+                new TreeShortcutHints.Shortcut("u", "use profile"),
+                new TreeShortcutHints.Shortcut("r", "refresh repository")
+            ),
+            hints.actions()
+        );
+    }
+
+    @Test
     void omitsMigrationHintForGitBackedRepository() {
         TreeShortcutHints.ShortcutHints hints = TreeShortcutHints.forSelection(
             NodeRef.repository("repo", Path.of("/tmp/repo")),

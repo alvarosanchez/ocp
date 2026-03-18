@@ -153,6 +153,40 @@ class InteractiveAppSelectionRefreshTest {
     }
 
     @Test
+    void navigateToParentFromMultiParentProfileSelectsLastDeclaredParent() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path baseOnePath = repositoryPath.resolve("base-one");
+        Path baseTwoPath = repositoryPath.resolve("base-two");
+        Path childProfilePath = repositoryPath.resolve("child");
+        Files.createDirectories(baseOnePath);
+        Files.createDirectories(baseTwoPath);
+        Files.createDirectories(childProfilePath);
+        Files.writeString(
+            repositoryPath.resolve("repository.json"),
+            "{\"profiles\":[{\"name\":\"base-one\"},{\"name\":\"base-two\"},{\"name\":\"child\",\"extends_from\":[\"base-one\",\"base-two\"]}]}"
+        );
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = createApp();
+        invokeReloadState(app);
+        selectTreeNode(app, node -> node.kind() == NodeKind.PROFILE && "child".equals(node.profileName()));
+        invokeSyncSelectionAndPreview(app);
+
+        Method method = InteractiveApp.class.getDeclaredMethod("navigateToParentProfile");
+        method.setAccessible(true);
+        method.invoke(app);
+
+        Field selectedNodeField = InteractiveApp.class.getDeclaredField("selectedNode");
+        selectedNodeField.setAccessible(true);
+        NodeRef selectedNode = (NodeRef) selectedNodeField.get(app);
+        assertEquals("base-two", selectedNode.profileName());
+
+        Field statusField = InteractiveApp.class.getDeclaredField("status");
+        statusField.setAccessible(true);
+        assertEquals("Selected parent profile base-two.", (String) statusField.get(app));
+    }
+
+    @Test
     void selectedFilePreviewCanHoldStyledText() throws Exception {
         InteractiveApp app = createApp();
         Text styledPreview = new AnsiTextParser().parse("\u001B[31mred\u001B[0m");
@@ -206,6 +240,7 @@ class InteractiveAppSelectionRefreshTest {
         Files.writeString(baseProfilePath.resolve("opencode.json"), "{\"base\":{\"enabled\":true},\"shared\":1}");
         Files.writeString(filePath, "{\"child\":{\"enabled\":true},\"shared\":2}");
         writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+        Path batFixture = createBatFixtureThatRequiresFullPath(tempDir.resolve("bat-fixture-deep-merged"), filePath);
 
         InteractiveApp app = new InteractiveApp(
             applicationContext.getBean(ProfileService.class),
@@ -213,7 +248,7 @@ class InteractiveAppSelectionRefreshTest {
             applicationContext.getBean(OnboardingService.class),
             applicationContext.getBean(RepositoryPostCreationService.class),
             objectMapper,
-            new FakeBatPreviewRenderer(new AnsiTextParser().parse("\u001B[31mmerged-styled\u001B[0m"))
+            new BatPreviewRenderer(batFixture.toString())
         );
         invokeReloadState(app);
         setBatAvailable(app, true);
@@ -222,6 +257,38 @@ class InteractiveAppSelectionRefreshTest {
 
         Text preview = readSelectedFilePreview(app);
         assertEquals("merged-styled", preview.lines().getFirst().spans().getFirst().content());
+        assertEquals(Color.indexed(1), preview.lines().getFirst().spans().getFirst().style().fg().orElseThrow());
+    }
+
+    @Test
+    void refreshSelectedFilePreviewUsesResolvedDeepMergedStateWhenSelectionMetadataIsStale() throws Exception {
+        Path repositoryPath = tempDir.resolve("repo-a");
+        Path baseProfilePath = repositoryPath.resolve("base");
+        Path childProfilePath = repositoryPath.resolve("child");
+        Path filePath = childProfilePath.resolve("opencode.json");
+        Files.createDirectories(baseProfilePath);
+        Files.createDirectories(childProfilePath);
+        Files.writeString(repositoryPath.resolve("repository.json"), "{\"profiles\":[{\"name\":\"base\"},{\"name\":\"child\",\"extends_from\":\"base\"}]}");
+        Files.writeString(baseProfilePath.resolve("opencode.json"), "{\"base\":{\"enabled\":true},\"shared\":1}");
+        Files.writeString(filePath, "{\"child\":{\"enabled\":true},\"shared\":2}");
+        writeConfig(new RepositoryEntry("repo-a", null, repositoryPath.toString()));
+
+        InteractiveApp app = new InteractiveApp(
+            applicationContext.getBean(ProfileService.class),
+            applicationContext.getBean(RepositoryService.class),
+            applicationContext.getBean(OnboardingService.class),
+            applicationContext.getBean(RepositoryPostCreationService.class),
+            objectMapper,
+            new FakeBatPreviewRenderer(new AnsiTextParser().parse("\u001B[31mresolved-merged-styled\u001B[0m"))
+        );
+        invokeReloadState(app);
+        setBatAvailable(app, true);
+        setSelectedNode(app, NodeRef.file("repo-a", "child", filePath));
+
+        invokeRefreshSelectedFilePreview(app);
+
+        Text preview = readSelectedFilePreview(app);
+        assertEquals("resolved-merged-styled", preview.lines().getFirst().spans().getFirst().content());
         assertEquals(Color.indexed(1), preview.lines().getFirst().spans().getFirst().style().fg().orElseThrow());
     }
 
@@ -510,6 +577,12 @@ class InteractiveAppSelectionRefreshTest {
         method.invoke(app);
     }
 
+    private static void invokeRefreshSelectedFilePreview(InteractiveApp app) throws Exception {
+        Method method = InteractiveApp.class.getDeclaredMethod("refreshSelectedFilePreview");
+        method.setAccessible(true);
+        method.invoke(app);
+    }
+
     private static void invokeRestoreConfigEditReturnSelection(InteractiveApp app, NodeRef nodeRef) throws Exception {
         Method method = InteractiveApp.class.getDeclaredMethod("restoreConfigEditReturnSelection", NodeRef.class);
         method.setAccessible(true);
@@ -556,16 +629,6 @@ class InteractiveAppSelectionRefreshTest {
         Field field = InteractiveApp.class.getDeclaredField("editorState");
         field.setAccessible(true);
         return ((dev.tamboui.widgets.input.TextAreaState) field.get(app)).text();
-    }
-
-    private static String flattenText(Text text) {
-        StringBuilder builder = new StringBuilder();
-        for (var line : text.lines()) {
-            for (var span : line.spans()) {
-                builder.append(span.content());
-            }
-        }
-        return builder.toString();
     }
 
     private static String previewPlainText(Text text) {
@@ -668,6 +731,28 @@ class InteractiveAppSelectionRefreshTest {
         boolean probeAvailability() {
             return true;
         }
+    }
+
+    private static Path createBatFixtureThatRequiresFullPath(Path scriptPath, Path expectedFilePath) throws IOException {
+        String escapedPath = expectedFilePath.toAbsolutePath().normalize().toString().replace("\\", "\\\\").replace("\"", "\\\"");
+        String script = "#!/bin/sh\n"
+            + "expected=\"" + escapedPath + "\"\n"
+            + "file_name=\"\"\n"
+            + "while [ $# -gt 0 ]; do\n"
+            + "  if [ \"$1\" = \"--file-name\" ]; then\n"
+            + "    shift\n"
+            + "    file_name=\"$1\"\n"
+            + "  fi\n"
+            + "  shift\n"
+            + "done\n"
+            + "if [ \"$file_name\" != \"$expected\" ]; then\n"
+            + "  exit 64\n"
+            + "fi\n"
+            + "cat >/dev/null\n"
+            + "printf '\\033[31mmerged-styled\\033[0m\\n'\n";
+        Files.writeString(scriptPath, script);
+        scriptPath.toFile().setExecutable(true);
+        return scriptPath;
     }
 
     private static void restoreProperty(String key, String value) {

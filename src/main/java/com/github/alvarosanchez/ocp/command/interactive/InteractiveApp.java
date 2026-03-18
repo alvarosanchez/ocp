@@ -38,14 +38,17 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalInt;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -78,6 +81,7 @@ public final class InteractiveApp extends ToolkitApp {
     private static final String REFRESH_CANCELLED_MESSAGE = "Refresh cancelled. Local changes were left untouched.";
     private static final String STATUS_SELECT_NODE_FIRST = "Select a repository, profile, or file first.";
     private static final String STATUS_INHERITED_FILE_READ_ONLY = "Inherited file is read-only and cannot be edited.";
+    private static final String STATUS_MERGED_PARENT_FILE_READ_ONLY = "Merged parent file preview is read-only and cannot be edited.";
     private static final String STATUS_CONFIG_FILE_UNAVAILABLE = "OCP config file does not exist yet. Add or create a repository first.";
     private static final String STATUS_FILE_DELETE_CANCELLED_MISMATCH = "Delete cancelled: file name mismatch.";
     private static final String ERROR_REPOSITORY_SELECTION_REQUIRED = "Repository selection is required.";
@@ -144,7 +148,7 @@ public final class InteractiveApp extends ToolkitApp {
     private List<ConfiguredRepository> repositories = List.of();
     private List<TreeNode<NodeRef>> hierarchyRoots = List.of();
     private Map<String, Profile> profilesByName = Map.of();
-    private Map<String, String> profileParentByName = Map.of();
+    private Map<String, List<String>> profileParentByName = Map.of();
     private Map<String, RepositoryDirtyState> repositoryDirtyStateByName = Map.of();
 
     private Pane activePane = Pane.TREE;
@@ -169,6 +173,7 @@ public final class InteractiveApp extends ToolkitApp {
     private RepositoryCommitPushPreview selectedRepositoryCommitPushPreview;
     private String selectedFileContent = "";
     private String selectedFilePreviewContent = "";
+    private boolean selectedFilePreviewDeepMerged;
     private Text selectedFilePreview = DetailPaneRenderer.plainText("");
     private List<String> splashLogoLines = DEFAULT_SPLASH_LOGO_LINES;
     private boolean editMode;
@@ -472,8 +477,8 @@ public final class InteractiveApp extends ToolkitApp {
         }
         if (event.isChar('e')) {
             if (selectedNode != null && selectedNode.kind() == NodeKind.FILE) {
-                if (selectedNode.inherited()) {
-                    status = STATUS_INHERITED_FILE_READ_ONLY;
+                if (selectedNode.readOnly()) {
+                    status = selectedNode.parentOnlyMerged() ? STATUS_MERGED_PARENT_FILE_READ_ONLY : STATUS_INHERITED_FILE_READ_ONLY;
                     return EventResult.HANDLED;
                 }
                 editMode = true;
@@ -535,6 +540,9 @@ public final class InteractiveApp extends ToolkitApp {
             return EventResult.HANDLED;
         }
         if (event.isConfirm()) {
+            if (advanceCreateProfilePromptIfNeeded()) {
+                return EventResult.HANDLED;
+            }
             if (prompt.nextField()) {
                 return EventResult.HANDLED;
             }
@@ -606,13 +614,13 @@ public final class InteractiveApp extends ToolkitApp {
                     if (repositoryName == null || repositoryName.isBlank()) {
                         throw new IllegalStateException(ERROR_REPOSITORY_SELECTION_REQUIRED);
                     }
-                    String parentProfileName = currentPrompt.values.get(1);
                     String profileName = currentPrompt.values.getFirst();
+                    List<String> parentProfileNames = selectedParentProfileNames(currentPrompt);
                     runBusyOperation(
                         "Creating profile " + profileName + "...",
                         () -> {
-                            profileService.createProfile(profileName, repositoryName, parentProfileName);
-                            if (parentProfileName == null || parentProfileName.isBlank()) {
+                            profileService.createProfile(profileName, repositoryName, parentProfileNames);
+                            if (parentProfileNames.isEmpty()) {
                                 return "Created profile " + profileName + " in repository " + repositoryName + ".";
                             }
                             return "Created profile "
@@ -620,7 +628,7 @@ public final class InteractiveApp extends ToolkitApp {
                                 + " in repository "
                                 + repositoryName
                                 + " extending from "
-                                + parentProfileName
+                                + String.join(", ", parentProfileNames)
                                 + ".";
                         },
                         () -> selectCreatedProfile(repositoryName, profileName)
@@ -854,10 +862,10 @@ public final class InteractiveApp extends ToolkitApp {
             status = "Select a file first.";
             return;
         }
-        if (selectedNode.inherited()) {
-            status = STATUS_INHERITED_FILE_READ_ONLY;
-            return;
-        }
+            if (selectedNode.readOnly()) {
+                status = selectedNode.parentOnlyMerged() ? STATUS_MERGED_PARENT_FILE_READ_ONLY : STATUS_INHERITED_FILE_READ_ONLY;
+                return;
+            }
         prompt = PromptState.single(
             PromptAction.DELETE_FILE,
             "Delete file",
@@ -949,6 +957,7 @@ public final class InteractiveApp extends ToolkitApp {
             if (pendingCreatedFilePath != null) {
                 selectedFileContent = "";
                 selectedFilePreviewContent = "";
+                selectedFilePreviewDeepMerged = false;
                 selectedFilePreview = DetailPaneRenderer.plainText("");
                 editorState.setText("");
                 editMode = true;
@@ -969,12 +978,13 @@ public final class InteractiveApp extends ToolkitApp {
         if (selectedNode == null || selectedNode.kind() != NodeKind.FILE) {
             return;
         }
-        if (selectedNode.inherited()) {
-            status = STATUS_INHERITED_FILE_READ_ONLY;
+        if (selectedNode.readOnly()) {
+            status = selectedNode.parentOnlyMerged() ? STATUS_MERGED_PARENT_FILE_READ_ONLY : STATUS_INHERITED_FILE_READ_ONLY;
             return;
         }
         selectedFileContent = fileContent;
         selectedFilePreviewContent = fileContent;
+        selectedFilePreviewDeepMerged = false;
         selectedFilePreview = DetailPaneRenderer.plainText(fileContent);
         previewScrollOffset = 0;
         editorState.setText(fileContent);
@@ -1001,8 +1011,8 @@ public final class InteractiveApp extends ToolkitApp {
             status = STATUS_FILE_DELETE_CANCELLED_MISMATCH;
             return;
         }
-        if (selectedNode.inherited()) {
-            status = STATUS_INHERITED_FILE_READ_ONLY;
+        if (selectedNode.readOnly()) {
+            status = selectedNode.parentOnlyMerged() ? STATUS_MERGED_PARENT_FILE_READ_ONLY : STATUS_INHERITED_FILE_READ_ONLY;
             return;
         }
         String repositoryName = selectedNode.repositoryName();
@@ -1072,6 +1082,7 @@ public final class InteractiveApp extends ToolkitApp {
         selectedNode = null;
         selectedFileContent = null;
         selectedFilePreviewContent = null;
+        selectedFilePreviewDeepMerged = false;
         selectedFilePreview = null;
         activePane = Pane.TREE;
         if (runner() != null) {
@@ -1352,17 +1363,64 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     private static PromptState buildCreateProfilePrompt(String repositoryName, List<String> resolvableProfileNames) {
-        List<String> parentOptions = new ArrayList<>();
-        parentOptions.add("");
-        parentOptions.addAll(resolvableProfileNames);
+        List<String> parentOptions = buildCreateProfileParentOptions(resolvableProfileNames, List.of());
         PromptState prompt = PromptState.multiWithOptions(
             PromptAction.CREATE_PROFILE,
             "Create profile",
-            List.of("Profile name", "Extends from profile (optional)"),
-            List.of(List.of(), parentOptions)
+            new ArrayList<>(List.of("Profile name", "Extends from profile (optional)")),
+            new ArrayList<>(List.of(List.of(), parentOptions))
         );
         prompt.contextRepositoryName = repositoryName;
+        prompt.baseParentOptions = List.copyOf(resolvableProfileNames);
         return prompt;
+    }
+
+
+    private boolean advanceCreateProfilePromptIfNeeded() {
+        if (prompt == null || prompt.action != PromptAction.CREATE_PROFILE) {
+            return false;
+        }
+        if (prompt.currentField != prompt.labels.size() - 1) {
+            return false;
+        }
+        if (!prompt.currentFieldHasOptions()) {
+            return false;
+        }
+        String selectedParentProfileName = prompt.currentValue();
+        if (selectedParentProfileName == null || selectedParentProfileName.isBlank()) {
+            return false;
+        }
+        List<String> selectedParentProfileNames = selectedParentProfileNames(prompt);
+        List<String> nextParentOptions = buildCreateProfileParentOptions(prompt.baseParentOptions, selectedParentProfileNames);
+        prompt.appendOptionField("Extends from profile (optional)", nextParentOptions);
+        prompt.currentField = prompt.labels.size() - 1;
+        return true;
+    }
+
+    private static List<String> selectedParentProfileNames(PromptState prompt) {
+        if (prompt.values.size() <= 1) {
+            return List.of();
+        }
+        List<String> selectedParentProfileNames = new ArrayList<>();
+        for (int index = 1; index < prompt.values.size(); index++) {
+            String parentProfileName = prompt.values.get(index);
+            if (parentProfileName == null || parentProfileName.isBlank()) {
+                continue;
+            }
+            selectedParentProfileNames.add(parentProfileName);
+        }
+        return List.copyOf(selectedParentProfileNames);
+    }
+
+    private static List<String> buildCreateProfileParentOptions(List<String> resolvableProfileNames, List<String> selectedParentProfileNames) {
+        List<String> parentOptions = new ArrayList<>();
+        parentOptions.add("");
+        for (String profileName : resolvableProfileNames) {
+            if (!selectedParentProfileNames.contains(profileName)) {
+                parentOptions.add(profileName);
+            }
+        }
+        return List.copyOf(parentOptions);
     }
 
     private static PromptState buildDeleteRepositoryPrompt(String repositoryName, RepositoryService.RepositoryDeletePreview deletePreview) {
@@ -1590,8 +1648,8 @@ public final class InteractiveApp extends ToolkitApp {
         );
     }
 
-    private Map<String, String> loadProfileParentByName() {
-        Map<String, String> parentByName = new HashMap<>();
+    private Map<String, List<String>> loadProfileParentByName() {
+        Map<String, List<String>> parentByName = new HashMap<>();
         for (ConfiguredRepository repository : repositories) {
             Path metadataFile = Path.of(repository.localPath()).resolve(REPOSITORY_METADATA_FILE);
             if (!Files.exists(metadataFile) || !Files.isRegularFile(metadataFile)) {
@@ -1607,15 +1665,15 @@ public final class InteractiveApp extends ToolkitApp {
         return Map.copyOf(parentByName);
     }
 
-    static Map<String, String> profileParentByName(String repositoryName, RepositoryConfigFile repositoryConfig) {
-        Map<String, String> parentByName = new HashMap<>();
+    static Map<String, List<String>> profileParentByName(String repositoryName, RepositoryConfigFile repositoryConfig) {
+        Map<String, List<String>> parentByName = new HashMap<>();
         for (RepositoryConfigFile.ProfileEntry profileEntry : repositoryConfig.profiles()) {
             String profileName = profileEntry.name() == null ? "" : profileEntry.name().trim();
-            String parentProfileName = profileEntry.extendsFrom() == null ? "" : profileEntry.extendsFrom().trim();
-            if (profileName.isBlank() || parentProfileName.isBlank()) {
+            List<String> parentProfileNames = profileEntry.extendsFromProfiles();
+            if (profileName.isBlank() || parentProfileNames.isEmpty()) {
                 continue;
             }
-            parentByName.put(profileKey(repositoryName, profileName), parentProfileName);
+            parentByName.put(profileKey(repositoryName, profileName), parentProfileNames);
         }
         return Map.copyOf(parentByName);
     }
@@ -1667,6 +1725,7 @@ public final class InteractiveApp extends ToolkitApp {
             refreshSelectedRepositoryCommitPushPreview();
             selectedFileContent = "";
             selectedFilePreviewContent = "";
+            selectedFilePreviewDeepMerged = false;
             selectedFilePreview = DetailPaneRenderer.plainText("");
             editorState.setText("");
             return;
@@ -1889,7 +1948,7 @@ public final class InteractiveApp extends ToolkitApp {
         if (!filePath.equals(selectedNode.path())) {
             return;
         }
-        String currentPreviewKey = buildPreviewKey(selectedNode.path(), selectedFilePreviewContent, selectedNode.deepMerged());
+        String currentPreviewKey = buildPreviewKey(selectedNode.path(), selectedFilePreviewContent, selectedFilePreviewDeepMerged);
         if (!Objects.equals(previewKey, currentPreviewKey)) {
             return;
         }
@@ -1914,13 +1973,15 @@ public final class InteractiveApp extends ToolkitApp {
         if (selectedNode == null || selectedNode.kind() != NodeKind.FILE || selectedNode.path() == null) {
             return;
         }
-        if (selectedNode.inherited()) {
-            status = STATUS_INHERITED_FILE_READ_ONLY;
+        if (selectedNode.readOnly()) {
+                    status = selectedNode.parentOnlyMerged() ? STATUS_MERGED_PARENT_FILE_READ_ONLY : STATUS_INHERITED_FILE_READ_ONLY;
             return;
         }
         NodeRef savedSelection = selectedNode;
         NodeRef returnSelection = configEditReturnSelection;
         Path filePath = selectedNode.path();
+        String editedProfileName = selectedNode.profileName();
+        String activeProfileNameToReapply = activeProfileNameToReapplyForEditedProfile(editedProfileName);
         boolean reloadAfterSave = isOcpConfigFile(filePath);
         runBusyOperation(
             "Saving " + filePath.getFileName() + "...",
@@ -1929,6 +1990,9 @@ public final class InteractiveApp extends ToolkitApp {
                     Files.writeString(filePath, editorState.text());
                 } catch (IOException e) {
                     throw new IllegalStateException("Failed to save file " + filePath + ".", e);
+                }
+                if (activeProfileNameToReapply != null) {
+                    profileService.useProfile(activeProfileNameToReapply);
                 }
             },
             "Saved " + filePath.getFileName() + ".",
@@ -1955,6 +2019,62 @@ public final class InteractiveApp extends ToolkitApp {
         );
     }
 
+    private String activeProfileNameToReapplyForEditedProfile(String editedProfileName) {
+        if (editedProfileName == null || editedProfileName.isBlank()) {
+            return null;
+        }
+        Profile activeProfile = activeProfile();
+        if (activeProfile == null) {
+            return null;
+        }
+        if (activeProfile.name().equals(editedProfileName)) {
+            return activeProfile.name();
+        }
+        return activeProfileDependsOn(activeProfile, editedProfileName) ? activeProfile.name() : null;
+    }
+
+    private Profile activeProfile() {
+        for (Profile profile : profiles) {
+            if (profile.active()) {
+                return profile;
+            }
+        }
+        return null;
+    }
+
+    private boolean activeProfileDependsOn(Profile activeProfile, String editedProfileName) {
+        String activeProfileKey = profileKey(activeProfile.repositoryName(), activeProfile.name());
+        Set<String> visited = new HashSet<>();
+        ArrayDeque<String> pending = new ArrayDeque<>();
+        pending.add(activeProfileKey);
+        while (!pending.isEmpty()) {
+            String currentProfileKey = pending.removeFirst();
+            if (!visited.add(currentProfileKey)) {
+                continue;
+            }
+            List<String> parentProfileNames = profileParentByName.getOrDefault(currentProfileKey, List.of());
+            for (String parentProfileName : parentProfileNames) {
+                if (editedProfileName.equals(parentProfileName)) {
+                    return true;
+                }
+                String parentProfileKey = profileKeyForName(parentProfileName);
+                if (parentProfileKey != null) {
+                    pending.addLast(parentProfileKey);
+                }
+            }
+        }
+        return false;
+    }
+
+    private String profileKeyForName(String profileName) {
+        for (Profile profile : profiles) {
+            if (profileName.equals(profile.name())) {
+                return profileKey(profile.repositoryName(), profile.name());
+            }
+        }
+        return null;
+    }
+
 
 
     private void restoreConfigEditReturnSelection(NodeRef returnSelection) {
@@ -1962,6 +2082,7 @@ public final class InteractiveApp extends ToolkitApp {
             selectedNode = null;
             selectedFileContent = "";
             selectedFilePreviewContent = "";
+            selectedFilePreviewDeepMerged = false;
             selectedFilePreview = DetailPaneRenderer.plainText("");
             editorState.setText("");
             previewScrollOffset = 0;
@@ -1981,6 +2102,7 @@ public final class InteractiveApp extends ToolkitApp {
         } else {
             selectedFileContent = "";
             selectedFilePreviewContent = "";
+            selectedFilePreviewDeepMerged = false;
             selectedFilePreview = DetailPaneRenderer.plainText("");
             editorState.setText("");
             refreshSelectedRepositoryCommitPushPreview();
@@ -1999,6 +2121,7 @@ public final class InteractiveApp extends ToolkitApp {
             selectedNode = NodeRef.file(null, null, configFile);
             selectedFileContent = Files.readString(configFile);
             selectedFilePreviewContent = selectedFileContent;
+            selectedFilePreviewDeepMerged = false;
             selectedFilePreview = DetailPaneRenderer.plainText(selectedFileContent);
             previewScrollOffset = 0;
             editorState.setText(selectedFileContent);
@@ -2084,7 +2207,40 @@ public final class InteractiveApp extends ToolkitApp {
         String profileName = selectedProfileName();
         return repositoryName != null
             && profileName != null
-            && profileParentByName.containsKey(profileKey(repositoryName, profileName));
+            && !profileParentByName.getOrDefault(profileKey(repositoryName, profileName), List.of()).isEmpty();
+    }
+
+    private String immediateParentProfileName(String repositoryName, String profileName) {
+        List<String> parentProfileNames = profileParentByName.get(profileKey(repositoryName, profileName));
+        if (parentProfileNames == null || parentProfileNames.isEmpty()) {
+            return null;
+        }
+        return parentProfileNames.getLast();
+    }
+
+    private String immediateContributorProfileName(NodeRef node) {
+        if (node == null) {
+            return null;
+        }
+        if (!node.readOnly()) {
+            return null;
+        }
+        List<String> contributorProfileNames = node.contributorProfileNames();
+        if (contributorProfileNames == null || contributorProfileNames.isEmpty()) {
+            return null;
+        }
+        return contributorProfileNames.getLast();
+    }
+
+    private Path immediateContributorPath(NodeRef node) {
+        if (node == null) {
+            return null;
+        }
+        List<Path> contributorSourcePaths = node.contributorSourcePaths();
+        if (contributorSourcePaths == null || contributorSourcePaths.isEmpty()) {
+            return null;
+        }
+        return contributorSourcePaths.get(contributorSourcePaths.size() - 1);
     }
 
     private void navigateToParentProfile() {
@@ -2095,9 +2251,12 @@ public final class InteractiveApp extends ToolkitApp {
             return;
         }
 
-        String parentProfileName = selectedNode != null && selectedNode.inherited()
-            ? selectedNode.inheritedFromProfile()
-            : profileParentByName.get(profileKey(repositoryName, profileName));
+        String contributorParentName = selectedNode != null && selectedNode.kind() == NodeKind.FILE
+            ? immediateContributorProfileName(selectedNode)
+            : null;
+        String parentProfileName = contributorParentName != null
+            ? contributorParentName
+            : immediateParentProfileName(repositoryName, profileName);
         if (parentProfileName == null || parentProfileName.isBlank()) {
             status = "Profile " + profileName + " does not extend another profile.";
             return;
@@ -2109,12 +2268,14 @@ public final class InteractiveApp extends ToolkitApp {
             return;
         }
 
+        Path parentFilePath = immediateContributorPath(selectedNode);
         boolean selectingInheritedParentFile = selectedNode != null
             && selectedNode.kind() == NodeKind.FILE
-            && selectedNode.inherited()
             && selectedNode.path() != null
-            && selectedNode.profileName() != null;
-        Path inheritedParentPath = selectingInheritedParentFile ? selectedNode.path() : null;
+            && selectedNode.profileName() != null
+            && parentFilePath != null
+            && selectedNode.readOnly();
+        Path inheritedParentPath = selectingInheritedParentFile ? parentFilePath : null;
         boolean selectedParent = selectingInheritedParentFile
             ? selectNode(node -> node.kind() == NodeKind.FILE
                 && parentRepositoryName.equals(node.repositoryName())
@@ -2130,6 +2291,7 @@ public final class InteractiveApp extends ToolkitApp {
                 : "Parent profile " + parentProfileName + " was not found in the tree.";
             return;
         }
+
 
         syncSelectionAndPreview();
         if (runner() != null) {
@@ -2291,6 +2453,7 @@ public final class InteractiveApp extends ToolkitApp {
         if (selectedNode == null || selectedNode.kind() != NodeKind.FILE || selectedNode.path() == null) {
             selectedFileContent = "";
             selectedFilePreviewContent = "";
+            selectedFilePreviewDeepMerged = false;
             selectedFilePreview = DetailPaneRenderer.plainText("");
             editorState.setText("");
             return;
@@ -2304,18 +2467,21 @@ public final class InteractiveApp extends ToolkitApp {
             String resolvedPreviewContent = resolvedPreview.content();
             selectedFileContent = loadedFileContent;
             selectedFilePreviewContent = resolvedPreviewContent;
+            selectedFilePreviewDeepMerged = resolvedPreview.deepMerged();
             selectedFilePreview = DetailPaneRenderer.plainText(selectedFilePreviewContent);
             requestBatPreview(selectedNode.path(), selectedFilePreviewContent, resolvedPreview.deepMerged());
             editorState.setText(selectedFileContent);
         } catch (IOException e) {
             selectedFileContent = "";
             selectedFilePreviewContent = "";
+            selectedFilePreviewDeepMerged = false;
             selectedFilePreview = DetailPaneRenderer.plainText("");
             editorState.setText("");
             status = "Error loading file: " + e.getMessage();
         } catch (RuntimeException e) {
             selectedFileContent = "";
             selectedFilePreviewContent = "";
+            selectedFilePreviewDeepMerged = false;
             selectedFilePreview = DetailPaneRenderer.plainText("");
             editorState.setText("");
             status = "Error loading file: " + e.getMessage();
@@ -2347,7 +2513,7 @@ public final class InteractiveApp extends ToolkitApp {
             runner().runOnRenderThread(() -> {
                 batAvailable = available;
                 if (available && selectedNode != null && selectedNode.kind() == NodeKind.FILE && selectedNode.path() != null) {
-                    requestBatPreview(selectedNode.path(), selectedFilePreviewContent, selectedNode.deepMerged());
+                    requestBatPreview(selectedNode.path(), selectedFilePreviewContent, selectedFilePreviewDeepMerged);
                 }
             });
         } else {
@@ -3118,6 +3284,11 @@ public final class InteractiveApp extends ToolkitApp {
         lastSyncedTreeSelection = -1;
         syncSelectionAndPreview();
         return selectedNode != null && predicate.test(selectedNode);
+    }
+
+
+    boolean testAdvanceCreateProfilePromptIfNeeded() {
+        return advanceCreateProfilePromptIfNeeded();
     }
 
     String testRefreshAllCompletionMessage() {
