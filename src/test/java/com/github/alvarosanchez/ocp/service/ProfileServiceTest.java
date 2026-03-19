@@ -853,6 +853,25 @@ class ProfileServiceTest {
         assertEquals(List.of("work"), profiles.stream().map(Profile::name).toList());
     }
 
+    @Test
+    void useProfileWithDetailsTreatsAlreadyLinkedActiveProfileAsProcessed() throws IOException {
+        writeRepositoryMetadata("repo-local", new RepositoryConfigFile(List.of(new ProfileEntry("corporate"))));
+        Path sourceProfileDir = repositoriesRootDirectory().resolve("repo-local").resolve("corporate");
+        Files.createDirectories(sourceProfileDir);
+        Files.writeString(sourceProfileDir.resolve("opencode.json"), "{\"profile\":\"corporate\"}");
+        writeConfig(List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null)));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        ProfileService.ProfileSwitchResult firstSwitch = profileService.useProfileWithDetails("corporate");
+        ProfileService.ProfileSwitchResult secondSwitch = profileService.useProfileWithDetails("corporate");
+
+        assertTrue(firstSwitch.changedFiles());
+        assertTrue(!secondSwitch.changedFiles());
+        assertEquals(0, secondSwitch.linkedFiles());
+        assertEquals(0, secondSwitch.removedFiles());
+        assertEquals(0, secondSwitch.backedUpFiles());
+    }
+
     private Path repositoriesRootDirectory() {
         String configuredCacheDir = System.getProperty("ocp.cache.dir");
         if (configuredCacheDir != null && !configuredCacheDir.isBlank()) {
