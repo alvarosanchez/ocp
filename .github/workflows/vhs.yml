@@ -1,0 +1,59 @@
+name: VHS Demo
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/vhs.yml'
+      - 'docs/demo/**'
+      - 'src/main/java/com/github/alvarosanchez/ocp/command/OcpCommand.java'
+      - 'src/main/java/com/github/alvarosanchez/ocp/command/interactive/**'
+      - 'src/main/java/com/github/alvarosanchez/ocp/service/**'
+      - 'build.gradle.kts'
+  pull_request:
+    paths:
+      - '.github/workflows/vhs.yml'
+      - 'docs/demo/**'
+      - 'src/main/java/com/github/alvarosanchez/ocp/command/OcpCommand.java'
+      - 'src/main/java/com/github/alvarosanchez/ocp/command/interactive/**'
+      - 'src/main/java/com/github/alvarosanchez/ocp/service/**'
+      - 'build.gradle.kts'
+
+permissions:
+  contents: read
+
+jobs:
+  render-demo:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+
+      - name: Set up Oracle GraalVM for JDK 25
+        uses: graalvm/setup-graalvm@v1
+        with:
+          distribution: 'graalvm'
+          java-version: '25'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: gradle
+
+      - name: Build native executable
+        run: ./gradlew --no-daemon nativeCompile
+
+      - name: Install VHS dependencies
+        run: |
+          sudo mkdir -p /etc/apt/keyrings
+          curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+          echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
+          sudo apt-get update
+          sudo apt-get install -y vhs ffmpeg bat ttyd bsdutils
+
+      - name: Render interactive demo
+        run: vhs docs/demo/interactive-mode.tape
+
+      - name: Upload rendered GIF
+        uses: actions/upload-artifact@v4
+        with:
+          name: interactive-mode-demo
+          path: docs/demo/interactive-mode.gif

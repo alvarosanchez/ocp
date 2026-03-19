@@ -33,6 +33,10 @@
   If <strong>ocp</strong> is useful to you, please consider <a href="https://github.com/alvarosanchez/ocp/stargazers">starring the repository</a>. It helps more developers discover the project.
 </p>
 
+<p align="center">
+  <img alt="Interactive mode demo" src="docs/demo/interactive-mode.gif" />
+</p>
+
 ---
 
 ## Why developers use `ocp`

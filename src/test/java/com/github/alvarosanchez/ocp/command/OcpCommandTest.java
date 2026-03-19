@@ -36,6 +36,7 @@ class OcpCommandTest {
     @AfterEach
     void resetStartupNotice() {
         Cli.consumeStartupNotice();
+        System.clearProperty(OcpCommand.VERSION_CHECK_DISABLE_PROPERTY);
     }
 
     @Test
@@ -183,6 +184,35 @@ class OcpCommandTest {
         assertTrue(OcpCommand.shouldDeferVersionNoticeToInteractiveUi(new String[0], true));
         assertFalse(OcpCommand.shouldDeferVersionNoticeToInteractiveUi(new String[] {"help"}, true));
         assertFalse(OcpCommand.shouldDeferVersionNoticeToInteractiveUi(new String[0], false));
+    }
+
+    @Test
+    void startupVersionCheckCanBeDisabledBySystemProperty() {
+        System.setProperty(OcpCommand.VERSION_CHECK_DISABLE_PROPERTY, "true");
+
+        assertTrue(OcpCommand.isStartupVersionCheckDisabled());
+    }
+
+    @Test
+    void startupVersionCheckTreatsCommonFalsyValuesAsDisabledFalse() {
+        System.setProperty(OcpCommand.VERSION_CHECK_DISABLE_PROPERTY, "false");
+
+        assertFalse(OcpCommand.isStartupVersionCheckDisabled());
+    }
+
+    @Test
+    @DisabledInNativeImage
+    void helpInvocationUsesEnvironmentConfigDirectoryOverride(@TempDir Path tempDir) throws Exception {
+        Path configDir = tempDir.resolve("env-config");
+        Files.createDirectories(configDir);
+
+        CommandResult result = executeMainWithStartupEnvironmentOverride(tempDir, configDir, "help");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("Usage: ocp"));
+        assertTrue(Files.exists(configDir.resolve("config.json")) || Files.notExists(configDir.resolve("config.json")));
+        assertFalse(result.stderr().contains(Path.of(System.getProperty("user.home"), ".config", "ocp", "config.json").toString()));
+        assertTrue(result.stderr().isBlank() || result.stderr().contains(configDir.resolve("config.json").toString()) || !result.stderr().contains("Could not check for newer ocp releases."));
     }
 
     @Test
@@ -348,6 +378,29 @@ class OcpCommandTest {
         return new CommandResult(exitCode, stdout, stderr);
     }
 
+    private static CommandResult executeMainWithStartupEnvironmentOverride(Path tempDir, Path configDir, String... args) throws IOException, InterruptedException {
+        if (System.getProperty("org.graalvm.nativeimage.imagecode") != null) {
+            throw new UnsupportedOperationException("Subprocess startup migration assertions are not supported inside native test images");
+        }
+
+        List<String> command = new java.util.ArrayList<>();
+        command.add(javaBinaryPath());
+        command.add("-Docp.cache.dir=" + tempDir.resolve("ocp-cache"));
+        command.add("-Duser.home=" + tempDir.resolve("home"));
+        command.add("-cp");
+        command.add(System.getProperty("java.class.path"));
+        command.add(OcpCommand.class.getName());
+        command.addAll(List.of(args));
+
+        ProcessBuilder processBuilder = new ProcessBuilder(command);
+        processBuilder.environment().put(com.github.alvarosanchez.ocp.service.OcpPathSettings.CONFIG_DIR_ENV, configDir.toString());
+        Process process = processBuilder.start();
+        String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
+        int exitCode = process.waitFor();
+        return new CommandResult(exitCode, stdout, stderr);
+    }
+
     private static String javaBinaryPath() {
         String javaHome = System.getProperty("java.home");
         if (javaHome != null && !javaHome.isBlank()) {
@@ -359,6 +412,14 @@ class OcpCommandTest {
             .command()
             .orElseThrow(() -> new IllegalStateException("Cannot resolve current Java executable path"));
         return Path.of(javaCommand).toString();
+    }
+
+    private static void restoreProperty(String key, String value) {
+        if (value == null) {
+            System.clearProperty(key);
+        } else {
+            System.setProperty(key, value);
+        }
     }
 
     private static String serializeAsJson(Object value) throws IOException {

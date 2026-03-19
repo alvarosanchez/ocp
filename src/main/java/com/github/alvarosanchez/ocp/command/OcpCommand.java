@@ -34,6 +34,9 @@ import picocli.CommandLine.Command;
 )
 public class OcpCommand implements Runnable {
 
+    static final String VERSION_CHECK_DISABLE_PROPERTY = "ocp.noVersionCheck";
+    static final String VERSION_CHECK_DISABLE_ENV = "OCP_NO_VERSION_CHECK";
+
     private final ProfileService profileService;
     private final RepositoryService repositoryService;
     private final OnboardingService onboardingService;
@@ -105,6 +108,9 @@ public class OcpCommand implements Runnable {
     }
 
     static void runStartupVersionCheck(ApplicationContext context, String[] args) {
+        if (isStartupVersionCheckDisabled()) {
+            return;
+        }
         try {
             VersionCheckService.VersionCheckResult result = context.getBean(VersionCheckService.class).check();
             presentStartupVersionNotice(args, result.noticeMessage(), isInteractiveTerminal());
@@ -116,6 +122,22 @@ public class OcpCommand implements Runnable {
             }
             Cli.warning(message);
         }
+    }
+
+    static boolean isStartupVersionCheckDisabled() {
+        return isTruthy(System.getProperty(VERSION_CHECK_DISABLE_PROPERTY))
+            || isTruthy(System.getenv(VERSION_CHECK_DISABLE_ENV));
+    }
+
+    private static boolean isTruthy(String value) {
+        if (value == null) {
+            return false;
+        }
+        String normalizedValue = value.trim();
+        return "1".equals(normalizedValue)
+            || "true".equalsIgnoreCase(normalizedValue)
+            || "yes".equalsIgnoreCase(normalizedValue)
+            || "on".equalsIgnoreCase(normalizedValue);
     }
 
     static String startupVersionCheckFailureMessage(RuntimeException exception) {
@@ -144,7 +166,7 @@ public class OcpCommand implements Runnable {
     }
 
     private static Path resolvedConfigFilePath() {
-        String configuredPath = System.getProperty("ocp.config.dir");
+        String configuredPath = com.github.alvarosanchez.ocp.service.OcpPathSettings.configuredPath(com.github.alvarosanchez.ocp.service.OcpPathSettings.CONFIG_DIR_PROPERTY, com.github.alvarosanchez.ocp.service.OcpPathSettings.CONFIG_DIR_ENV);
         if (configuredPath != null && !configuredPath.isBlank()) {
             return Path.of(configuredPath).resolve("config.json");
         }
