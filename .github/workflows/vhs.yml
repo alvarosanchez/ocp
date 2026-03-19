@@ -2,14 +2,6 @@ name: VHS Demo
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/vhs.yml'
-      - 'docs/demo/**'
-      - 'src/main/java/com/github/alvarosanchez/ocp/command/OcpCommand.java'
-      - 'src/main/java/com/github/alvarosanchez/ocp/command/interactive/**'
-      - 'src/main/java/com/github/alvarosanchez/ocp/service/**'
-      - 'build.gradle.kts'
   pull_request:
     paths:
       - '.github/workflows/vhs.yml'
