@@ -49,15 +49,22 @@ class CliTest {
 
     @Test
     void infoWithCodeHighlightsPrintsPlainMessageWhenAnsiIsDisabled() {
-        Cli.init();
+        String previousAnsiProp = System.getProperty("picocli.ansi");
+        System.setProperty("picocli.ansi", "false");
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         PrintStream originalOut = System.out;
 
         try {
+            Cli.init();
             System.setOut(new PrintStream(output));
             Cli.infoWithCodeHighlights("Version 1.2.3 available");
         } finally {
             System.setOut(originalOut);
+            if (previousAnsiProp == null) {
+                System.clearProperty("picocli.ansi");
+            } else {
+                System.setProperty("picocli.ansi", previousAnsiProp);
+            }
         }
 
         assertTrue(output.toString().contains("Version 1.2.3 available"));

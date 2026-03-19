@@ -1,33 +1,41 @@
 package com.github.alvarosanchez.ocp.command.interactive;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 class InteractiveClipboardTest {
 
-    private final String originalOsName = System.getProperty("os.name");
+    @Test
+    void clipboardUnavailableMessageForLinuxMentionsWlCopyXclipAndXsel() {
+        String message = InteractiveClipboard.clipboardUnavailableMessage("linux");
 
-    @AfterEach
-    void restoreOsName() {
-        if (originalOsName == null) {
-            System.clearProperty("os.name");
-        } else {
-            System.setProperty("os.name", originalOsName);
-        }
+        assertTrue(message.contains("wl-copy"));
+        assertTrue(message.contains("xclip"));
+        assertTrue(message.contains("xsel"));
     }
 
     @Test
-    void copyFallsBackToLinuxClipboardGuidanceForUnknownOperatingSystems() {
-        System.setProperty("os.name", "Plan9");
+    void clipboardUnavailableMessageForUnknownOsMentionsLinuxTools() {
+        String message = InteractiveClipboard.clipboardUnavailableMessage("plan9");
 
-        IllegalStateException thrown = assertThrows(IllegalStateException.class, () -> InteractiveClipboard.copy("value"));
+        assertTrue(message.contains("wl-copy"));
+        assertTrue(message.contains("xclip"));
+        assertTrue(message.contains("xsel"));
+    }
 
-        assertTrue(thrown.getMessage().contains("wl-copy"));
-        assertTrue(thrown.getMessage().contains("xclip"));
-        assertTrue(thrown.getMessage().contains("xsel"));
+    @Test
+    void clipboardUnavailableMessageForMacMentionsPbcopy() {
+        String message = InteractiveClipboard.clipboardUnavailableMessage("mac os x");
+
+        assertTrue(message.contains("pbcopy"));
+    }
+
+    @Test
+    void clipboardUnavailableMessageForWindowsMentionsClip() {
+        String message = InteractiveClipboard.clipboardUnavailableMessage("windows 10");
+
+        assertTrue(message.contains("clip"));
     }
 
 }
