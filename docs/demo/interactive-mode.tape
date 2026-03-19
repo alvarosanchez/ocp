@@ -9,8 +9,8 @@ Require bat
 
 Set Shell "bash"
 Set FontSize 26
-Set Width 2970
-Set Height 1890
+Set Width 2400
+Set Height 1530
 Set TypingSpeed 90ms
 Set Framerate 18
 Set PlaybackSpeed 1.0
