@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.micronaut.application)
     alias(libs.plugins.graalvm.native)
     alias(libs.plugins.test.logger)
+    jacoco
 }
 
 val defaultVersion = "0.1.0"
@@ -62,6 +63,24 @@ java {
 
 tasks.test {
     useJUnitPlatform()
+    finalizedBy(tasks.jacocoTestReport)
+}
+
+jacoco {
+    toolVersion = "0.8.13"
+}
+
+val jacocoTestReport by tasks.existing(JacocoReport::class) {
+    dependsOn(tasks.test)
+    reports {
+        csv.required.set(true)
+        xml.required.set(true)
+        html.required.set(true)
+    }
+}
+
+tasks.check {
+    dependsOn(jacocoTestReport)
 }
 
 val generateVersionResource by tasks.registering {

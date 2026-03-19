@@ -31,3 +31,37 @@ jobs:
 
       - name: Run native tests
         run: ./gradlew --no-daemon nativeTest
+
+  coverage-badge:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+
+      - name: Set up Oracle GraalVM for JDK 25
+        uses: graalvm/setup-graalvm@v1
+        with:
+          distribution: "graalvm"
+          java-version: "25"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: gradle
+
+      - name: Run tests and JaCoCo report
+        run: ./gradlew --no-daemon test jacocoTestReport
+
+      - name: Generate JaCoCo badge
+        uses: cicirello/jacoco-badge-generator@v2.11.0
+        with:
+          generate-branches-badge: false
+          jacoco-csv-file: build/reports/jacoco/test/jacocoTestReport.csv
+          badges-directory: .github/badges
+
+      - name: Commit coverage badge
+        uses: stefanzweifel/git-auto-commit-action@v6
+        with:
+          commit_message: 'docs: update coverage badge'
+          file_pattern: .github/badges/jacoco.svg

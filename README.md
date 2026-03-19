@@ -14,6 +14,7 @@
   <a href="https://github.com/alvarosanchez/ocp/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/alvarosanchez/ocp?style=flat-square" /></a>
   <a href="https://github.com/alvarosanchez/ocp/releases"><img alt="GitHub downloads" src="https://img.shields.io/github/downloads/alvarosanchez/ocp/total?style=flat-square" /></a>
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" /></a>
+  <img alt="Coverage" src=".github/badges/jacoco.svg" />
   <img alt="Java 25" src="https://img.shields.io/badge/java-25-f89820" />
   <img alt="Micronaut 4.x" src="https://img.shields.io/badge/micronaut-4.x-5e81f4" />
 </p>
@@ -102,6 +103,12 @@ The README is intentionally a landing page. Detailed documentation is planned fo
 - **Docs site:** _Planned for GitHub Pages_
 - **Product spec:** [`SPEC.md`](SPEC.md)
 - **License:** [`LICENSE`](LICENSE)
+
+## Code coverage
+
+- Run `./gradlew test jacocoTestReport` to generate coverage reports.
+- Open the HTML report at `build/reports/jacoco/test/html/index.html`.
+- The README badge is generated in CI by `cicirello/jacoco-badge-generator` and committed to `.github/badges/jacoco.svg`.
 
 ## Built for developers
 
