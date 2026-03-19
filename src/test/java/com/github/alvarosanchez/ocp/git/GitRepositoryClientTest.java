@@ -210,6 +210,20 @@ class GitRepositoryClientTest {
     }
 
     @Test
+    void localDiffTruncatesCapturedOutputWithoutFailingOnLargeDiffs() {
+        String largeDiff = "x".repeat(80_000);
+        StubProcessExecutor processExecutor = new StubProcessExecutor(List.of(new StubProcess(0, largeDiff)));
+        Path localPath = tempDir.resolve("repositories/repo-nine-large");
+
+        GitRepositoryClient client = new GitRepositoryClient(processExecutor);
+
+        String diff = client.localDiff(localPath);
+
+        assertEquals(64 * 1024, diff.length());
+        assertEquals(largeDiff.substring(0, 64 * 1024), diff);
+    }
+
+    @Test
     void discardLocalChangesRunsResetAndClean() {
         StubProcessExecutor processExecutor = new StubProcessExecutor(
             List.of(new StubProcess(0, ""), new StubProcess(0, ""))

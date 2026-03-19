@@ -1,6 +1,8 @@
 package com.github.alvarosanchez.ocp.git;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import jakarta.inject.Singleton;
@@ -262,18 +264,35 @@ public final class GitRepositoryClient {
     private String runAndCaptureBounded(Path localPath, String operation, List<String> command, int maxBytes) {
         try {
             Process process = processExecutor.start(command);
-            byte[] outputBytes = process.getInputStream().readNBytes(maxBytes);
+            String output = readOutputBounded(process.getInputStream(), maxBytes);
             int exitCode = process.waitFor();
             if (exitCode != 0) {
                 throw new IllegalStateException("git " + operation + " failed for " + localPath + " (exit code " + exitCode + ")");
             }
-            return new String(outputBytes, StandardCharsets.UTF_8);
+            return output;
         } catch (IOException e) {
             throw new IllegalStateException("Failed to run git " + operation + " in repository " + localPath, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while running git " + operation + " in repository " + localPath, e);
         }
+    }
+
+    private String readOutputBounded(InputStream inputStream, int maxBytes) throws IOException {
+        ByteArrayOutputStream capturedOutput = new ByteArrayOutputStream(Math.min(maxBytes, 8192));
+        byte[] buffer = new byte[8192];
+        int capturedBytes = 0;
+        int read;
+        while ((read = inputStream.read(buffer)) != -1) {
+            int remainingBytes = maxBytes - capturedBytes;
+            if (remainingBytes <= 0) {
+                continue;
+            }
+            int bytesToCapture = Math.min(read, remainingBytes);
+            capturedOutput.write(buffer, 0, bytesToCapture);
+            capturedBytes += bytesToCapture;
+        }
+        return capturedOutput.toString(StandardCharsets.UTF_8);
     }
 
     private String runAndCaptureAllowingExitCode(Path localPath, String operation, List<String> command, int... allowedExitCodes) {
