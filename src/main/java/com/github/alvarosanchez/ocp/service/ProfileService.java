@@ -696,7 +696,7 @@ public final class ProfileService {
         if (!Files.isSymbolicLink(targetFile)) {
             return false;
         }
-        if (!Files.readSymbolicLink(targetFile).equals(desiredSymlinkTarget)) {
+        if (!resolveSymlinkTarget(targetFile).equals(desiredSymlinkTarget.toAbsolutePath().normalize())) {
             return false;
         }
         for (Path occupiedTarget : occupiedTargetFiles(relativePath, targetDirectory)) {
@@ -1102,8 +1102,12 @@ public final class ProfileService {
             return List.of();
         }
 
-        List<Path> allowedSourceRoots = new ArrayList<>();
+        java.util.LinkedHashSet<Path> allowedSourceRoots = new java.util.LinkedHashSet<>();
         allowedSourceRoots.add(resolvedProfileDirectory(profileName).toAbsolutePath().normalize());
+        DiscoveredProfile activeProfile = profilesByName.get(profileName);
+        if (activeProfile != null) {
+            allowedSourceRoots.add(profilePathFor(activeProfile).toAbsolutePath().normalize());
+        }
         for (DiscoveredProfile discoveredProfile : profileLineageFor(profileName, profilesByName)) {
             allowedSourceRoots.add(profilePathFor(discoveredProfile).toAbsolutePath().normalize());
         }
@@ -1111,7 +1115,7 @@ public final class ProfileService {
         try (var paths = Files.walk(targetDirectory)) {
             return paths
                 .filter(Files::isSymbolicLink)
-                .map(path -> toCurrentlyLinkedProfileFile(targetDirectory, path, allowedSourceRoots))
+                .map(path -> toCurrentlyLinkedProfileFile(targetDirectory, path, List.copyOf(allowedSourceRoots)))
                 .filter(java.util.Objects::nonNull)
                 .sorted(Comparator.comparing(file -> file.relativePath().toString()))
                 .toList();
@@ -1122,7 +1126,7 @@ public final class ProfileService {
 
     private ResolvedProfileFile toCurrentlyLinkedProfileFile(Path targetDirectory, Path targetFile, List<Path> allowedSourceRoots) {
         try {
-            Path symlinkTarget = Files.readSymbolicLink(targetFile).toAbsolutePath().normalize();
+            Path symlinkTarget = resolveSymlinkTarget(targetFile);
             for (Path allowedSourceRoot : allowedSourceRoots) {
                 if (symlinkTarget.startsWith(allowedSourceRoot)) {
                     return new ResolvedProfileFile(targetDirectory.relativize(targetFile), symlinkTarget);
@@ -1132,6 +1136,18 @@ public final class ProfileService {
         } catch (IOException e) {
             throw new IllegalStateException("Failed to inspect linked profile file " + targetFile, e);
         }
+    }
+
+    private Path resolveSymlinkTarget(Path targetFile) throws IOException {
+        Path symlinkTarget = Files.readSymbolicLink(targetFile);
+        if (symlinkTarget.isAbsolute()) {
+            return symlinkTarget.normalize();
+        }
+        Path targetParent = targetFile.getParent();
+        if (targetParent == null) {
+            return symlinkTarget.toAbsolutePath().normalize();
+        }
+        return targetParent.resolve(symlinkTarget).toAbsolutePath().normalize();
     }
 
     private String normalizeOptionalProfileName(String profileName) {

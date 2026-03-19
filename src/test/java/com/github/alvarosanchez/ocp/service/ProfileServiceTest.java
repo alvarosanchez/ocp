@@ -1,6 +1,7 @@
 package com.github.alvarosanchez.ocp.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -863,13 +864,24 @@ class ProfileServiceTest {
         profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
 
         ProfileService.ProfileSwitchResult firstSwitch = profileService.useProfileWithDetails("corporate");
+        replaceWithRelativeSymlink(openCodeFile(), sourceProfileDir.resolve("opencode.json"));
         ProfileService.ProfileSwitchResult secondSwitch = profileService.useProfileWithDetails("corporate");
 
         assertTrue(firstSwitch.changedFiles());
-        assertTrue(!secondSwitch.changedFiles());
+        assertFalse(secondSwitch.changedFiles());
         assertEquals(0, secondSwitch.linkedFiles());
         assertEquals(0, secondSwitch.removedFiles());
         assertEquals(0, secondSwitch.backedUpFiles());
+    }
+
+    private Path openCodeFile() {
+        return Path.of(System.getProperty("ocp.opencode.config.dir")).resolve("opencode.json");
+    }
+
+    private void replaceWithRelativeSymlink(Path targetFile, Path sourceFile) throws IOException {
+        Files.deleteIfExists(targetFile);
+        Path relativeTarget = targetFile.getParent().relativize(sourceFile.toAbsolutePath());
+        Files.createSymbolicLink(targetFile, relativeTarget);
     }
 
     private Path repositoriesRootDirectory() {
