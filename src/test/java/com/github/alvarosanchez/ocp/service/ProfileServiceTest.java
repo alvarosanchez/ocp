@@ -874,6 +874,31 @@ class ProfileServiceTest {
         assertEquals(0, secondSwitch.backedUpFiles());
     }
 
+    @Test
+    void useProfileRemovesPreviousRelativeSymlinkWhenSwitchingProfiles() throws IOException {
+        writeRepositoryMetadata(
+            "repo-local",
+            new RepositoryConfigFile(List.of(new ProfileEntry("corporate"), new ProfileEntry("oss")))
+        );
+        Path repositoryDir = repositoriesRootDirectory().resolve("repo-local");
+        Path corporateDir = repositoryDir.resolve("corporate");
+        Path ossDir = repositoryDir.resolve("oss");
+        Files.createDirectories(corporateDir);
+        Files.createDirectories(ossDir);
+        Path corporateFile = corporateDir.resolve("opencode.json");
+        Files.writeString(corporateFile, "{\"profile\":\"corporate\"}");
+        writeConfig(List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null)));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        profileService.useProfileWithDetails("corporate");
+        replaceWithRelativeSymlink(openCodeFile(), corporateFile);
+
+        ProfileService.ProfileSwitchResult switchResult = profileService.useProfileWithDetails("oss");
+
+        assertEquals(1, switchResult.removedFiles());
+        assertFalse(Files.exists(openCodeFile(), java.nio.file.LinkOption.NOFOLLOW_LINKS));
+    }
+
     private Path openCodeFile() {
         return Path.of(System.getProperty("ocp.opencode.config.dir")).resolve("opencode.json");
     }

@@ -605,7 +605,7 @@ public final class ProfileService {
                 }
 
                 Path currentSymlinkTarget = Files.readSymbolicLink(targetFile);
-                if (!currentSymlinkTarget.equals(previousSourceFile.sourcePath().toAbsolutePath())) {
+                if (!resolveSymlinkTarget(targetFile).equals(previousSourceFile.sourcePath().toAbsolutePath().normalize())) {
                     continue;
                 }
 
