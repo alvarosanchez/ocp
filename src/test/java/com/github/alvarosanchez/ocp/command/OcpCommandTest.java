@@ -203,6 +203,16 @@ class OcpCommandTest {
 
     @Test
     @DisabledInNativeImage
+    void helpInvocationUsesEnvironmentVariableToDisableStartupVersionCheck(@TempDir Path tempDir) throws Exception {
+        CommandResult result = executeMainWithEnvironmentVariable(tempDir, OcpCommand.VERSION_CHECK_DISABLE_ENV, "true", "help");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("Usage: ocp"));
+        assertEquals("", result.stderr());
+    }
+
+    @Test
+    @DisabledInNativeImage
     void helpInvocationUsesEnvironmentConfigDirectoryOverride(@TempDir Path tempDir) throws Exception {
         Path configDir = tempDir.resolve("env-config");
         Files.createDirectories(configDir);
@@ -396,6 +406,29 @@ class OcpCommandTest {
 
         ProcessBuilder processBuilder = new ProcessBuilder(command);
         processBuilder.environment().put(OcpPathSettings.CONFIG_DIR_ENV, configDir.toString());
+        Process process = processBuilder.start();
+        String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
+        int exitCode = process.waitFor();
+        return new CommandResult(exitCode, stdout, stderr);
+    }
+
+    private static CommandResult executeMainWithEnvironmentVariable(Path tempDir, String envName, String envValue, String... args) throws IOException, InterruptedException {
+        if (System.getProperty("org.graalvm.nativeimage.imagecode") != null) {
+            throw new UnsupportedOperationException("Subprocess startup migration assertions are not supported inside native test images");
+        }
+
+        List<String> command = new java.util.ArrayList<>();
+        command.add(javaBinaryPath());
+        command.add("-Docp.cache.dir=" + tempDir.resolve("ocp-cache"));
+        command.add("-Duser.home=" + tempDir.resolve("home"));
+        command.add("-cp");
+        command.add(System.getProperty("java.class.path"));
+        command.add(OcpCommand.class.getName());
+        command.addAll(List.of(args));
+
+        ProcessBuilder processBuilder = new ProcessBuilder(command);
+        processBuilder.environment().put(envName, envValue);
         Process process = processBuilder.start();
         String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
