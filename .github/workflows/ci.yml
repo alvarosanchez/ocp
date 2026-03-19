@@ -54,7 +54,7 @@ jobs:
         run: ./gradlew --no-daemon test jacocoTestReport
 
       - name: Generate JaCoCo badge
-        uses: cicirello/jacoco-badge-generator@v2.11.0
+        uses: cicirello/jacoco-badge-generator@v2.12.1
         with:
           generate-branches-badge: false
           jacoco-csv-file: build/reports/jacoco/test/jacocoTestReport.csv
