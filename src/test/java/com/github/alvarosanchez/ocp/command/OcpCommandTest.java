@@ -11,6 +11,7 @@ import com.github.alvarosanchez.ocp.config.OcpConfigFile;
 import com.github.alvarosanchez.ocp.config.OcpConfigFile.OcpConfigOptions;
 import com.github.alvarosanchez.ocp.config.OcpConfigFile.RepositoryEntry;
 import com.github.alvarosanchez.ocp.service.OnboardingService;
+import com.github.alvarosanchez.ocp.service.OcpPathSettings;
 import com.github.alvarosanchez.ocp.service.ProfileService;
 import com.github.alvarosanchez.ocp.service.RepositoryPostCreationService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
@@ -210,9 +211,8 @@ class OcpCommandTest {
 
         assertEquals(0, result.exitCode());
         assertTrue(result.stdout().contains("Usage: ocp"));
-        assertTrue(Files.exists(configDir.resolve("config.json")) || Files.notExists(configDir.resolve("config.json")));
-        assertFalse(result.stderr().contains(Path.of(System.getProperty("user.home"), ".config", "ocp", "config.json").toString()));
-        assertTrue(result.stderr().isBlank() || result.stderr().contains(configDir.resolve("config.json").toString()) || !result.stderr().contains("Could not check for newer ocp releases."));
+        assertEquals("", result.stderr());
+        assertFalse(Files.exists(tempDir.resolve("home").resolve(".config").resolve("ocp").resolve("config.json")));
     }
 
     @Test
@@ -365,6 +365,7 @@ class OcpCommandTest {
         command.add(javaBinaryPath());
         command.add("-Docp.config.dir=" + tempDir.resolve("ocp-config"));
         command.add("-Docp.cache.dir=" + tempDir.resolve("ocp-cache"));
+        command.add("-D" + OcpCommand.VERSION_CHECK_DISABLE_PROPERTY + "=true");
         command.add("-Duser.home=" + tempDir.resolve("home"));
         command.add("-cp");
         command.add(System.getProperty("java.class.path"));
@@ -386,6 +387,7 @@ class OcpCommandTest {
         List<String> command = new java.util.ArrayList<>();
         command.add(javaBinaryPath());
         command.add("-Docp.cache.dir=" + tempDir.resolve("ocp-cache"));
+        command.add("-D" + OcpCommand.VERSION_CHECK_DISABLE_PROPERTY + "=true");
         command.add("-Duser.home=" + tempDir.resolve("home"));
         command.add("-cp");
         command.add(System.getProperty("java.class.path"));
@@ -393,7 +395,7 @@ class OcpCommandTest {
         command.addAll(List.of(args));
 
         ProcessBuilder processBuilder = new ProcessBuilder(command);
-        processBuilder.environment().put(com.github.alvarosanchez.ocp.service.OcpPathSettings.CONFIG_DIR_ENV, configDir.toString());
+        processBuilder.environment().put(OcpPathSettings.CONFIG_DIR_ENV, configDir.toString());
         Process process = processBuilder.start();
         String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
@@ -412,14 +414,6 @@ class OcpCommandTest {
             .command()
             .orElseThrow(() -> new IllegalStateException("Cannot resolve current Java executable path"));
         return Path.of(javaCommand).toString();
-    }
-
-    private static void restoreProperty(String key, String value) {
-        if (value == null) {
-            System.clearProperty(key);
-        } else {
-            System.setProperty(key, value);
-        }
     }
 
     private static String serializeAsJson(Object value) throws IOException {

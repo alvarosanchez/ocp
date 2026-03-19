@@ -48,6 +48,7 @@ jobs:
           echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
           sudo apt-get update
           sudo apt-get install -y vhs ffmpeg bat ttyd bsdutils
+          sudo ln -sf /usr/bin/batcat /usr/local/bin/bat
 
       - name: Render interactive demo
         run: vhs docs/demo/interactive-mode.tape

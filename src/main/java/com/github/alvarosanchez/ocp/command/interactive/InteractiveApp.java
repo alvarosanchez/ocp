@@ -4,6 +4,7 @@ import com.github.alvarosanchez.ocp.command.OcpVersionProvider;
 import com.github.alvarosanchez.ocp.config.OcpConfigFile.RepositoryEntry;
 import com.github.alvarosanchez.ocp.config.RepositoryConfigFile;
 import com.github.alvarosanchez.ocp.command.Cli;
+import com.github.alvarosanchez.ocp.service.OcpPathSettings;
 import com.github.alvarosanchez.ocp.git.GitHubRepositoryClient.RepositoryVisibility;
 import com.github.alvarosanchez.ocp.model.Profile;
 import com.github.alvarosanchez.ocp.service.OnboardingService;
@@ -2144,7 +2145,7 @@ public final class InteractiveApp extends ToolkitApp {
     }
 
     private Path ocpConfigFilePath() {
-        String configuredPath = com.github.alvarosanchez.ocp.service.OcpPathSettings.configuredPath(com.github.alvarosanchez.ocp.service.OcpPathSettings.CONFIG_DIR_PROPERTY, com.github.alvarosanchez.ocp.service.OcpPathSettings.CONFIG_DIR_ENV);
+        String configuredPath = OcpPathSettings.configuredPath(OcpPathSettings.CONFIG_DIR_PROPERTY, OcpPathSettings.CONFIG_DIR_ENV);
         if (configuredPath != null && !configuredPath.isBlank()) {
             return Path.of(configuredPath).resolve("config.json");
         }

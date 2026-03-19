@@ -6,6 +6,7 @@ import com.github.alvarosanchez.ocp.service.ProfileService;
 import com.github.alvarosanchez.ocp.service.RepositoryMetadataMigrationService;
 import com.github.alvarosanchez.ocp.service.RepositoryPostCreationService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
+import com.github.alvarosanchez.ocp.service.OcpPathSettings;
 import com.github.alvarosanchez.ocp.service.VersionCheckService;
 import io.micronaut.configuration.picocli.MicronautFactory;
 import io.micronaut.context.ApplicationContext;
@@ -166,7 +167,7 @@ public class OcpCommand implements Runnable {
     }
 
     private static Path resolvedConfigFilePath() {
-        String configuredPath = com.github.alvarosanchez.ocp.service.OcpPathSettings.configuredPath(com.github.alvarosanchez.ocp.service.OcpPathSettings.CONFIG_DIR_PROPERTY, com.github.alvarosanchez.ocp.service.OcpPathSettings.CONFIG_DIR_ENV);
+        String configuredPath = OcpPathSettings.configuredPath(OcpPathSettings.CONFIG_DIR_PROPERTY, OcpPathSettings.CONFIG_DIR_ENV);
         if (configuredPath != null && !configuredPath.isBlank()) {
             return Path.of(configuredPath).resolve("config.json");
         }
