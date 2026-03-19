@@ -298,7 +298,7 @@ public final class RepositoryService {
             }
 
             String content = configWriter.writeRepositoryConfig(new RepositoryConfigFile(profiles));
-            Files.writeString(repositoryPath.resolve("repository.json"), content);
+            AtomicFileWriter.write(repositoryPath.resolve("repository.json"), content);
             return repositoryPath;
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to create repository at " + repositoryPath, e);
@@ -373,8 +373,7 @@ public final class RepositoryService {
 
     void saveConfig(OcpConfigFile configFile) {
         try {
-            Files.createDirectories(configDirectory());
-            Files.writeString(repositoriesFile(), configWriter.writeConfig(configFile));
+            AtomicFileWriter.write(repositoriesFile(), configWriter.writeConfig(configFile));
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write repository registry", e);
         }
