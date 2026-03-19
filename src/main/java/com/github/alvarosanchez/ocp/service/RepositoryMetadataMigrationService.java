@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 
 @Singleton
 public final class RepositoryMetadataMigrationService {
@@ -39,38 +38,9 @@ public final class RepositoryMetadataMigrationService {
             if (!migration.migrated()) {
                 return;
             }
-            writeAtomically(metadataFile, migration.content());
+            AtomicFileWriter.write(metadataFile, migration.content());
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to migrate repository metadata at " + metadataFile, e);
-        }
-    }
-
-    private void writeAtomically(Path metadataFile, String content) throws IOException {
-        Path parent = metadataFile.getParent();
-        if (parent == null) {
-            Files.writeString(metadataFile, content);
-            return;
-        }
-
-        Path temporaryFile = Files.createTempFile(parent, metadataFile.getFileName().toString(), ".tmp");
-        boolean moved = false;
-        try {
-            Files.writeString(temporaryFile, content);
-            try {
-                Files.move(
-                    temporaryFile,
-                    metadataFile,
-                    StandardCopyOption.REPLACE_EXISTING,
-                    StandardCopyOption.ATOMIC_MOVE
-                );
-            } catch (IOException atomicMoveFailure) {
-                Files.move(temporaryFile, metadataFile, StandardCopyOption.REPLACE_EXISTING);
-            }
-            moved = true;
-        } finally {
-            if (!moved) {
-                Files.deleteIfExists(temporaryFile);
-            }
         }
     }
 }

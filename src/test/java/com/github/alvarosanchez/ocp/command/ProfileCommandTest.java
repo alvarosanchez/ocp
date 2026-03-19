@@ -300,6 +300,30 @@ class ProfileCommandTest {
     }
 
     @Test
+    void useReportsProcessedNoticeWhenReusingAlreadyLinkedActiveProfile() throws IOException {
+        writeRepositoryMetadata("repo-local", new RepositoryConfigFile(List.of(new ProfileEntry("corporate"))));
+        Path sourceProfileDir = repositoriesCacheDir().resolve("repo-local").resolve("corporate");
+        Files.createDirectories(sourceProfileDir);
+        Files.writeString(sourceProfileDir.resolve("opencode.json"), "{\"profile\":\"corporate\"}");
+
+        writeOcpConfig(
+            new OcpConfigFile(
+                new OcpConfigOptions(),
+                List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null))
+            )
+        );
+
+        CommandResult firstResult = execute("profile", "use", "corporate");
+        CommandResult secondResult = execute("profile", "use", "corporate");
+
+        assertEquals(0, firstResult.exitCode());
+        assertEquals(0, secondResult.exitCode());
+        assertTrue(secondResult.stdout().contains("Processed user configuration files in"));
+        assertFalse(secondResult.stdout().contains("Updated user configuration files in"));
+        assertFalse(secondResult.stdout().contains("Backed up "));
+    }
+
+    @Test
     void useRemovesFilesThatBelongOnlyToPreviousProfile() throws IOException {
         writeRepositoryMetadata(
             "repo-local",

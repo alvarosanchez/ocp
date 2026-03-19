@@ -1,6 +1,7 @@
 package com.github.alvarosanchez.ocp.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -851,6 +852,61 @@ class ProfileServiceTest {
         assertTrue(profileService.refreshRepository("repo-local"));
         List<Profile> profiles = profileService.getAllProfiles();
         assertEquals(List.of("work"), profiles.stream().map(Profile::name).toList());
+    }
+
+    @Test
+    void useProfileWithDetailsTreatsAlreadyLinkedActiveProfileAsProcessed() throws IOException {
+        writeRepositoryMetadata("repo-local", new RepositoryConfigFile(List.of(new ProfileEntry("corporate"))));
+        Path sourceProfileDir = repositoriesRootDirectory().resolve("repo-local").resolve("corporate");
+        Files.createDirectories(sourceProfileDir);
+        Files.writeString(sourceProfileDir.resolve("opencode.json"), "{\"profile\":\"corporate\"}");
+        writeConfig(List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null)));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        ProfileService.ProfileSwitchResult firstSwitch = profileService.useProfileWithDetails("corporate");
+        replaceWithRelativeSymlink(openCodeFile(), sourceProfileDir.resolve("opencode.json"));
+        ProfileService.ProfileSwitchResult secondSwitch = profileService.useProfileWithDetails("corporate");
+
+        assertTrue(firstSwitch.changedFiles());
+        assertFalse(secondSwitch.changedFiles());
+        assertEquals(0, secondSwitch.linkedFiles());
+        assertEquals(0, secondSwitch.removedFiles());
+        assertEquals(0, secondSwitch.backedUpFiles());
+    }
+
+    @Test
+    void useProfileRemovesPreviousRelativeSymlinkWhenSwitchingProfiles() throws IOException {
+        writeRepositoryMetadata(
+            "repo-local",
+            new RepositoryConfigFile(List.of(new ProfileEntry("corporate"), new ProfileEntry("oss")))
+        );
+        Path repositoryDir = repositoriesRootDirectory().resolve("repo-local");
+        Path corporateDir = repositoryDir.resolve("corporate");
+        Path ossDir = repositoryDir.resolve("oss");
+        Files.createDirectories(corporateDir);
+        Files.createDirectories(ossDir);
+        Path corporateFile = corporateDir.resolve("opencode.json");
+        Files.writeString(corporateFile, "{\"profile\":\"corporate\"}");
+        writeConfig(List.of(new RepositoryEntry("repo-local", "git@github.com:acme/repo-local.git", null)));
+        profileService = new ProfileService(objectMapper, repositoryService, gitRepositoryClient);
+
+        profileService.useProfileWithDetails("corporate");
+        replaceWithRelativeSymlink(openCodeFile(), corporateFile);
+
+        ProfileService.ProfileSwitchResult switchResult = profileService.useProfileWithDetails("oss");
+
+        assertEquals(1, switchResult.removedFiles());
+        assertFalse(Files.exists(openCodeFile(), java.nio.file.LinkOption.NOFOLLOW_LINKS));
+    }
+
+    private Path openCodeFile() {
+        return Path.of(System.getProperty("ocp.opencode.config.dir")).resolve("opencode.json");
+    }
+
+    private void replaceWithRelativeSymlink(Path targetFile, Path sourceFile) throws IOException {
+        Files.deleteIfExists(targetFile);
+        Path relativeTarget = targetFile.getParent().relativize(sourceFile.toAbsolutePath());
+        Files.createSymbolicLink(targetFile, relativeTarget);
     }
 
     private Path repositoriesRootDirectory() {

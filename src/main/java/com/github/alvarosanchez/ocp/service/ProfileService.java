@@ -342,6 +342,10 @@ public final class ProfileService {
      * @return profile switch details including updated paths and backup metadata
      */
     public ProfileSwitchResult useProfileWithDetails(String profileName) {
+        return useProfileWithDetails(profileName, false);
+    }
+
+    private ProfileSwitchResult useProfileWithDetails(String profileName, boolean forceRelinkActiveProfileFiles) {
         String normalizedProfileName = normalizeProfileName(profileName);
         Map<String, DiscoveredProfile> profilesByName = discoverProfilesByName();
         DiscoveredProfile discoveredProfile = profilesByName.get(normalizedProfileName);
@@ -352,14 +356,21 @@ public final class ProfileService {
         List<ResolvedProfileFile> resolvedFiles = resolveProfileFiles(normalizedProfileName, profilesByName, true);
         List<ResolvedProfileFile> previousResolvedFiles = List.of();
         String previousProfileName = currentActiveProfileName();
-        if (previousProfileName != null && !previousProfileName.equals(normalizedProfileName)) {
+        if (previousProfileName != null) {
             DiscoveredProfile previousProfile = profilesByName.get(previousProfileName);
             if (previousProfile != null) {
-                previousResolvedFiles = resolveProfileFiles(previousProfileName, profilesByName, false);
+                previousResolvedFiles = previousProfileName.equals(normalizedProfileName)
+                    ? currentlyLinkedProfileFiles(previousProfileName, profilesByName)
+                    : resolveProfileFiles(previousProfileName, profilesByName, false);
             }
         }
 
-        ProfileSwitchOperation switchOperation = switchProfileFiles(resolvedFiles, previousResolvedFiles, openCodeDirectory());
+        ProfileSwitchOperation switchOperation = switchProfileFiles(
+            resolvedFiles,
+            previousResolvedFiles,
+            openCodeDirectory(),
+            forceRelinkActiveProfileFiles
+        );
         try {
             writeActiveProfile(normalizedProfileName);
             return switchOperation.result();
@@ -459,7 +470,7 @@ public final class ProfileService {
         if (resolution != RefreshConflictResolution.DISCARD_AND_REFRESH) {
             return false;
         }
-        useProfileWithDetails(conflict.profileName());
+        useProfileWithDetails(conflict.profileName(), true);
         return true;
     }
 
@@ -558,7 +569,8 @@ public final class ProfileService {
     private ProfileSwitchOperation switchProfileFiles(
         List<ResolvedProfileFile> sourceFiles,
         List<ResolvedProfileFile> previousSourceFiles,
-        Path targetDirectory
+        Path targetDirectory,
+        boolean forceRelinkActiveProfileFiles
     ) {
         Set<Path> sourceFileRelativePaths = new HashSet<>();
         Set<Path> sourceLogicalRelativePaths = new HashSet<>();
@@ -593,7 +605,7 @@ public final class ProfileService {
                 }
 
                 Path currentSymlinkTarget = Files.readSymbolicLink(targetFile);
-                if (!currentSymlinkTarget.equals(previousSourceFile.sourcePath().toAbsolutePath())) {
+                if (!resolveSymlinkTarget(targetFile).equals(previousSourceFile.sourcePath().toAbsolutePath().normalize())) {
                     continue;
                 }
 
@@ -605,6 +617,12 @@ public final class ProfileService {
             for (ResolvedProfileFile sourceFile : sourceFiles) {
                 Path relativePath = sourceFile.relativePath();
                 Path targetFile = targetDirectory.resolve(relativePath);
+                Path desiredSymlinkTarget = sourceFile.sourcePath().toAbsolutePath();
+
+                if (!forceRelinkActiveProfileFiles
+                    && isAlreadyLinkedToDesiredSource(relativePath, targetDirectory, targetFile, desiredSymlinkTarget)) {
+                    continue;
+                }
 
                 Files.createDirectories(targetFile.getParent());
 
@@ -637,7 +655,7 @@ public final class ProfileService {
                 if (!targetFileHadState) {
                     switchStates.add(new FileSwitchState(targetFile, null, null));
                 }
-                Files.createSymbolicLink(targetFile, sourceFile.sourcePath().toAbsolutePath());
+                Files.createSymbolicLink(targetFile, desiredSymlinkTarget);
                 linkedFiles++;
             }
             return new ProfileSwitchOperation(
@@ -667,6 +685,29 @@ public final class ProfileService {
         Path alternateRelativePath = parent == null ? Path.of(alternateFileName) : parent.resolve(alternateFileName);
         targets.add(targetDirectory.resolve(alternateRelativePath));
         return targets;
+    }
+
+    private boolean isAlreadyLinkedToDesiredSource(
+        Path relativePath,
+        Path targetDirectory,
+        Path targetFile,
+        Path desiredSymlinkTarget
+    ) throws IOException {
+        if (!Files.isSymbolicLink(targetFile)) {
+            return false;
+        }
+        if (!resolveSymlinkTarget(targetFile).equals(desiredSymlinkTarget.toAbsolutePath().normalize())) {
+            return false;
+        }
+        for (Path occupiedTarget : occupiedTargetFiles(relativePath, targetDirectory)) {
+            if (occupiedTarget.equals(targetFile)) {
+                continue;
+            }
+            if (Files.exists(occupiedTarget, LinkOption.NOFOLLOW_LINKS)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private Path logicalRelativePath(Path relativePath) {
@@ -1052,6 +1093,63 @@ public final class ProfileService {
         return PathSegmentValidator.requireSinglePathSegment(repositoryName, "Repository name");
     }
 
+    private List<ResolvedProfileFile> currentlyLinkedProfileFiles(
+        String profileName,
+        Map<String, DiscoveredProfile> profilesByName
+    ) {
+        Path targetDirectory = openCodeDirectory();
+        if (!Files.isDirectory(targetDirectory)) {
+            return List.of();
+        }
+
+        java.util.LinkedHashSet<Path> allowedSourceRoots = new java.util.LinkedHashSet<>();
+        allowedSourceRoots.add(resolvedProfileDirectory(profileName).toAbsolutePath().normalize());
+        DiscoveredProfile activeProfile = profilesByName.get(profileName);
+        if (activeProfile != null) {
+            allowedSourceRoots.add(profilePathFor(activeProfile).toAbsolutePath().normalize());
+        }
+        for (DiscoveredProfile discoveredProfile : profileLineageFor(profileName, profilesByName)) {
+            allowedSourceRoots.add(profilePathFor(discoveredProfile).toAbsolutePath().normalize());
+        }
+
+        try (var paths = Files.walk(targetDirectory)) {
+            return paths
+                .filter(Files::isSymbolicLink)
+                .map(path -> toCurrentlyLinkedProfileFile(targetDirectory, path, List.copyOf(allowedSourceRoots)))
+                .filter(java.util.Objects::nonNull)
+                .sorted(Comparator.comparing(file -> file.relativePath().toString()))
+                .toList();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to inspect currently linked profile files in " + targetDirectory, e);
+        }
+    }
+
+    private ResolvedProfileFile toCurrentlyLinkedProfileFile(Path targetDirectory, Path targetFile, List<Path> allowedSourceRoots) {
+        try {
+            Path symlinkTarget = resolveSymlinkTarget(targetFile);
+            for (Path allowedSourceRoot : allowedSourceRoots) {
+                if (symlinkTarget.startsWith(allowedSourceRoot)) {
+                    return new ResolvedProfileFile(targetDirectory.relativize(targetFile), symlinkTarget);
+                }
+            }
+            return null;
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to inspect linked profile file " + targetFile, e);
+        }
+    }
+
+    private Path resolveSymlinkTarget(Path targetFile) throws IOException {
+        Path symlinkTarget = Files.readSymbolicLink(targetFile);
+        if (symlinkTarget.isAbsolute()) {
+            return symlinkTarget.normalize();
+        }
+        Path targetParent = targetFile.getParent();
+        if (targetParent == null) {
+            return symlinkTarget.toAbsolutePath().normalize();
+        }
+        return targetParent.resolve(symlinkTarget).toAbsolutePath().normalize();
+    }
+
     private String normalizeOptionalProfileName(String profileName) {
         if (profileName == null) {
             return null;
@@ -1115,7 +1213,7 @@ public final class ProfileService {
 
         for (DiscoveredProfile discoveredProfile : profileLineageFor(activeProfileName, profilesByName)) {
             if (discoveredProfile.repositoryEntry().name().equals(refreshedRepositoryName)) {
-                return Optional.of(useProfileWithDetails(activeProfileName));
+                return Optional.of(useProfileWithDetails(activeProfileName, true));
             }
         }
         return Optional.empty();
@@ -1132,7 +1230,7 @@ public final class ProfileService {
             return Optional.empty();
         }
 
-        return Optional.of(useProfileWithDetails(activeProfileName));
+        return Optional.of(useProfileWithDetails(activeProfileName, true));
     }
 
     private Map<String, DiscoveredProfile> discoverProfilesByName() {
@@ -1286,8 +1384,7 @@ public final class ProfileService {
 
     private void writeRepositoryConfigFile(Path metadataFile, RepositoryConfigFile configFile) {
         try {
-            Files.createDirectories(metadataFile.getParent());
-            Files.writeString(metadataFile, objectMapper.writeValueAsString(configFile));
+            AtomicFileWriter.write(metadataFile, objectMapper.writeValueAsString(configFile));
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write profile metadata to " + metadataFile, e);
         }

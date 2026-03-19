@@ -6,13 +6,14 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-native:
     name: Build (${{ matrix.artifact_suffix }})
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.container_image || null }}
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -46,6 +47,9 @@ jobs:
 
       - name: Checkout source
         uses: actions/checkout@v6
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
 
       - name: Set up Oracle GraalVM for JDK 25
         if: ${{ matrix.container_image == '' }}
@@ -98,6 +102,9 @@ jobs:
     name: Publish Release
     needs: build-native
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
 
     steps:
       - name: Download artifacts
@@ -125,6 +132,7 @@ jobs:
     needs: publish
     if: ${{ startsWith(github.ref_name, 'v') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Derive release metadata
