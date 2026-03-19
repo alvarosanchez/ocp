@@ -15,6 +15,11 @@
       "source": "micronaut-projects/micronaut-project-template",
       "sourceType": "github",
       "computedHash": "1372c6505565e4d8548ab97dccdc0bade7cb192e38203465237f9df14c7efead"
+    },
+    "vhs": {
+      "source": "pproenca/dot-skills",
+      "sourceType": "github",
+      "computedHash": "ef69a57c9f1542ff6bb95e4c5639d6fc7a476003937ebc9b1472eeef70c3dd57"
     }
   }
 }
