@@ -31,7 +31,7 @@ Type "SH" Sleep 120ms Enter
 Type "chmod +x build/vhs-demo/bin/ocp" Sleep 200ms Enter
 Type "cat > build/vhs-demo/bin/ocp-demo <<'SH'" Sleep 300ms Enter
 Type "#!/bin/sh" Sleep 120ms Enter
-Type "env OCP_NO_VERSION_CHECK=1 OCP_CONFIG_DIR=build/vhs-demo/config OCP_CACHE_DIR=build/vhs-demo/cache OCP_OPENCODE_DIR=build/vhs-demo/opencode OCP_WORKING_DIR=build/vhs-demo/workspace TERM=xterm-256color COLORTERM=truecolor CLICOLOR_FORCE=1 script -q /dev/null build/native/nativeCompile/ocp" Sleep 150ms Enter
+Type "env OCP_NO_VERSION_CHECK=1 OCP_CONFIG_DIR=build/vhs-demo/config OCP_CACHE_DIR=build/vhs-demo/cache OCP_OPENCODE_DIR=build/vhs-demo/opencode OCP_WORKING_DIR=build/vhs-demo/workspace TERM=xterm-256color COLORTERM=truecolor CLICOLOR_FORCE=1 script -q -c 'build/native/nativeCompile/ocp' /dev/null" Sleep 150ms Enter
 Type "SH" Sleep 120ms Enter
 Type "chmod +x build/vhs-demo/bin/ocp-demo" Sleep 200ms Enter
 Type "export PATH=build/vhs-demo/bin:$PATH" Sleep 250ms Enter
