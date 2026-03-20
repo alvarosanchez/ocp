@@ -2146,7 +2146,7 @@ public final class InteractiveApp extends ToolkitApp {
 
     private Path ocpConfigFilePath() {
         String configuredPath = OcpPathSettings.configuredPath(OcpPathSettings.CONFIG_DIR_PROPERTY, OcpPathSettings.CONFIG_DIR_ENV);
-        if (configuredPath != null && !configuredPath.isBlank()) {
+        if (configuredPath != null) {
             return Path.of(configuredPath).resolve("config.json");
         }
         return Path.of(System.getProperty("user.home"), ".config", "ocp", "config.json");

@@ -19,6 +19,7 @@ concurrency:
 
 jobs:
   render-demo:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
 
     steps:
@@ -45,14 +46,16 @@ jobs:
           echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
           sudo apt-get update
           sudo apt-get install -y vhs ffmpeg bat bsdutils
-          sudo curl -fsSL -o /usr/local/bin/ttyd https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64
-          sudo chmod +x /usr/local/bin/ttyd
+          curl -fsSL -o /tmp/ttyd.x86_64 https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64
+          echo '2b6fd8f6bf168e2a44ad96b8c1a4d7d8115d2eb8b77a8e2a8c6c5f6d1f11d0f8  /tmp/ttyd.x86_64' | sha256sum -c -
+          sudo install -m 0755 /tmp/ttyd.x86_64 /usr/local/bin/ttyd
           sudo ln -sf /usr/bin/batcat /usr/local/bin/bat
 
       - name: Render interactive demo
         run: ./docs/demo/render-demo.sh
 
       - name: Auto-commit generated GIF
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         uses: stefanzweifel/git-auto-commit-action@v5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

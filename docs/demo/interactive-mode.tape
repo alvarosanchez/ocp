@@ -1,11 +1,11 @@
-Output "docs/demo/interactive-mode.gif"
-
 Require sh
 Require env
 Require mkdir
 Require cat
 Require script
 Require bat
+
+Output "docs/demo/interactive-mode.gif"
 
 Set Shell "bash"
 Set FontSize 10
@@ -32,7 +32,7 @@ Sleep 2500ms
 Type "demo-repo" Sleep 150ms Enter
 Sleep 2500ms
 
-# Crate onboarding profile
+# Create onboarding profile
 Type "base" Sleep 150ms Enter
 Sleep 2500ms
 
@@ -66,7 +66,7 @@ Sleep 1800ms
 
 # New file editing
 Type "{" Sleep 150ms Enter
-Type '  "autoupdate": true' Sleep 150ms Enter
+Type "  \"autoupdate\": true" Sleep 150ms Enter
 Type "}" Sleep 150ms
 Sleep 2500ms
 

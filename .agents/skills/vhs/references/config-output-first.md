@@ -7,7 +7,7 @@ tags: config, output, structure, order
 
 ## Declare Output at File Start
 
-Declare `Output` commands at the top of your tape file to clearly indicate what files will be generated. While VHS defaults to `out.gif`, explicit output declarations prevent confusion and ensure outputs are written to expected locations.
+Declare `Output` commands at the top of your tape file configuration block, immediately after any `Require` commands, to clearly indicate what files will be generated. While VHS defaults to `out.gif`, explicit output declarations prevent confusion and ensure outputs are written to expected locations.
 
 **Incorrect (relying on defaults):**
 
@@ -21,9 +21,11 @@ Sleep 2s
 # Where does the output go? Defaults to out.gif in current directory
 ```
 
-**Correct (explicit output declaration):**
+**Correct (explicit output declaration after dependency checks):**
 
 ```tape
+Require bat
+
 Output demo.gif
 Output demo.mp4
 

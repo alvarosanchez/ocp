@@ -669,7 +669,7 @@ public final class RepositoryService {
 
     private Path configDirectory() {
         String configuredPath = OcpPathSettings.configuredPath(OcpPathSettings.CONFIG_DIR_PROPERTY, OcpPathSettings.CONFIG_DIR_ENV);
-        if (configuredPath != null && !configuredPath.isBlank()) {
+        if (configuredPath != null) {
             return Path.of(configuredPath);
         }
         return Path.of(System.getProperty("user.home"), ".config", "ocp");
@@ -677,7 +677,7 @@ public final class RepositoryService {
 
     private Path repositoryStorageDirectory() {
         String configuredPath = OcpPathSettings.configuredPath(OcpPathSettings.CACHE_DIR_PROPERTY, OcpPathSettings.CACHE_DIR_ENV);
-        if (configuredPath != null && !configuredPath.isBlank()) {
+        if (configuredPath != null) {
             return Path.of(configuredPath);
         }
         return configDirectory();

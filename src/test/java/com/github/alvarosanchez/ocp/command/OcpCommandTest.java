@@ -27,7 +27,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledInNativeImage;
 import org.junit.jupiter.api.io.TempDir;
@@ -195,7 +199,8 @@ class OcpCommandTest {
     }
 
     @Test
-    void startupVersionCheckTreatsCommonFalsyValuesAsDisabledFalse() {
+    void startupVersionCheckTreatsFalsePropertyAsNotDisabled() {
+        Assumptions.assumeFalse(isTruthyForTest(System.getenv(OcpCommand.VERSION_CHECK_DISABLE_ENV)));
         System.setProperty(OcpCommand.VERSION_CHECK_DISABLE_PROPERTY, "false");
 
         assertFalse(OcpCommand.isStartupVersionCheckDisabled());
@@ -216,12 +221,12 @@ class OcpCommandTest {
     void helpInvocationUsesEnvironmentConfigDirectoryOverride(@TempDir Path tempDir) throws Exception {
         Path configDir = tempDir.resolve("env-config");
         Files.createDirectories(configDir);
+        Files.writeString(configDir.resolve("config.json"), "not valid json");
 
         CommandResult result = executeMainWithStartupEnvironmentOverride(tempDir, configDir, "help");
 
-        assertEquals(0, result.exitCode());
-        assertTrue(result.stdout().contains("Usage: ocp"));
-        assertEquals("", result.stderr());
+        assertEquals(1, result.exitCode());
+        assertTrue(result.stderr().contains("Could not migrate legacy repository metadata before startup."));
         assertFalse(Files.exists(tempDir.resolve("home").resolve(".config").resolve("ocp").resolve("config.json")));
     }
 
@@ -382,11 +387,7 @@ class OcpCommandTest {
         command.add(OcpCommand.class.getName());
         command.addAll(List.of(args));
 
-        Process process = new ProcessBuilder(command).start();
-        String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
-        int exitCode = process.waitFor();
-        return new CommandResult(exitCode, stdout, stderr);
+        return executeProcess(new ProcessBuilder(command));
     }
 
     private static CommandResult executeMainWithStartupEnvironmentOverride(Path tempDir, Path configDir, String... args) throws IOException, InterruptedException {
@@ -406,11 +407,7 @@ class OcpCommandTest {
 
         ProcessBuilder processBuilder = new ProcessBuilder(command);
         processBuilder.environment().put(OcpPathSettings.CONFIG_DIR_ENV, configDir.toString());
-        Process process = processBuilder.start();
-        String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
-        int exitCode = process.waitFor();
-        return new CommandResult(exitCode, stdout, stderr);
+        return executeProcess(processBuilder);
     }
 
     private static CommandResult executeMainWithEnvironmentVariable(Path tempDir, String envName, String envValue, String... args) throws IOException, InterruptedException {
@@ -429,11 +426,48 @@ class OcpCommandTest {
 
         ProcessBuilder processBuilder = new ProcessBuilder(command);
         processBuilder.environment().put(envName, envValue);
+        return executeProcess(processBuilder);
+    }
+
+    private static CommandResult executeProcess(ProcessBuilder processBuilder) throws IOException, InterruptedException {
         Process process = processBuilder.start();
-        String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
-        int exitCode = process.waitFor();
-        return new CommandResult(exitCode, stdout, stderr);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            Future<String> stdoutFuture = executor.submit(
+                () -> new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8)
+            );
+            Future<String> stderrFuture = executor.submit(
+                () -> new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8)
+            );
+            int exitCode = process.waitFor();
+            return new CommandResult(exitCode, awaitOutput(stdoutFuture), awaitOutput(stderrFuture));
+        }
+    }
+
+    private static String awaitOutput(Future<String> future) throws IOException, InterruptedException {
+        try {
+            return future.get();
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof IOException ioException) {
+                throw ioException;
+            }
+            if (cause instanceof InterruptedException interruptedException) {
+                Thread.currentThread().interrupt();
+                throw interruptedException;
+            }
+            throw new IOException("Failed to capture subprocess output", cause);
+        }
+    }
+
+    private static boolean isTruthyForTest(String value) {
+        if (value == null) {
+            return false;
+        }
+        String normalizedValue = value.trim();
+        return "1".equals(normalizedValue)
+            || "true".equalsIgnoreCase(normalizedValue)
+            || "yes".equalsIgnoreCase(normalizedValue)
+            || "on".equalsIgnoreCase(normalizedValue);
     }
 
     private static String javaBinaryPath() {
