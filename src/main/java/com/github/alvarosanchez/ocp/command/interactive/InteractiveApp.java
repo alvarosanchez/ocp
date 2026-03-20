@@ -58,6 +58,7 @@ import static dev.tamboui.toolkit.Toolkit.dialog;
 import static dev.tamboui.toolkit.Toolkit.panel;
 import static dev.tamboui.toolkit.Toolkit.richText;
 import static dev.tamboui.toolkit.Toolkit.row;
+import static dev.tamboui.toolkit.Toolkit.stack;
 import static dev.tamboui.toolkit.Toolkit.spacer;
 import static dev.tamboui.toolkit.Toolkit.text;
 
@@ -74,6 +75,8 @@ public final class InteractiveApp extends ToolkitApp {
     private static final String TREE_ID = "hierarchy-tree";
     private static final String DETAIL_ID = "detail-pane";
     private static final String EDITOR_ID = "file-editor";
+    private static final String SHORTCUTS_PANEL_ID = "shortcuts-panel";
+    private static final String STATUS_PANEL_ID = "status-panel";
     private static final String[] SPINNER_FRAMES = {"|", "/", "-", "\\"};
     private static final Duration SPLASH_MIN_DURATION = Duration.ofMillis(120);
     private static final int TREE_MAX_DEPTH = 6;
@@ -332,13 +335,18 @@ public final class InteractiveApp extends ToolkitApp {
             renderStatusPanel()
         );
 
-        return switch (activeOverlay()) {
-            case PROMPT -> column(root, renderPromptDialog());
-            case STARTUP_NOTICE -> column(root, renderStartupUpdateDialog());
-            case REFRESH_CONFLICT -> column(root, renderRefreshConflictDialog());
-            case COMMIT_CONFIRM -> column(root, renderCommitConfirmDialog());
-            case NONE -> root;
+        Element overlay = switch (activeOverlay()) {
+            case PROMPT -> renderPromptDialog();
+            case STARTUP_NOTICE -> renderStartupUpdateDialog();
+            case REFRESH_CONFLICT -> renderRefreshConflictDialog();
+            case COMMIT_CONFIRM -> renderCommitConfirmDialog();
+            case NONE -> null;
         };
+
+        if (overlay == null) {
+            return root;
+        }
+        return stack(root, overlay);
     }
 
     private ActiveOverlay activeOverlay() {
@@ -2616,7 +2624,11 @@ public final class InteractiveApp extends ToolkitApp {
                 ShortcutHintRenderer.emphasizedPrefixStyle()
             ));
         }
-        return panel(lines.toArray(Element[]::new)).rounded().borderColor(Color.CYAN).length(lines.size() + 2);
+        return panel(lines.toArray(Element[]::new))
+            .id(SHORTCUTS_PANEL_ID)
+            .rounded()
+            .borderColor(Color.CYAN)
+            .length(lines.size() + 2);
     }
 
     private Element renderStatusPanel() {
@@ -2650,7 +2662,11 @@ public final class InteractiveApp extends ToolkitApp {
 
         return panel(
             column(panelContent.toArray(Element[]::new))
-        ).rounded().borderColor(busy ? Color.GREEN : Color.YELLOW).length(2 + panelContent.size());
+        )
+            .id(STATUS_PANEL_ID)
+            .rounded()
+            .borderColor(busy ? Color.GREEN : Color.YELLOW)
+            .length(2 + panelContent.size());
     }
 
     private List<Line> statusTextLines(int width) {

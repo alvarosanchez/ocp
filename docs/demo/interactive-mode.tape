@@ -57,6 +57,14 @@ Sleep 1800ms
 Enter
 Sleep 2500ms
 
+# Trigger delete confirmation overlay on selected profile
+Type "d"
+Sleep 2500ms
+
+# Cancel overlay and continue
+Escape
+Sleep 1500ms
+
 # Create file
 Type "f" Sleep 900ms
 

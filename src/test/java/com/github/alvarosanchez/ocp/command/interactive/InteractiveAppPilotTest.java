@@ -223,6 +223,24 @@ class InteractiveAppPilotTest {
     }
 
     @Test
+    void refreshConflictOverlayKeepsFooterPanelsMounted() throws Exception {
+        InteractiveApp app = createApp();
+        app.onStart();
+        app.testSetPendingRefreshOperation(RefreshOperation.singleRepository("repo-a"));
+        app.testSetRefreshConflict(
+            RefreshConflictState.forRepository(ProfileService.testRepositoryRefreshConflict("repo-a", "/tmp/repo-a", "diff --git a/a b/a\n+foo"))
+        );
+
+        try (ToolkitTestRunner test = ToolkitTestRunner.runTest(app::render)) {
+            Pilot pilot = test.pilot();
+
+            assertTrue(pilot.hasElement("shortcuts-panel"));
+            assertTrue(pilot.hasElement("status-panel"));
+            assertTrue(app.testRefreshConflict() != null);
+        }
+    }
+
+    @Test
     void navigateToParentFromNestedReadOnlyMergedFileSelectsLastDeclaredParentBranchContributor() throws Exception {
         Path repositoryPath = tempDir.resolve("repo-a");
         Path baseOneRootPath = repositoryPath.resolve("base-one-root");

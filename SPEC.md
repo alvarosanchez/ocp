@@ -208,6 +208,7 @@ oss/opencode.json
 - In interactive mode, refresh (`r`) is shown only when the selected repository context is git-backed; file-based repositories do not offer refresh actions.
 - In interactive mode, the tree/detail content split favors the detail pane at roughly one-third / two-thirds width.
 - In interactive mode, keyboard shortcuts are rendered in a dedicated full-width shortcuts pane above the status bar instead of being split between the tree and detail panes.
+- In interactive mode, prompts and modal dialogs render as overlays above the existing screen so the shortcuts pane and status bar remain anchored while overlays are active.
 - Interactive tree profile nodes visually show inheritance using a relationship marker (`👤 child ⇢ 👤 parent`). Multiple parents are rendered inline (for example `👤 child ⇢ 👤 parent-a, parent-b`) so users can see every parent contribution in order.
 - Interactive tree includes inherited parent-only files under child profiles as read-only file nodes with subdued styling; inherited files cannot be edited.
 - The `p` action on multi-parent profile nodes jumps to the most immediate parent (the last parent declared in `extends_from`).
