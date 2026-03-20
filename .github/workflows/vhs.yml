@@ -40,16 +40,17 @@ jobs:
 
       - name: Install demo dependencies
         run: |
+          sudo mkdir -p /etc/apt/keyrings
+          curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+          echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
           sudo apt-get update
-          sudo apt-get install -y bat bsdutils
+          sudo apt-get install -y vhs ffmpeg bat bsdutils
           sudo curl -fsSL -o /usr/local/bin/ttyd https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64
           sudo chmod +x /usr/local/bin/ttyd
           sudo ln -sf /usr/bin/batcat /usr/local/bin/bat
 
       - name: Render interactive demo
-        uses: charmbracelet/vhs-action@v1
-        with:
-          path: 'docs/demo/interactive-mode.tape'
+        run: vhs docs/demo/interactive-mode.tape
 
       - name: Auto-commit generated GIF
         uses: stefanzweifel/git-auto-commit-action@v5
