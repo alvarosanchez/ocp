@@ -11,7 +11,7 @@ on:
       - 'build.gradle.kts'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: vhs-demo-${{ github.event.pull_request.number || github.ref }}
@@ -24,6 +24,8 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Set up Oracle GraalVM for JDK 25
         uses: graalvm/setup-graalvm@v1
@@ -36,22 +38,27 @@ jobs:
       - name: Build native executable
         run: ./gradlew --no-daemon nativeCompile
 
-      - name: Install VHS dependencies
+      - name: Install demo dependencies
         run: |
-          sudo mkdir -p /etc/apt/keyrings
-          curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
-          echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
           sudo apt-get update
-          sudo apt-get install -y vhs ffmpeg bat bsdutils
+          sudo apt-get install -y bat bsdutils
           sudo curl -fsSL -o /usr/local/bin/ttyd https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64
           sudo chmod +x /usr/local/bin/ttyd
           sudo ln -sf /usr/bin/batcat /usr/local/bin/bat
 
       - name: Render interactive demo
-        run: vhs docs/demo/interactive-mode.tape
-
-      - name: Upload rendered GIF
-        uses: actions/upload-artifact@v4
+        uses: charmbracelet/vhs-action@v1
         with:
-          name: interactive-mode-demo
-          path: docs/demo/interactive-mode.gif
+          path: 'docs/demo/interactive-mode.tape'
+
+      - name: Auto-commit generated GIF
+        uses: stefanzweifel/git-auto-commit-action@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          commit_message: 'docs: update generated VHS demo'
+          branch: ${{ github.head_ref || github.ref_name }}
+          commit_user_name: vhs-action 📼
+          commit_user_email: actions@github.com
+          commit_author: vhs-action 📼 <actions@github.com>
+          file_pattern: 'docs/demo/interactive-mode.gif'
