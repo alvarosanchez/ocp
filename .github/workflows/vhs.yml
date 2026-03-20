@@ -49,6 +49,9 @@ jobs:
           sudo chmod +x /usr/local/bin/ttyd
           sudo ln -sf /usr/bin/batcat /usr/local/bin/bat
 
+      - name: Prepare interactive demo environment
+        run: ./docs/demo/prepare-demo.sh
+
       - name: Render interactive demo
         run: vhs docs/demo/interactive-mode.tape
 
