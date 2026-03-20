@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="ocp" src="https://img.shields.io/badge/ocp-OpenCode%20Configuration%20Profiles-111827?style=for-the-badge" />
+  <img alt="ocp" src="docs/img/splash.png" />
 </p>
 
 <h1 align="center">Switch OpenCode setups like code, not chaos.</h1>
