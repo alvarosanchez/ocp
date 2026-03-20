@@ -19,6 +19,6 @@ chmod +x build/vhs-demo/bin/ocp
 
 cat > build/vhs-demo/bin/ocp-demo <<'SH'
 #!/bin/sh
-env OCP_NO_VERSION_CHECK=1 OCP_CONFIG_DIR=build/vhs-demo/config OCP_CACHE_DIR=build/vhs-demo/cache OCP_OPENCODE_DIR=build/vhs-demo/opencode OCP_WORKING_DIR=build/vhs-demo/workspace TERM=xterm-256color COLORTERM=truecolor CLICOLOR_FORCE=1 sh -c 'if script -q -c true /dev/null >/dev/null 2>&1; then exec script -q -c "build/native/nativeCompile/ocp" /dev/null; else exec script -q /dev/null build/native/nativeCompile/ocp; fi'
+env OCP_NO_VERSION_CHECK=1 OCP_CONFIG_DIR=build/vhs-demo/config OCP_CACHE_DIR=build/vhs-demo/cache OCP_OPENCODE_DIR=build/vhs-demo/opencode OCP_WORKING_DIR=build/vhs-demo/workspace TERM=xterm-256color COLORTERM=truecolor CLICOLOR_FORCE=1 sh -c 'if script -q -c true /dev/null >/dev/null 2>&1; then exec script -q -c "./gradlew --no-daemon run" /dev/null; else exec script -q /dev/null ./gradlew --no-daemon run; fi'
 SH
 chmod +x build/vhs-demo/bin/ocp-demo

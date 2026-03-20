@@ -35,9 +35,6 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           cache: gradle
 
-      - name: Build native executable
-        run: ./gradlew --no-daemon nativeCompile
-
       - name: Install demo dependencies
         run: |
           sudo mkdir -p /etc/apt/keyrings
