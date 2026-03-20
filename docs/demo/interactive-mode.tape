@@ -8,22 +8,21 @@ Require script
 Require bat
 
 Set Shell "bash"
-Set FontSize 26
-Set Width 1600
-Set Height 1020
+Set FontSize 10
+Set Width 1080
+Set Height 720
 Set WindowBar Colorful
-Set Margin 20
+Set Margin 10
+Set Padding 5
 Set BorderRadius 20
 Set TypingSpeed 100ms
 Set PlaybackSpeed 0.5
 Set Theme "Catppuccin Mocha"
 
 Hide
+Type "build/vhs-demo/bin/ocp" Enter
+Sleep 2s
 Show
-Sleep 800ms
-
-Type "build/vhs-demo/bin/ocp" Sleep 250ms Enter
-Sleep 2500ms
 
 # Import existing config. Default yes
 Enter
