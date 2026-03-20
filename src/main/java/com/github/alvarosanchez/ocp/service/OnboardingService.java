@@ -177,7 +177,7 @@ public final class OnboardingService {
     }
 
     private Path repositoryStorageDirectory() {
-        String configuredPath = System.getProperty("ocp.cache.dir");
+        String configuredPath = OcpPathSettings.configuredPath(OcpPathSettings.CACHE_DIR_PROPERTY, OcpPathSettings.CACHE_DIR_ENV);
         if (configuredPath != null && !configuredPath.isBlank()) {
             return Path.of(configuredPath);
         }
@@ -185,7 +185,7 @@ public final class OnboardingService {
     }
 
     private Path configDirectory() {
-        String configuredPath = System.getProperty("ocp.config.dir");
+        String configuredPath = OcpPathSettings.configuredPath(OcpPathSettings.CONFIG_DIR_PROPERTY, OcpPathSettings.CONFIG_DIR_ENV);
         if (configuredPath != null && !configuredPath.isBlank()) {
             return Path.of(configuredPath);
         }
@@ -193,7 +193,7 @@ public final class OnboardingService {
     }
 
     private Path openCodeDirectory() {
-        String configuredPath = System.getProperty("ocp.opencode.config.dir");
+        String configuredPath = OcpPathSettings.configuredPath(OcpPathSettings.OPENCODE_CONFIG_DIR_PROPERTY, OcpPathSettings.OPENCODE_CONFIG_DIR_ENV);
         if (configuredPath != null && !configuredPath.isBlank()) {
             return Path.of(configuredPath);
         }

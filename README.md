@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="ocp" src="https://img.shields.io/badge/ocp-OpenCode%20Configuration%20Profiles-111827?style=for-the-badge" />
+  <img alt="ocp" src="docs/img/splash.png" />
 </p>
 
 <h1 align="center">Switch OpenCode setups like code, not chaos.</h1>
@@ -31,6 +31,10 @@
 
 <p align="center">
   If <strong>ocp</strong> is useful to you, please consider <a href="https://github.com/alvarosanchez/ocp/stargazers">starring the repository</a>. It helps more developers discover the project.
+</p>
+
+<p align="center">
+  <img alt="Interactive mode demo" src="docs/demo/interactive-mode.gif" />
 </p>
 
 ---

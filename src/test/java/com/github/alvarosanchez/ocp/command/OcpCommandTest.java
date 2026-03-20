@@ -11,6 +11,7 @@ import com.github.alvarosanchez.ocp.config.OcpConfigFile;
 import com.github.alvarosanchez.ocp.config.OcpConfigFile.OcpConfigOptions;
 import com.github.alvarosanchez.ocp.config.OcpConfigFile.RepositoryEntry;
 import com.github.alvarosanchez.ocp.service.OnboardingService;
+import com.github.alvarosanchez.ocp.service.OcpPathSettings;
 import com.github.alvarosanchez.ocp.service.ProfileService;
 import com.github.alvarosanchez.ocp.service.RepositoryPostCreationService;
 import com.github.alvarosanchez.ocp.service.RepositoryService;
@@ -36,6 +37,7 @@ class OcpCommandTest {
     @AfterEach
     void resetStartupNotice() {
         Cli.consumeStartupNotice();
+        System.clearProperty(OcpCommand.VERSION_CHECK_DISABLE_PROPERTY);
     }
 
     @Test
@@ -183,6 +185,44 @@ class OcpCommandTest {
         assertTrue(OcpCommand.shouldDeferVersionNoticeToInteractiveUi(new String[0], true));
         assertFalse(OcpCommand.shouldDeferVersionNoticeToInteractiveUi(new String[] {"help"}, true));
         assertFalse(OcpCommand.shouldDeferVersionNoticeToInteractiveUi(new String[0], false));
+    }
+
+    @Test
+    void startupVersionCheckCanBeDisabledBySystemProperty() {
+        System.setProperty(OcpCommand.VERSION_CHECK_DISABLE_PROPERTY, "true");
+
+        assertTrue(OcpCommand.isStartupVersionCheckDisabled());
+    }
+
+    @Test
+    void startupVersionCheckTreatsCommonFalsyValuesAsDisabledFalse() {
+        System.setProperty(OcpCommand.VERSION_CHECK_DISABLE_PROPERTY, "false");
+
+        assertFalse(OcpCommand.isStartupVersionCheckDisabled());
+    }
+
+    @Test
+    @DisabledInNativeImage
+    void helpInvocationUsesEnvironmentVariableToDisableStartupVersionCheck(@TempDir Path tempDir) throws Exception {
+        CommandResult result = executeMainWithEnvironmentVariable(tempDir, OcpCommand.VERSION_CHECK_DISABLE_ENV, "true", "help");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("Usage: ocp"));
+        assertEquals("", result.stderr());
+    }
+
+    @Test
+    @DisabledInNativeImage
+    void helpInvocationUsesEnvironmentConfigDirectoryOverride(@TempDir Path tempDir) throws Exception {
+        Path configDir = tempDir.resolve("env-config");
+        Files.createDirectories(configDir);
+
+        CommandResult result = executeMainWithStartupEnvironmentOverride(tempDir, configDir, "help");
+
+        assertEquals(0, result.exitCode());
+        assertTrue(result.stdout().contains("Usage: ocp"));
+        assertEquals("", result.stderr());
+        assertFalse(Files.exists(tempDir.resolve("home").resolve(".config").resolve("ocp").resolve("config.json")));
     }
 
     @Test
@@ -335,6 +375,7 @@ class OcpCommandTest {
         command.add(javaBinaryPath());
         command.add("-Docp.config.dir=" + tempDir.resolve("ocp-config"));
         command.add("-Docp.cache.dir=" + tempDir.resolve("ocp-cache"));
+        command.add("-D" + OcpCommand.VERSION_CHECK_DISABLE_PROPERTY + "=true");
         command.add("-Duser.home=" + tempDir.resolve("home"));
         command.add("-cp");
         command.add(System.getProperty("java.class.path"));
@@ -342,6 +383,53 @@ class OcpCommandTest {
         command.addAll(List.of(args));
 
         Process process = new ProcessBuilder(command).start();
+        String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
+        int exitCode = process.waitFor();
+        return new CommandResult(exitCode, stdout, stderr);
+    }
+
+    private static CommandResult executeMainWithStartupEnvironmentOverride(Path tempDir, Path configDir, String... args) throws IOException, InterruptedException {
+        if (System.getProperty("org.graalvm.nativeimage.imagecode") != null) {
+            throw new UnsupportedOperationException("Subprocess startup migration assertions are not supported inside native test images");
+        }
+
+        List<String> command = new java.util.ArrayList<>();
+        command.add(javaBinaryPath());
+        command.add("-Docp.cache.dir=" + tempDir.resolve("ocp-cache"));
+        command.add("-D" + OcpCommand.VERSION_CHECK_DISABLE_PROPERTY + "=true");
+        command.add("-Duser.home=" + tempDir.resolve("home"));
+        command.add("-cp");
+        command.add(System.getProperty("java.class.path"));
+        command.add(OcpCommand.class.getName());
+        command.addAll(List.of(args));
+
+        ProcessBuilder processBuilder = new ProcessBuilder(command);
+        processBuilder.environment().put(OcpPathSettings.CONFIG_DIR_ENV, configDir.toString());
+        Process process = processBuilder.start();
+        String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
+        int exitCode = process.waitFor();
+        return new CommandResult(exitCode, stdout, stderr);
+    }
+
+    private static CommandResult executeMainWithEnvironmentVariable(Path tempDir, String envName, String envValue, String... args) throws IOException, InterruptedException {
+        if (System.getProperty("org.graalvm.nativeimage.imagecode") != null) {
+            throw new UnsupportedOperationException("Subprocess startup migration assertions are not supported inside native test images");
+        }
+
+        List<String> command = new java.util.ArrayList<>();
+        command.add(javaBinaryPath());
+        command.add("-Docp.cache.dir=" + tempDir.resolve("ocp-cache"));
+        command.add("-Duser.home=" + tempDir.resolve("home"));
+        command.add("-cp");
+        command.add(System.getProperty("java.class.path"));
+        command.add(OcpCommand.class.getName());
+        command.addAll(List.of(args));
+
+        ProcessBuilder processBuilder = new ProcessBuilder(command);
+        processBuilder.environment().put(envName, envValue);
+        Process process = processBuilder.start();
         String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
         int exitCode = process.waitFor();

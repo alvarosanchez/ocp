@@ -1,0 +1,65 @@
+name: VHS Demo
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/vhs.yml'
+      - 'docs/demo/**'
+      - 'src/main/java/com/github/alvarosanchez/ocp/command/OcpCommand.java'
+      - 'src/main/java/com/github/alvarosanchez/ocp/command/interactive/**'
+      - 'build.gradle.kts'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vhs-demo-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  render-demo:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Oracle GraalVM for JDK 25
+        uses: graalvm/setup-graalvm@v1
+        with:
+          distribution: 'graalvm'
+          java-version: '25'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: gradle
+
+      - name: Build JVM distribution
+        run: ./gradlew --no-daemon installDist
+
+      - name: Install demo dependencies
+        run: |
+          sudo mkdir -p /etc/apt/keyrings
+          curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+          echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
+          sudo apt-get update
+          sudo apt-get install -y vhs ffmpeg bat bsdutils
+          sudo curl -fsSL -o /usr/local/bin/ttyd https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64
+          sudo chmod +x /usr/local/bin/ttyd
+          sudo ln -sf /usr/bin/batcat /usr/local/bin/bat
+
+      - name: Render interactive demo
+        run: ./docs/demo/render-demo.sh
+
+      - name: Auto-commit generated GIF
+        uses: stefanzweifel/git-auto-commit-action@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          commit_message: 'docs: update generated VHS demo'
+          branch: ${{ github.head_ref || github.ref_name }}
+          commit_user_name: vhs-action 📼
+          commit_user_email: actions@github.com
+          commit_author: vhs-action 📼 <actions@github.com>
+          file_pattern: 'docs/demo/interactive-mode.gif'

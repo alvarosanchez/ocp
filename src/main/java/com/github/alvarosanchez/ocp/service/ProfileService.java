@@ -1424,7 +1424,7 @@ public final class ProfileService {
     }
 
     private Path profileStorageDirectory() {
-        String configuredPath = System.getProperty("ocp.cache.dir");
+        String configuredPath = OcpPathSettings.configuredPath(OcpPathSettings.CACHE_DIR_PROPERTY, OcpPathSettings.CACHE_DIR_ENV);
         if (configuredPath != null && !configuredPath.isBlank()) {
             return Path.of(configuredPath);
         }
@@ -1432,7 +1432,7 @@ public final class ProfileService {
     }
 
     private Path configDirectory() {
-        String configuredPath = System.getProperty("ocp.config.dir");
+        String configuredPath = OcpPathSettings.configuredPath(OcpPathSettings.CONFIG_DIR_PROPERTY, OcpPathSettings.CONFIG_DIR_ENV);
         if (configuredPath != null && !configuredPath.isBlank()) {
             return Path.of(configuredPath);
         }
@@ -1444,7 +1444,7 @@ public final class ProfileService {
     }
 
     private Path openCodeDirectory() {
-        String configuredPath = System.getProperty("ocp.opencode.config.dir");
+        String configuredPath = OcpPathSettings.configuredPath(OcpPathSettings.OPENCODE_CONFIG_DIR_PROPERTY, OcpPathSettings.OPENCODE_CONFIG_DIR_ENV);
         if (configuredPath != null && !configuredPath.isBlank()) {
             return Path.of(configuredPath);
         }
@@ -1452,7 +1452,7 @@ public final class ProfileService {
     }
 
     private Path workingDirectory() {
-        String configuredPath = System.getProperty("ocp.working.dir");
+        String configuredPath = OcpPathSettings.configuredPath(OcpPathSettings.WORKING_DIR_PROPERTY, OcpPathSettings.WORKING_DIR_ENV);
         if (configuredPath != null && !configuredPath.isBlank()) {
             return Path.of(configuredPath);
         }
