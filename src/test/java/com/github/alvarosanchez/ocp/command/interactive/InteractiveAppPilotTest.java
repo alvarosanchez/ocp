@@ -228,7 +228,9 @@ class InteractiveAppPilotTest {
         app.onStart();
         app.testSetPendingRefreshOperation(RefreshOperation.singleRepository("repo-a"));
         app.testSetRefreshConflict(
-            RefreshConflictState.forRepository(ProfileService.testRepositoryRefreshConflict("repo-a", "/tmp/repo-a", "diff --git a/a b/a\n+foo"))
+            RefreshConflictState.forRepository(
+                ProfileService.testRepositoryRefreshConflict("repo-a", tempDir.resolve("repo-a").toString(), "diff --git a/a b/a\n+foo")
+            )
         );
 
         try (ToolkitTestRunner test = ToolkitTestRunner.runTest(app::render)) {
