@@ -22,7 +22,7 @@ Hide
 Show
 Sleep 800ms
 
-Type "ocp" Sleep 250ms Enter
+Type "build/vhs-demo/bin/ocp" Sleep 250ms Enter
 Sleep 2500ms
 
 # Import existing config. Default yes
