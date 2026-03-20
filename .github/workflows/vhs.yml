@@ -35,6 +35,9 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           cache: gradle
 
+      - name: Build JVM distribution
+        run: ./gradlew --no-daemon installDist
+
       - name: Install demo dependencies
         run: |
           sudo mkdir -p /etc/apt/keyrings
