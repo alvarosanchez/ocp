@@ -2,7 +2,7 @@
   <img alt="ocp" src="docs/img/splash.png" />
 </p>
 
-<h1 align="center">Switch OpenCode setups like code, not chaos.</h1>
+<h1 align="center">Switch OpenCode configurations like code, not chaos.</h1>
 
 <p align="center">
   <strong>ocp</strong> is a developer-first CLI for managing OpenCode profiles in Git,
@@ -22,7 +22,7 @@
 <p align="center">
   <a href="#get-started"><strong>Get started</strong></a>
   ·
-  <a href="#documentation"><strong>Read the docs</strong></a>
+  <a href="https://alvarosanchez.github.io/ocp/docs/"><strong>Read the docs</strong></a>
   ·
   <a href="https://github.com/alvarosanchez/ocp/stargazers"><strong>Star on GitHub</strong></a>
   ·
@@ -57,7 +57,7 @@ OpenCode configuration tends to drift into local state: copied files, one-off ed
     </td>
     <td valign="top" width="33%">
       <strong>🛡️ Safer local changes</strong><br />
-      `ocp` links active profile files into your OpenCode directory and creates backups when replacing existing files.
+      `ocp` links active profile files into your OpenCode directory, creates backups when replacing existing files, and rolls back partial switches on failure.
     </td>
   </tr>
 </table>
@@ -72,7 +72,7 @@ ocp repository add git@github.com:my-org/opencode-profiles.git --name my-org-ope
 ocp repository list
 ocp profile list
 
-# Switch your active OpenCode setup
+# Switch your active OpenCode configuration
 ocp profile use my-company
 ```
 
@@ -85,6 +85,7 @@ That is the core idea: store configuration intentionally, discover it easily, an
 - **Interactive terminal UI** for day-to-day workflows
 - **Profile inheritance** for layered configuration setups
 - **Backup-aware file replacement** when applying profiles
+- **Optional Git and GitHub publish flows** for local repositories
 - **Native-image distribution target** for a fast CLI experience
 
 ## Get started
@@ -99,12 +100,14 @@ brew install alvarosanchez/tap/ocp
 
 - `git` in your `PATH`
 - `bat` optional for syntax-highlighted previews in interactive mode
+- `gh` optional for GitHub publish from the interactive post-creation flow
 
 ## Documentation
 
-The README is intentionally a landing page. Detailed documentation is planned for GitHub Pages and, until it is published, the product specification remains the best source of detailed behavior and contract information.
+The README stays intentionally concise. The full GitHub Pages documentation covers installation, concepts, command reference, interactive mode, troubleshooting, and contributor workflow.
 
-- **Docs site:** _Planned for GitHub Pages_
+- **Docs site:** <https://alvarosanchez.github.io/ocp/docs/>
+- **Landing page:** <https://alvarosanchez.github.io/ocp/>
 - **Product spec:** [`SPEC.md`](SPEC.md)
 - **License:** [`LICENSE`](LICENSE)
 
@@ -132,6 +135,8 @@ The README is intentionally a landing page. Detailed documentation is planned fo
 ./gradlew test
 ./gradlew check
 ./gradlew build
+npm --prefix site install
+npm --prefix site run build
 ```
 
 If you are contributing, start with [`SPEC.md`](SPEC.md). It is the source of truth for product behavior and acceptance criteria.

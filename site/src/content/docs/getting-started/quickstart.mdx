@@ -1,0 +1,54 @@
+---
+title: "Quickstart"
+description: "Add a repository, inspect profiles, and activate one successfully."
+sidebar:
+  label: "Quickstart"
+  order: 3
+---
+
+# Quickstart
+
+This is the shortest path from a fresh install to a working profile switch.
+
+## 1. Add a repository
+
+Git-backed repository:
+
+```bash
+ocp repository add git@github.com:my-company/opencode-profiles.git --name my-company
+```
+
+Local file-based repository:
+
+```bash
+ocp repository add /absolute/path/to/my-profiles --name my-local-profiles
+```
+
+For repository types and storage behavior, see [Repositories and profiles](/docs/concepts/repositories-and-profiles/) and [Configuration and paths](/docs/reference/configuration-and-paths/).
+
+## 2. Inspect repositories and profiles
+
+```bash
+ocp repository list
+ocp profile list
+```
+
+`repository list` shows the configured repositories. `profile list` shows the available profiles.
+
+For exact table columns, width behavior, and update notes, see [Repository commands](/docs/reference/commands/repository/) and [Profile commands](/docs/reference/commands/profile/).
+
+## 3. Activate a profile
+
+```bash
+ocp profile use my-company
+```
+
+When you switch, `ocp` links profile files into `~/.config/opencode/` and handles backups and rollback for you. See [Backups and switching](/docs/reference/backups-and-switching/) for the file-level rules.
+
+## 4. Confirm the active profile
+
+```bash
+ocp profile
+```
+
+This prints the current profile together with repository/version metadata and any update hints. See [Profile commands](/docs/reference/commands/profile/) for the output details.

@@ -1,0 +1,41 @@
+:root {
+  color-scheme: dark;
+  --font-display: "Instrument Sans", "Segoe UI", sans-serif;
+  --font-body: "Instrument Sans", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", monospace;
+
+  --color-bg: #0b0d10;
+  --color-bg-elevated: #11151b;
+  --color-bg-panel: rgba(17, 21, 27, 0.78);
+  --color-surface-strong: #171d25;
+  --color-border: rgba(255, 255, 255, 0.11);
+  --color-border-strong: rgba(255, 255, 255, 0.18);
+  --color-text: #f7f5ef;
+  --color-text-muted: #b7c0cd;
+  --color-accent: #f89820;
+  --color-accent-soft: rgba(248, 152, 32, 0.18);
+  --color-secondary: #5e81f4;
+  --color-secondary-soft: rgba(94, 129, 244, 0.18);
+  --color-success: #7fda89;
+  --color-shadow: rgba(0, 0, 0, 0.35);
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+  --space-9: 6rem;
+
+  --radius-sm: 0.75rem;
+  --radius-md: 1.125rem;
+  --radius-lg: 1.75rem;
+  --radius-pill: 999px;
+
+  --shadow-panel: 0 24px 80px var(--color-shadow);
+  --shadow-glow: 0 0 0 1px var(--color-border), 0 20px 60px rgba(94, 129, 244, 0.18);
+  --transition-base: 180ms ease;
+  --content-width: 74rem;
+}

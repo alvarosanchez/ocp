@@ -1,0 +1,58 @@
+---
+title: "Profile commands"
+description: "Reference for ocp profile, profile list, profile create, and profile use."
+sidebar:
+  label: "Profile commands"
+  order: 7
+---
+
+# Profile commands
+
+## `ocp profile`
+
+Prints the currently active profile together with repository/version metadata and update hints.
+
+## `ocp profile list`
+
+Shows a table of profiles with:
+
+- `NAME`
+- `DESCRIPTION`
+- `ACTIVE`
+- `VERSION`
+- `LAST UPDATED`
+- `MESSAGE`
+- `REPOSITORY` when it fits within the width budget
+
+For how profiles are discovered and why duplicate names fail, see [Repositories and profiles](/docs/concepts/repositories-and-profiles/) and [Common failures](/docs/troubleshooting/common-failures/).
+
+### Rendering behavior
+
+- the table uses `$COLUMNS` when exported
+- interactive sessions use detected terminal width
+- otherwise rendering falls back to 120 columns
+- description and message cells wrap when needed
+- if the table still cannot fit, the repository column is omitted
+- remote update failures are non-fatal and shown as notes
+
+## `ocp profile create [name] [--extends-from <parent-1,parent-2,...>]`
+
+Creates a profile directory and registers it in `repository.json`.
+
+- defaults to `default` when no name is provided
+- supports optional inheritance
+- parent order matters and is preserved
+
+For inheritance rules and legacy metadata handling, see [Profile inheritance](/docs/reference/profile-inheritance/).
+
+## `ocp profile use <name>`
+
+Switches the active profile by linking files into the OpenCode config directory.
+
+For backup and rollback behavior, see [Backups and switching](/docs/reference/backups-and-switching/).
+
+Success output includes:
+
+- a user-config notice for the target config directory
+- whether files were updated or only processed
+- a backup notice when existing local files were moved aside

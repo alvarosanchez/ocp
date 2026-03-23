@@ -1,0 +1,26 @@
+---
+title: "Refresh and update profiles"
+description: "Pull repository changes, reapply active profiles, and understand merged-file conflict prompts."
+sidebar:
+  label: "Refresh and update profiles"
+  order: 14
+---
+
+# Refresh and update profiles
+
+Use `ocp repository refresh [name]` to pull the latest changes for git-backed repositories.
+
+For the command behavior and output details, see [Repository commands](/docs/reference/commands/repository/) and [Common failures](/docs/troubleshooting/common-failures/).
+
+## What refresh does
+
+- pulls repository updates for Git-backed repositories
+- shows a user-facing no-op message for file-based repositories
+- reapplies active profile resolution when refreshed data affects the active profile lineage
+
+## Local edits to merged active-profile files
+
+If merged active-profile files in `~/.config/opencode/` were locally edited, refresh prompts whether to discard those merged-file edits or abort.
+
+- discard proceeds with refresh and reapply
+- abort exits with code `1` and leaves files untouched

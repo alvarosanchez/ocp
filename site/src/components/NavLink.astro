@@ -1,0 +1,77 @@
+---
+interface Props {
+  href: string;
+  label: string;
+  currentPath: string;
+  external?: boolean;
+}
+
+const { href, label, currentPath, external = false } = Astro.props;
+const isActive = !external && (currentPath === href || currentPath.startsWith(`${href}/`));
+---
+
+<a
+  href={href}
+  class:list={["nav-link", { active: isActive }]}
+  target={external ? '_blank' : undefined}
+  rel={external ? 'noreferrer' : undefined}
+>
+  {label}
+</a>
+
+<style>
+  .nav-link {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    color: var(--color-text-muted);
+    transition: color var(--transition-base);
+    font-size: 0.96rem;
+  }
+
+  .nav-link:hover,
+  .nav-link.active {
+    color: var(--color-text);
+  }
+
+  .nav-link.active::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -0.55rem;
+    height: 2px;
+    border-radius: var(--radius-pill);
+    background: linear-gradient(90deg, var(--color-accent), var(--color-secondary));
+  }
+
+  @media (max-width: 820px) {
+    .nav-link {
+      justify-content: space-between;
+      width: 100%;
+      min-height: 3rem;
+      padding: 0 var(--space-3);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-pill);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .nav-link.active {
+      border-color: var(--color-border-strong);
+      background: linear-gradient(135deg, rgba(248, 152, 32, 0.1), rgba(94, 129, 244, 0.1));
+    }
+
+    .nav-link.active::after {
+      left: auto;
+      right: var(--space-3);
+      top: 50%;
+      bottom: auto;
+      width: 0.5rem;
+      height: 0.5rem;
+      transform: translateY(-50%);
+      border-radius: 50%;
+      background: var(--color-accent);
+      box-shadow: 0 0 18px rgba(248, 152, 32, 0.55);
+    }
+  }
+</style>

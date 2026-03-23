@@ -1,0 +1,34 @@
+---
+title: "Common failures"
+description: "Diagnose the errors users are most likely to hit first."
+sidebar:
+  label: "Common failures"
+  order: 15
+---
+
+# Common failures
+
+## Missing `git`
+
+`ocp` verifies `git` at startup. If it is not available in `PATH`, commands fail fast with a runtime error.
+
+## Duplicate profile names
+
+Profile names must be globally unique across all configured repositories. Duplicate discovery fails with an error message that includes the duplicate names. See [Repositories and profiles](/docs/concepts/repositories-and-profiles/) for the model.
+
+## Invalid JSON
+
+- invalid `config.json` fails registry loading
+- invalid `repository.json` fails repository metadata loading
+
+## Offline update checks
+
+Version-check failures are non-fatal. Profile list and profile view still render, but notes explain that update metadata could not be refreshed.
+
+## JSON extension mismatch in inheritance
+
+If parent and child profiles use different extensions for the same logical file, such as `.json` vs `.jsonc`, profile resolution fails. See [Profile inheritance](/docs/reference/profile-inheritance/).
+
+## Git command failures
+
+Clone, pull, and other Git-backed operations surface errors with contextual detail, including exit codes when available.

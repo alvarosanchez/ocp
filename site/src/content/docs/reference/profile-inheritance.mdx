@@ -1,0 +1,48 @@
+---
+title: "Profile inheritance"
+description: "Reference for extends_from, parent precedence, deep merge rules, and legacy metadata handling."
+sidebar:
+  label: "Profile inheritance"
+  order: 10
+---
+
+# Profile inheritance
+
+Use `extends_from` in `repository.json` to build a profile from one or more parents.
+
+## Canonical shape
+
+```json
+{
+  "profiles": [
+    { "name": "base", "description": "Company defaults" },
+    { "name": "oss", "extends_from": ["base"] }
+  ]
+}
+```
+
+## Ordering rules
+
+Inheritance is resolved parent-first in the declared order.
+
+- earlier parents contribute first
+- later parents can override earlier parents
+- the child overrides all parents
+
+## Deep merge rules
+
+When two profiles contribute the same logical JSON file:
+
+- object values are deep-merged recursively
+- child keys override parent keys at any nesting level
+- arrays are replaced, not merged
+- scalar values are replaced
+- `.json` and `.jsonc` must match for the same logical file, or `profile use` fails
+
+## Parent-only files
+
+Files that exist only in a parent profile are inherited by the child. In interactive mode they appear as read-only nodes with subdued styling.
+
+## Metadata compatibility
+
+Legacy scalar `extends_from` values are accepted at read time, but OCP migrates them on startup to the canonical array form.

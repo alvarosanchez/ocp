@@ -1,0 +1,160 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import { getCollection } from 'astro:content';
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+const docs = (await getCollection('docs')).sort((a, b) => (a.data.sidebar?.order ?? 0) - (b.data.sidebar?.order ?? 0));
+const currentPath = Astro.url.pathname;
+const withBase = (path: string) => Astro.site ? new URL(path, Astro.site).pathname : `${import.meta.env.BASE_URL.replace(/\/$/, '')}${path === '/' ? '/' : path}`;
+const normalizeId = (id: string) => id.replace(/\.(md|mdx)$/, '');
+const topLevelSegment = (id: string) => normalizeId(id).split('/')[0];
+const docPath = (id: string) => {
+  const normalized = normalizeId(id);
+  return normalized === 'index' ? '/docs/' : `/docs/${normalized}/`;
+};
+
+const sectionDefinitions = [
+  { id: 'start-here', label: 'Start here', segments: ['index', 'getting-started', 'concepts'] },
+  { id: 'guides', label: 'Guides', segments: ['guides'] },
+  { id: 'reference', label: 'Reference', segments: ['reference'] },
+  { id: 'troubleshooting', label: 'Troubleshooting', segments: ['troubleshooting'] },
+  { id: 'development', label: 'Development', segments: ['development'] }
+];
+
+const sections = sectionDefinitions
+  .map((section) => ({
+    ...section,
+    docs: docs.filter((doc) => section.segments.includes(topLevelSegment(doc.id)))
+  }))
+  .filter((section) => section.docs.length > 0);
+---
+
+<BaseLayout title={title} description={description}>
+  <section class="shell docs-shell">
+    <aside class="docs-sidebar panel">
+      <p class="sidebar-label">Documentation</p>
+      <nav aria-label="Docs navigation">
+        <ul class="sidebar-sections">
+          {sections.map((section) => (
+            <li class="sidebar-section">
+              <p class="section-label">{section.label}</p>
+              <ul class="sidebar-links">
+                {section.docs.map((doc) => {
+                  const href = withBase(docPath(doc.id));
+                  const active = currentPath === href || currentPath === href.replace(/\/$/, '');
+                  return (
+                    <li>
+                      <a href={href} class:list={["sidebar-link", { active }]}>
+                        <span>{doc.data.sidebar?.label ?? doc.data.title}</span>
+                        <small>{doc.data.description}</small>
+                      </a>
+                    </li>
+                  );
+                })}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </aside>
+
+    <article class="docs-content panel">
+      <slot />
+    </article>
+  </section>
+</BaseLayout>
+
+<style>
+  .docs-shell {
+    display: grid;
+    grid-template-columns: minmax(16rem, 20rem) minmax(0, 1fr);
+    gap: var(--space-5);
+    padding: var(--space-6) 0 var(--space-7);
+  }
+
+  .docs-sidebar,
+  .docs-content {
+    padding: var(--space-5);
+  }
+
+  .sidebar-label {
+    margin: 0 0 var(--space-4);
+    color: var(--color-text);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .sidebar-sections,
+  .sidebar-links {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .sidebar-sections {
+    gap: var(--space-4);
+  }
+
+  .sidebar-section {
+    display: grid;
+    gap: var(--space-2);
+  }
+
+  .section-label {
+    margin: 0;
+    color: var(--color-text);
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .sidebar-links {
+    gap: var(--space-3);
+  }
+
+  .sidebar-link {
+    display: grid;
+    gap: var(--space-1);
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    color: var(--color-text-muted);
+    transition:
+      border-color var(--transition-base),
+      background var(--transition-base),
+      color var(--transition-base);
+  }
+
+  .sidebar-link:hover,
+  .sidebar-link.active {
+    border-color: var(--color-border-strong);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--color-text);
+  }
+
+  .sidebar-link small {
+    color: var(--color-text-muted);
+    font-size: 0.84rem;
+    line-height: 1.5;
+  }
+
+  .docs-content :global(h1:first-child) {
+    margin-top: 0;
+    font-size: clamp(2.2rem, 3vw, 3.5rem);
+  }
+
+  @media (max-width: 960px) {
+    .docs-shell {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

@@ -1,0 +1,343 @@
+---
+import NavLink from './NavLink.astro';
+import { siteConfig } from '../config';
+
+interface Props {
+  currentPath: string;
+}
+
+const { currentPath } = Astro.props;
+const withBase = (path: string) => Astro.site ? new URL(path, Astro.site).pathname : `${import.meta.env.BASE_URL.replace(/\/$/, '')}${path === '/' ? '/' : path}`;
+const menuId = 'site-navigation';
+---
+
+<header class="site-header">
+  <div class="shell frame">
+    <div class="topline">
+      <a class="brand" href={withBase('/')}>
+        <span class="brand-logo" aria-hidden="true">
+          <img src={withBase('/images/splash-mark.png')} alt="" class="brand-logo-image" />
+        </span>
+        <span class="brand-copy">
+          <strong>ocp</strong>
+          <span>OpenCode Configuration Profiles</span>
+        </span>
+      </a>
+
+      <button
+        class="menu-toggle"
+        type="button"
+        aria-expanded="false"
+        aria-controls={menuId}
+        aria-label="Toggle navigation menu"
+        data-menu-toggle
+      >
+        <span>Menu</span>
+        <span class="menu-toggle-icon" aria-hidden="true">
+          <span></span>
+          <span></span>
+        </span>
+      </button>
+    </div>
+
+    <nav class="nav" id={menuId} aria-label="Primary" data-nav>
+      {siteConfig.nav.map((item) => (
+        <NavLink
+          href={item.external ? item.href : withBase(item.href)}
+          label={item.label}
+          currentPath={currentPath}
+          external={item.external}
+        />
+      ))}
+    </nav>
+  </div>
+</header>
+
+<script>
+  const initSiteHeader = () => {
+    const header = document.querySelector('.site-header');
+    if (!(header instanceof HTMLElement)) {
+      return;
+    }
+
+    const toggle = header.querySelector('[data-menu-toggle]');
+    const nav = header.querySelector('[data-nav]');
+
+    if (!(toggle instanceof HTMLButtonElement) || !(nav instanceof HTMLElement)) {
+      return;
+    }
+
+    const mobileQuery = window.matchMedia('(max-width: 820px)');
+
+    const syncState = (expanded: boolean) => {
+      toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      header.dataset.menuOpen = expanded ? 'true' : 'false';
+    };
+
+    const collapseMenu = () => syncState(false);
+
+    const syncForViewport = () => {
+      if (mobileQuery.matches) {
+        nav.hidden = toggle.getAttribute('aria-expanded') !== 'true';
+      } else {
+        nav.hidden = false;
+        collapseMenu();
+      }
+    };
+
+    toggle.addEventListener('click', () => {
+      const nextExpanded = toggle.getAttribute('aria-expanded') !== 'true';
+      syncState(nextExpanded);
+      nav.hidden = !nextExpanded;
+    });
+
+    nav.querySelectorAll('a').forEach((link) => {
+      link.addEventListener('click', () => {
+        if (mobileQuery.matches) {
+          collapseMenu();
+          nav.hidden = true;
+        }
+      });
+    });
+
+    mobileQuery.addEventListener('change', syncForViewport);
+
+    syncForViewport();
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('astro:page-load', initSiteHeader, { once: true });
+    document.addEventListener('DOMContentLoaded', initSiteHeader, { once: true });
+  } else {
+    initSiteHeader();
+  }
+
+  document.addEventListener('astro:after-swap', initSiteHeader);
+</script>
+
+<style>
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding-top: var(--space-3);
+  }
+
+  .frame {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    background: rgba(11, 13, 16, 0.72);
+    backdrop-filter: blur(20px);
+  }
+
+  .topline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    min-width: 0;
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+
+  .brand-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-radius: 1rem;
+    border: 1px solid var(--color-border-strong);
+    background:
+      radial-gradient(circle at top, rgba(248, 152, 32, 0.26), transparent 60%),
+      linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+  }
+
+  .brand-logo-image {
+    width: 2.2rem;
+    height: 2.2rem;
+    object-fit: contain;
+    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.24));
+  }
+
+  .brand-copy {
+    display: grid;
+    gap: 0;
+    min-width: 0;
+  }
+
+  .brand-copy strong {
+    font-size: 0.92rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    text-transform: lowercase;
+  }
+
+  .brand-copy span {
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+    line-height: 1.25;
+    white-space: nowrap;
+  }
+
+  .menu-toggle {
+    display: none;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 3rem;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--color-text);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition:
+      border-color var(--transition-base),
+      background var(--transition-base),
+      transform var(--transition-base);
+  }
+
+  .menu-toggle:hover {
+    border-color: var(--color-border-strong);
+    transform: translateY(-1px);
+  }
+
+  .menu-toggle:focus-visible {
+    outline: 2px solid var(--color-secondary);
+    outline-offset: 2px;
+  }
+
+  .menu-toggle-icon {
+    display: inline-grid;
+    gap: 0.28rem;
+  }
+
+  .menu-toggle-icon span {
+    display: block;
+    width: 1rem;
+    height: 1px;
+    background: currentColor;
+    transition: transform var(--transition-base), opacity var(--transition-base);
+  }
+
+  .nav {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 0;
+  }
+
+  @media (min-width: 821px) {
+    .frame {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .topline {
+      flex: 0 1 auto;
+    }
+
+    .nav {
+      flex-wrap: wrap;
+    }
+  }
+
+  @media (max-width: 820px) {
+    .frame {
+      border-radius: var(--radius-lg);
+      padding: var(--space-3);
+    }
+
+    .brand-copy {
+      gap: 0.18rem;
+    }
+
+    .menu-toggle {
+      display: inline-flex;
+      flex-shrink: 0;
+    }
+
+    .nav {
+      width: 100%;
+      display: grid;
+      gap: var(--space-2);
+      padding-top: var(--space-3);
+      border-top: 1px solid var(--color-border);
+      justify-content: stretch;
+    }
+
+    .nav[hidden] {
+      display: none;
+    }
+
+    .site-header[data-menu-open='true'] .menu-toggle {
+      background: var(--color-accent-soft);
+      border-color: rgba(248, 152, 32, 0.4);
+    }
+
+    .site-header[data-menu-open='true'] .menu-toggle-icon span:first-child {
+      transform: translateY(0.16rem);
+    }
+
+    .site-header[data-menu-open='true'] .menu-toggle-icon span:last-child {
+      transform: translateY(-0.16rem);
+    }
+  }
+
+  @media (max-width: 540px) {
+    .frame {
+      padding: var(--space-2) var(--space-3);
+    }
+
+    .brand {
+      gap: 0.4rem;
+    }
+
+    .brand-logo {
+      width: 2.5rem;
+      height: 2.5rem;
+      border-radius: 0.85rem;
+    }
+
+    .brand-logo-image {
+      width: 1.85rem;
+      height: 1.85rem;
+    }
+
+    .brand-copy strong {
+      font-size: 0.88rem;
+    }
+
+    .brand-copy span {
+      max-width: 12ch;
+      font-size: 0.68rem;
+      line-height: 1.25;
+      white-space: normal;
+    }
+
+    .menu-toggle {
+      min-height: 2.6rem;
+      padding: 0 var(--space-2);
+      font-size: 0.72rem;
+    }
+  }
+</style>

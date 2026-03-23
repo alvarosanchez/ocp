@@ -1,0 +1,631 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { Icon } from 'astro-icon/components';
+import { siteConfig } from '../config';
+
+const highlights = [
+  {
+    icon: 'switch',
+    title: 'Fast context switching',
+    body: 'Move between work, personal, OSS, and experiment setups without hand-editing config files.'
+  },
+  {
+    icon: 'git-branch',
+    title: 'Configuration in Git',
+    body: 'Treat OpenCode profiles like code: version them, review them, share them, and keep them reproducible.'
+  },
+  {
+    icon: 'shield',
+    title: 'Backup-aware changes',
+    body: 'Apply profiles with linked files, transactional rollback, and safer replacement behavior instead of fragile local drift.'
+  }
+];
+
+const docsPaths = [
+  {
+    icon: 'download',
+    title: 'Installation',
+    body: 'Set up the CLI, optional tools, and environment expectations before your first profile switch.',
+    href: '/docs/getting-started/installation/'
+  },
+  {
+    icon: 'rocket',
+    title: 'Quickstart',
+    body: 'Add a repository, inspect available profiles, and activate a setup with the shortest path through the docs.',
+    href: '/docs/getting-started/quickstart/'
+  },
+  {
+    icon: 'book',
+    title: 'Command reference',
+    body: 'Keep profile and repository command details close when you need flags, outcomes, and CLI semantics.',
+    href: '/docs/reference/commands/profile/'
+  },
+  {
+    icon: 'terminal',
+    title: 'Interactive mode',
+    body: 'Browse repositories, preview inheritance, and run day-to-day actions from the full-screen terminal UI.',
+    href: '/docs/reference/interactive-mode/'
+  }
+];
+
+const withBase = (path: string) => Astro.site ? new URL(path, Astro.site).pathname : `${import.meta.env.BASE_URL.replace(/\/$/, '')}${path === '/' ? '/' : path}`;
+const githubRepoUrl = siteConfig.repoUrl;
+const githubStarsBadgeUrl = 'https://img.shields.io/github/stars/alvarosanchez/ocp';
+const installCommand = 'brew install alvarosanchez/tap/ocp';
+---
+
+<BaseLayout>
+  <section class="shell hero">
+    <div class="hero-copy">
+      <img src={withBase('/images/splash.png')} alt="ocp logo" class="hero-logo" />
+      <a href={githubRepoUrl} target="_blank" rel="noreferrer" class="github-stars-link">
+        <img src={githubStarsBadgeUrl} alt="GitHub stars for alvarosanchez/ocp" class="github-stars-badge" />
+      </a>
+      <h1>{siteConfig.tagline}</h1>
+      <p class="hero-lede">Version and switch OpenCode profiles in Git so work, personal, OSS, and experimental environments stay intentional instead of drifting into local state.</p>
+
+      <div class="hero-actions">
+        <div class="button-row">
+          <a class="button button-primary" href={withBase('/docs/getting-started/installation/')}>Get started</a>
+          <a class="button button-secondary" href={githubRepoUrl} target="_blank" rel="noreferrer">View on GitHub</a>
+        </div>
+
+        <div class="hero-meta">
+          <div class="command-strip">
+            <span class="command-prompt">$</span>
+            <code>{installCommand}</code>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="shell value-section">
+    <div class="section-heading">
+      <h2>Keep your OpenCode configuration intentional, reviewable, and one command away.</h2>
+      <p>
+        Store profiles in repositories, keep the active OpenCode state explicit, and move from install to everyday switching without
+        guessing where config lives.
+      </p>
+    </div>
+
+      <div class="highlight-grid">
+      {highlights.map((item) => (
+        <article class="panel highlight-card">
+          <span class="card-index" aria-hidden="true">
+            <Icon name={item.icon} size="1.25rem" />
+          </span>
+          <h3>{item.title}</h3>
+          <p>{item.body}</p>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="shell docs-section">
+    <div class="section-heading docs-heading">
+      <h2>A cleaner route from configuration basics to exact command details.</h2>
+      <p>
+        Start with setup, move into the first successful profile switch, then jump straight to guides or exact command reference when you
+        need detail.
+      </p>
+    </div>
+
+    <div class="docs-grid">
+      {docsPaths.map((item) => (
+        <a class="panel docs-card" href={withBase(item.href)}>
+          <span class="docs-card-eyebrow" aria-hidden="true">
+            <Icon name={item.icon} size="1.15rem" />
+          </span>
+          <h3>{item.title}</h3>
+          <p>{item.body}</p>
+        </a>
+      ))}
+    </div>
+  </section>
+
+  <section class="shell story-grid">
+    <div class="panel demo-panel">
+      <div class="section-heading compact">
+        <h2>Browse repositories, inspect inheritance, and act without leaving the terminal.</h2>
+        <p>
+          The full-screen UI covers onboarding, refresh, editing, migration, commit, publish, and preview workflows on top of the same
+          service-layer semantics as the CLI.
+        </p>
+      </div>
+      <img src={withBase('/images/interactive-mode.gif')} alt="Animated demonstration of ocp interactive mode" class="demo-image" />
+      <a class="button button-secondary inline-button" href={withBase('/docs/reference/interactive-mode/')}>Explore interactive mode</a>
+    </div>
+
+    <div class="panel capability-panel">
+      <div class="section-heading compact">
+        <h2>Use the docs index when you need guides, troubleshooting, or contributor workflow.</h2>
+      </div>
+
+      <div class="capability-stack">
+        <a class="capability-link" href={withBase('/docs')}>
+          <strong>Documentation home</strong>
+          <span>Use the new IA to jump into getting started, guides, reference, troubleshooting, or development.</span>
+        </a>
+        <a class="capability-link" href={withBase('/docs/reference/commands/repository/')}>
+          <strong>Repository commands</strong>
+          <span>Look up add, list, refresh, and publish-related command behavior.</span>
+        </a>
+        <a class="capability-link" href={withBase('/docs/troubleshooting/common-failures/')}>
+          <strong>Common failures</strong>
+          <span>Diagnose Git issues, invalid configs, and other blockers without digging through unrelated pages.</span>
+        </a>
+      </div>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .hero {
+    padding: calc(var(--space-7) + var(--space-2)) 0 var(--space-8);
+  }
+
+  .hero-copy {
+    display: grid;
+    justify-items: center;
+    gap: calc(var(--space-4) + var(--space-1));
+    width: min(100%, 72rem);
+    margin: 0 auto;
+    text-align: center;
+  }
+
+  .hero-logo {
+    width: min(100%, 20rem);
+    height: auto;
+    object-fit: contain;
+  }
+
+  .hero-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: 3.5rem;
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-pill);
+    background:
+      linear-gradient(135deg, rgba(248, 152, 32, 0.18), rgba(248, 152, 32, 0.05)),
+      rgba(255, 255, 255, 0.03);
+    box-shadow: 0 22px 50px rgba(0, 0, 0, 0.24);
+  }
+
+  .hero-mark {
+    width: 3rem;
+    height: 3rem;
+    object-fit: contain;
+    filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.26));
+  }
+
+  .hero-kicker-copy {
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.84rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: clamp(3.1rem, 8vw, 5.6rem);
+    font-weight: 700;
+    line-height: 0.94;
+    letter-spacing: -0.05em;
+    max-width: 12ch;
+    text-wrap: balance;
+  }
+
+  .hero-lede,
+  .hero-support {
+    margin: 0;
+    color: var(--color-text-muted);
+    line-height: 1.8;
+  }
+
+  .hero-lede {
+    max-width: 52rem;
+    font-size: 1.12rem;
+  }
+
+  .hero-support {
+    max-width: 38rem;
+    font-size: 1rem;
+  }
+
+  .hero-actions {
+    display: grid;
+    gap: var(--space-4);
+    justify-items: center;
+    width: min(100%, 58rem);
+  }
+
+  .hero-meta {
+    display: grid;
+    gap: var(--space-4);
+    align-items: start;
+    justify-items: center;
+    width: 100%;
+  }
+
+  .github-proof {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-5);
+    padding: var(--space-4) var(--space-5);
+    width: min(100%, 52rem);
+    text-align: left;
+    text-decoration: none;
+    transition:
+      transform var(--transition-base),
+      border-color var(--transition-base),
+      background var(--transition-base);
+  }
+
+  .github-copy {
+    display: grid;
+    gap: var(--space-2);
+    max-width: 34rem;
+  }
+
+  .github-label,
+  .docs-card-eyebrow,
+  .card-index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.35rem;
+    height: 2.35rem;
+    border-radius: 0.9rem;
+    border: 1px solid rgba(248, 152, 32, 0.18);
+    background: rgba(248, 152, 32, 0.08);
+    color: var(--color-accent);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+
+  .github-label {
+    width: auto;
+    height: auto;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    font-family: var(--font-mono);
+    font-size: 0.88rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .card-index svg,
+  .docs-card-eyebrow svg {
+    width: 1.05rem;
+    height: 1.05rem;
+  }
+
+  .docs-card-eyebrow {
+    margin-bottom: var(--space-1);
+  }
+
+  .github-copy strong {
+    font-size: 1.08rem;
+    line-height: 1.3;
+  }
+
+  .github-copy span:last-child {
+    color: var(--color-text-muted);
+    line-height: 1.7;
+  }
+
+  .github-actions {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .github-stars-link {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .github-stars-badge {
+    height: 1.25rem;
+  }
+
+  .github-copy a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 0.16em;
+  }
+
+  .github-proof:hover {
+    transform: translateY(-1px);
+    border-color: var(--color-border-strong);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .command-strip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    width: fit-content;
+    padding: var(--space-2) var(--space-4);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-pill);
+    background: rgba(8, 10, 14, 0.9);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+  }
+
+  .command-prompt {
+    color: var(--color-success);
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    line-height: 1;
+  }
+
+  .command-strip code {
+    margin: 0;
+    color: #dce3ed;
+    font-size: 0.92rem;
+    white-space: nowrap;
+  }
+
+  .value-section,
+  .docs-section {
+    padding-bottom: var(--space-8);
+  }
+
+  .section-heading {
+    display: grid;
+    gap: var(--space-2);
+    justify-items: center;
+    text-align: center;
+    margin-bottom: var(--space-4);
+  }
+
+  .highlight-grid,
+  .docs-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-4);
+  }
+
+  .docs-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .highlight-card,
+  .docs-card {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-5);
+    justify-items: center;
+    text-align: center;
+  }
+
+  .card-index,
+  .docs-card-eyebrow {
+    justify-self: center;
+  }
+
+  .highlight-card h3,
+  .docs-card h3,
+  .story-grid h2 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 1.65rem;
+    letter-spacing: -0.03em;
+  }
+
+  .highlight-card p,
+  .docs-card p,
+  .compact p {
+    margin: 0;
+    color: var(--color-text-muted);
+    line-height: 1.8;
+  }
+
+  .docs-card {
+    transition:
+      transform var(--transition-base),
+      border-color var(--transition-base),
+      background var(--transition-base);
+  }
+
+  .docs-card:hover {
+    transform: translateY(-1px);
+    border-color: var(--color-border-strong);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .story-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+    gap: var(--space-5);
+    padding-bottom: var(--space-8);
+  }
+
+  .demo-panel,
+  .capability-panel {
+    padding: var(--space-5);
+  }
+
+  .compact {
+    margin-bottom: var(--space-5);
+  }
+
+  .demo-image {
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    margin-bottom: var(--space-4);
+  }
+
+  .inline-button {
+    width: fit-content;
+  }
+
+  .capability-stack {
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  .capability-link {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.03);
+    transition:
+      transform var(--transition-base),
+      border-color var(--transition-base),
+      background var(--transition-base);
+  }
+
+  .capability-link:hover {
+    transform: translateY(-1px);
+    border-color: var(--color-border-strong);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .capability-link strong {
+    font-size: 1rem;
+  }
+
+  .capability-link span {
+    color: var(--color-text-muted);
+    line-height: 1.7;
+  }
+
+  @media (max-width: 980px) {
+    .story-grid,
+    .highlight-grid,
+    .docs-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .hero-copy,
+    .hero-actions {
+      width: 100%;
+    }
+
+    .github-proof {
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .hero {
+      padding-top: var(--space-5);
+      padding-bottom: var(--space-7);
+    }
+
+    .hero-copy {
+      gap: var(--space-4);
+    }
+
+    .hero-kicker {
+      width: 100%;
+      justify-content: center;
+      flex-wrap: wrap;
+      padding-inline: var(--space-3);
+    }
+
+    h1 {
+      font-size: clamp(2.9rem, 15vw, 4.4rem);
+      max-width: 8ch;
+    }
+
+    .hero-lede {
+      font-size: 1rem;
+      line-height: 1.7;
+    }
+
+    .hero-actions {
+      gap: var(--space-3);
+    }
+
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+      align-items: center;
+    }
+
+    .button {
+      min-height: 2.6rem;
+      padding: 0 1rem;
+    }
+
+    .button-row .button-secondary:last-child {
+      padding-inline: 0;
+      min-height: auto;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      color: var(--color-text-muted);
+      text-decoration: underline;
+      text-decoration-color: rgba(255, 255, 255, 0.24);
+      text-underline-offset: 0.18em;
+    }
+
+    .hero-meta {
+      gap: var(--space-2);
+      width: 100%;
+    }
+
+    .command-strip {
+      gap: var(--space-2);
+      padding: var(--space-1) var(--space-3);
+      background: rgba(8, 10, 14, 0.72);
+      box-shadow: none;
+      border-color: var(--color-border);
+    }
+
+    .github-proof {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: var(--space-2);
+      align-items: flex-start;
+      padding: var(--space-3);
+    }
+
+    .github-copy {
+      gap: var(--space-1);
+    }
+
+    .github-label {
+      font-size: 0.8rem;
+    }
+
+    .github-copy strong {
+      font-size: 1rem;
+    }
+
+    .github-copy span:last-child {
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+
+    .github-actions {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: var(--space-2);
+    }
+
+    .github-stars-badge {
+      height: 1.15rem;
+    }
+
+    .command-strip code {
+      white-space: normal;
+      font-size: 0.88rem;
+    }
+  }
+</style>
