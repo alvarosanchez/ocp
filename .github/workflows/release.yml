@@ -207,15 +207,15 @@ jobs:
 
           content = File.read(formula_path)
           updated = content.dup
-
-          version_pattern = /^  version ".*"$/
-          raise "Formula version line not found" unless updated.match?(version_pattern)
-          updated.sub!(version_pattern, "  version \"#{version}\"")
-
+          
+          version_pattern = /^  OCP_VERSION = ".*"$/
+          raise "Formula OCP_VERSION constant not found" unless updated.match?(version_pattern)
+          updated.sub!(version_pattern, "  OCP_VERSION = \"#{version}\"")
+          
           sha_rules = [
-            [%r{(ocp-\#\{version\}-macos-aarch64"\n\s+sha256 ")([^"]+)(")}, macos_arm_sha, "macOS arm64"],
-            [%r{(ocp-\#\{version\}-macos-x86_64"\n\s+sha256 ")([^"]+)(")}, macos_x86_sha, "macOS x86_64"],
-            [%r{(ocp-\#\{version\}-linux-x86_64"\n\s+sha256 ")([^"]+)(")}, linux_sha, "Linux x86_64"]
+            [/(ocp-\#\{OCP_VERSION\}-macos-aarch64"\n\s+sha256 ")([^"]+)(")/, macos_arm_sha, "macOS arm64"],
+            [/(ocp-\#\{OCP_VERSION\}-macos-x86_64"\n\s+sha256 ")([^"]+)(")/, macos_x86_sha, "macOS x86_64"],
+            [/(ocp-\#\{OCP_VERSION\}-linux-x86_64"\n\s+sha256 ")([^"]+)(")/, linux_sha, "Linux x86_64"]
           ]
 
           sha_rules.each do |pattern, checksum, label|
