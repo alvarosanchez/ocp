@@ -1,0 +1,37 @@
+---
+title: "Verification"
+description: "Verification tasks for the CLI and for the docs site itself."
+sidebar:
+  label: "Verification"
+  order: 17
+---
+
+# Verification
+
+## CLI verification
+
+The product spec requires at least:
+
+```bash
+./gradlew test
+./gradlew nativeTest
+```
+
+Use `./gradlew build` when wiring or build-sensitive behavior changes.
+
+## Site verification
+
+Before publishing docs changes, verify the website locally:
+
+```bash
+npm --prefix site install
+npm --prefix site run build
+npm --prefix site run preview
+```
+
+Use browser-based QA to check:
+
+- landing page layout and CTA links
+- docs navigation and sidebar behavior
+- image and GIF loading under the GitHub Pages base path
+- representative long-form pages such as Interactive mode and Troubleshooting

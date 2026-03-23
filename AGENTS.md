@@ -144,7 +144,7 @@ Rule of thumb: keep command classes thin; move business logic to services.
 - Minimum verification: `./gradlew test`
 - If startup/native-sensitive behavior changed: `./gradlew nativeTest`
 - If wiring/build behavior changed: `./gradlew build`
-- If CLI behavior changed, update `SPEC.md` in the same change set
+- If CLI or other user-visible behavior changed, update `SPEC.md` and the affected user-facing documentation in the same change set (site docs under `site/src/content/docs/**`, plus `README.md` when landing-page messaging or quickstart guidance changes).
 - Ask the user if they want to create a PR with the "gh" CLI. If granted permission, create it.
 - Do not merge the PR until GitHub Copilot has posted its review on that PR.
 - Address every Copilot review comment, and confirm there are no unresolved Copilot comments.

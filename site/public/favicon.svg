@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>ocp favicon</title>
+  <defs>
+    <linearGradient id="shell" x1="10" y1="10" x2="54" y2="54" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f89820" stop-opacity="0.92" />
+      <stop offset="1" stop-color="#5e81f4" stop-opacity="0.9" />
+    </linearGradient>
+    <linearGradient id="glow" x1="16" y1="18" x2="48" y2="46" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f7f5ef" />
+      <stop offset="1" stop-color="#d9e2f1" />
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="52" height="52" rx="18" fill="#0b0d10" />
+  <rect x="7" y="7" width="50" height="50" rx="17" fill="url(#shell)" fill-opacity="0.18" stroke="rgba(247,245,239,0.22)" />
+  <path d="M22 20h8.5a12.5 12.5 0 1 1 0 25H22z" fill="none" stroke="url(#glow)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M39 20h-8v25h8" fill="none" stroke="#f89820" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity="0.95" />
+  <circle cx="46" cy="32" r="4" fill="#5e81f4" />
+</svg>

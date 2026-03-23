@@ -1,0 +1,31 @@
+---
+title: "Output and exit codes"
+description: "Understand stdout, stderr, help behavior, and non-fatal notices."
+sidebar:
+  label: "Output and exit codes"
+  order: 11
+---
+
+# Output and exit codes
+
+## Output channels
+
+- success and informational messages go to `stdout`
+- errors go to `stderr`
+- help output is available through Picocli help commands
+
+## Exit codes
+
+- `0` success
+- `1` runtime or validation failure
+- `2` usage error
+
+## Startup checks
+
+At startup, `ocp`:
+
+- verifies required dependencies, currently `git`
+- checks for a newer CLI release in both interactive and non-interactive flows
+- reuses cached version metadata until at least 24 hours have passed since the previous check attempt
+
+Update-check failures are non-fatal and should not block the main command flow.

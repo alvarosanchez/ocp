@@ -1,0 +1,60 @@
+---
+title: "Interactive mode"
+description: "Comprehensive guide to the TUI: onboarding, navigation, creation, refresh, publish, and file previews."
+sidebar:
+  label: "Interactive mode"
+  order: 10
+---
+
+# Interactive mode
+
+Interactive mode gives you a full-screen terminal UI for browsing repositories, inspecting profiles, and running common day-to-day actions without leaving the terminal.
+
+Running `ocp` with no subcommand starts this UI when `System.console()` is available and `TERM` is not `dumb`. If UI initialization fails, OCP falls back to standard Picocli root usage output.
+
+## What interactive mode exposes
+
+Interactive mode uses the same service layer semantics as the subcommands, but presents them through a tree-and-detail interface with modal overlays.
+
+It supports:
+
+- profile `use`, `create`, and delete flows
+- repository add, create, delete, refresh, and migration flows
+- editing files and the registry config
+- copying absolute file paths
+- jumping to parent profiles and parent-owned files
+- optional Git init, GitHub publish, commit, and push actions
+
+## Layout behavior
+
+- the tree/detail split favors the detail pane at roughly one-third / two-thirds width
+- keyboard shortcuts are rendered in a full-width shortcuts pane above the status bar
+- prompts and dialogs render as overlays so the shortcuts pane and status bar remain anchored
+
+## Important action keys
+
+- `r` refresh selected repository
+- `R` refresh all repositories
+- `u` use selected profile
+- `c` create profile in the selected repository context
+- `d` delete repository or selected profile depending on context
+- `e` edit selected file
+- `o` edit the OCP registry config
+- `y` copy the selected file path
+- `p` jump to the selected profile's most immediate parent or the parent contributor of an inherited node
+- `m` migrate a file-based repository into the shared Git/GitHub post-creation flow
+- `g` commit and push local changes for a git-backed repository with uncommitted changes
+
+## Inheritance visualization
+
+Interactive tree profile nodes show inheritance inline, for example:
+
+```text
+👤 child ⇢ 👤 parent-a, parent-b
+```
+
+Inherited parent-only files appear as read-only nodes with subdued styling. Overlapping inherited JSON/JSONC files that resolve through deep merge appear with a distinct icon and preview the resolved merged contents.
+
+## First-run onboarding
+
+On first interactive launch, if the OCP config is effectively empty and `~/.config/opencode/` contains supported top-level files, OCP offers to import those files into a newly created local repository and profile, activates that profile, and then offers the same optional post-creation Git/GitHub flow.

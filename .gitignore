@@ -9,3 +9,7 @@ out/
 .settings/
 bin/
 .sisyphus/
+site/node_modules/
+site/dist/
+site/.astro/
+playwright-report/

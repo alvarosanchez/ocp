@@ -1,0 +1,38 @@
+---
+title: "Backups and switching"
+description: "Understand symlink replacement, backup directories, and transactional rollback."
+sidebar:
+  label: "Backups and switching"
+  order: 9
+---
+
+# Backups and switching
+
+When you run `ocp profile use <name>`, OCP applies files from the source profile into the OpenCode target directory.
+
+## Source and target
+
+- source: `~/.config/ocp/repositories/<repo-name>/<profile-name>/`
+- target: `~/.config/opencode/`
+
+## Per-file behavior
+
+For each profile file:
+
+- if the target does not exist, create a symlink
+- if the target already exists and is a symlink, replace it
+- if the target exists and is not a symlink, move it to a backup directory before linking
+
+## Backup directory
+
+Backups are stored under:
+
+```text
+~/.config/ocp/backups/<timestamp>/
+```
+
+When backups are created, CLI output includes the backup location.
+
+## Transactional safety
+
+Switching is transactional at file level. If linking one file fails, already-processed files are restored from backups so the target directory is not left half-switched.

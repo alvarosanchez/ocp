@@ -1,0 +1,21 @@
+{
+  "name": "ocp-site",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro check && astro build",
+    "preview": "astro preview --host 127.0.0.1 --port 4321",
+    "check": "astro check"
+  },
+  "dependencies": {
+    "@astrojs/check": "^0.9.8",
+    "@astrojs/mdx": "^4.3.14",
+    "@astrojs/rss": "^4.0.12",
+    "astro": "^5.7.0",
+    "astro-icon": "^1.1.5",
+    "sharp": "^0.34.2"
+  }
+}

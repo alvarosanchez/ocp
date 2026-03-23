@@ -1,0 +1,36 @@
+---
+title: "Publish a local repository"
+description: "Use the optional post-creation Git and GitHub publish flow safely."
+sidebar:
+  label: "Publish a local repository"
+  order: 13
+---
+
+# Publish a local repository
+
+After local repository add, create, or onboarding import, OCP can run a shared optional post-creation flow.
+
+## What the flow offers
+
+- optional Git initialization with an initial commit
+- optional GitHub publish using `gh repo create`
+- persistence of the discovered `origin` URI into the configured repository entry while preserving the explicit `localPath`
+
+For the exact publish conditions and defaults, see [Repository commands](/docs/reference/commands/repository/) and [Configuration and paths](/docs/reference/configuration-and-paths/).
+
+## Defaults
+
+- Git init default: `yes` for interactive create and onboarding, `no` for adding an existing local repository
+- GitHub publish default: `no`
+- visibility default when publishing: `private`
+
+## Conditions
+
+The GitHub publish prompt only appears when:
+
+- `gh auth status` succeeds
+- the repository does not already have an `origin` remote
+
+If a file-based repository already has a configured `origin`, OCP persists that URI immediately instead of asking to publish again.
+
+Failures in this optional post-creation flow do **not** roll back an otherwise successful add, create, or onboarding operation.

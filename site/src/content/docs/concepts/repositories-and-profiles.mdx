@@ -1,0 +1,63 @@
+---
+title: "Repositories and profiles"
+description: "Understand the core model for repositories, profiles, and the OCP registry."
+sidebar:
+  label: "Repositories and profiles"
+  order: 4
+---
+
+# Repositories and profiles
+
+`ocp` works with three core concepts.
+
+## Registry
+
+The registry is `~/.config/ocp/config.json`. It stores:
+
+- the active profile name
+- cached CLI version-check metadata
+- configured repositories
+
+A repository entry contains a `name`, an optional `uri`, and a normalized `localPath`.
+
+## Repository
+
+A repository is either:
+
+- a Git repository cloned into `~/.config/ocp/repositories/<repo-name>`
+- a local directory registered directly by absolute path
+
+Every repository contains a `repository.json` file and one directory per profile.
+
+## Profile
+
+A profile is a named set of OpenCode config files, such as `opencode.json`, `oh-my-opencode.json`, or JSONC variants.
+
+Profile names must be globally unique across all configured repositories. Duplicate names are a runtime error during discovery and use.
+
+## Repository structure
+
+```text
+repository.json
+my-company/opencode.json
+my-company/oh-my-opencode.json
+oss/opencode.json
+```
+
+## File-based vs Git-backed repositories
+
+### Git-backed
+
+- added from a Git URI
+- cloned into OCP storage
+- support `repository refresh` by pulling latest changes
+- deleted local clone path when the repository entry is removed
+- require `--force` on delete if local changes exist
+
+### File-based
+
+- added from a local path
+- stored with `uri = null`
+- `repository refresh` is a no-op with a user-facing message
+- keep the local folder by default when removed from the registry
+- can optionally delete the local folder with `--delete-local-path`

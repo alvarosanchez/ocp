@@ -1,0 +1,58 @@
+---
+title: "Repository commands"
+description: "Reference for repository add, list, create, delete, and refresh."
+sidebar:
+  label: "Repository commands"
+  order: 8
+---
+
+# Repository commands
+
+## `ocp repository add <uri-or-path> --name <name>`
+
+Adds a repository from either a Git URI or a local path.
+
+- Git URIs are cloned into OCP storage
+- local paths are normalized to an absolute path and registered directly
+- source and name are trimmed before validation and persistence
+
+For repository storage and registry shape, see [Configuration and paths](/docs/reference/configuration-and-paths/).
+
+## `ocp repository list`
+
+Prints one rounded CLI box per repository with:
+
+- `Name`
+- `URI`
+- `Local path`
+- `Resolved profiles`
+
+## `ocp repository create <name> [--profile-name <profile>]`
+
+Creates a new profile repository with `repository.json` and an initial profile.
+
+For the profile metadata shape, see [Configuration and paths](/docs/reference/configuration-and-paths/).
+
+## `ocp repository delete <name> [--force] [--delete-local-path]`
+
+Behavior depends on repository type.
+
+### Git-backed
+
+- deletion removes the registry entry
+- local clone path is deleted
+- if local changes exist, deletion fails unless `--force` is provided
+
+### File-based
+
+- deletion removes the registry entry
+- local folder is preserved by default
+- `--delete-local-path` removes the local folder as well
+
+## `ocp repository refresh [name]`
+
+Refreshes git-backed repositories by pulling latest changes.
+
+For file-based repositories, refresh is a no-op with a user-facing message.
+
+If the refreshed data affects the active profile lineage, OCP reapplies the active profile resolution.

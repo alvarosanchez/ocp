@@ -1,0 +1,41 @@
+---
+title: "Installation"
+description: "Install ocp, understand requirements, and verify the CLI is ready."
+sidebar:
+  label: "Installation"
+  order: 2
+---
+
+# Installation
+
+The fastest way to install `ocp` is with Homebrew.
+
+```bash
+brew install alvarosanchez/tap/ocp
+```
+
+## Requirements
+
+`ocp` verifies required system dependencies at startup.
+
+- `git` is required
+- `bat` is optional and enables syntax-highlighted previews in interactive mode
+- `gh` is optional and only needed for the interactive GitHub publish flow
+
+## Verify the install
+
+```bash
+ocp help
+ocp profile list
+```
+
+Expected behavior:
+
+- `ocp help` exits with `0` and prints usage
+- `ocp profile list` exits with `0` even when you have no repositories yet, and prints a helpful empty state
+
+## Default paths
+
+By default, `ocp` stores its own data under `~/.config/ocp` and manages active OpenCode configuration under `~/.config/opencode`.
+
+See [Configuration and paths](/docs/reference/configuration-and-paths/) for the full layout.

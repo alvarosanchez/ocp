@@ -1,0 +1,83 @@
+---
+title: "Configuration and paths"
+description: "Reference for config.json, repository.json, storage directories, schema shapes, and path overrides."
+sidebar:
+  label: "Configuration and paths"
+  order: 6
+---
+
+# Configuration and paths
+
+Use this page for the low-level details that support the rest of the docs: where OCP stores state, how repository metadata is shaped, and which JVM properties override the defaults.
+
+## Default paths
+
+- OCP registry: `~/.config/ocp/config.json`
+- OCP storage root: `~/.config/ocp`
+- Repository clone directory: `~/.config/ocp/repositories/<repo-name>`
+- Repository metadata file: `~/.config/ocp/repositories/<repo-name>/repository.json`
+- Resolved merged profile directory: `~/.config/ocp/resolved-profiles/<profile-name>/`
+- Backup directory: `~/.config/ocp/backups/<timestamp>/`
+- OpenCode target directory: `~/.config/opencode/`
+
+## System property overrides
+
+Advanced usage and tests can override paths with JVM properties:
+
+- `ocp.config.dir`
+- `ocp.cache.dir` (legacy storage override)
+- `ocp.opencode.config.dir`
+- `ocp.working.dir`
+
+## `config.json` shape
+
+```json
+{
+  "config": {
+    "activeProfile": "my-company",
+    "lastOcpVersionCheckEpochSeconds": 1741262400,
+    "latestOcpVersion": "0.2.0"
+  },
+  "repositories": [
+    {
+      "name": "my-repo",
+      "uri": "git@github.com:my-company/my-repo.git",
+      "localPath": "/home/user/.config/ocp/repositories/my-repo"
+    }
+  ]
+}
+```
+
+- `config.activeProfile` defaults to `null`.
+- `config.lastOcpVersionCheckEpochSeconds` defaults to `null` and records the last CLI update check attempt.
+- `config.latestOcpVersion` defaults to `null` and stores the latest successful CLI release lookup.
+- `repositories[*].name` is required.
+- `repositories[*].uri` is optional and is `null` for file-based repositories.
+- `repositories[*].localPath` is required after normalization.
+  - Git-backed repositories derive `localPath` from storage root and repository name when no explicit path is stored.
+  - File-based repositories store the normalized absolute path provided by the user.
+  - A repository entry may store both `uri` and `localPath` when a local repository later gains a remote Git URI. In that case, `localPath` remains authoritative.
+
+## `repository.json` shape
+
+```json
+{
+  "profiles": [
+    { "name": "my-company", "description": "Company defaults" },
+    { "name": "oss", "description": "Open-source profile", "extends_from": ["my-company"] }
+  ]
+}
+```
+
+- `profiles` defaults to an empty list.
+- Blank profile names are ignored.
+- `description` is optional and may be omitted or `null`.
+- `extends_from` is optional and uses an ordered array of parent profile names.
+- Legacy scalar `extends_from` values are accepted at read time and migrated on startup to a one-element array.
+- Profile names must be globally unique across all configured repositories.
+
+## Related reference pages
+
+- [Repositories and profiles](/docs/concepts/repositories-and-profiles/) for the higher-level mental model.
+- [Profile inheritance](/docs/reference/profile-inheritance/) for merge and precedence rules.
+- [Repository commands](/docs/reference/commands/repository/) for add, create, delete, list, and refresh behavior.
