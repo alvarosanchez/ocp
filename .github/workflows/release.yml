@@ -208,9 +208,9 @@ jobs:
           content = File.read(formula_path)
           updated = content.dup
           
-          version_pattern = /^  OCP_VERSION = ".*"$/
+          version_pattern = /^  OCP_VERSION = ".*"\.freeze$/
           raise "Formula OCP_VERSION constant not found" unless updated.match?(version_pattern)
-          updated.sub!(version_pattern, "  OCP_VERSION = \"#{version}\"")
+          updated.sub!(version_pattern, "  OCP_VERSION = \"#{version}\".freeze")
           
           sha_rules = [
             [/(ocp-\#\{OCP_VERSION\}-macos-aarch64"\n\s+sha256 ")([^"]+)(")/, macos_arm_sha, "macOS arm64"],
