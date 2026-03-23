@@ -43,6 +43,7 @@ jobs:
           cache-dependency-path: site/package-lock.json
 
       - name: Configure GitHub Pages
+        if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v5
         with:
           enablement: true
@@ -58,6 +59,7 @@ jobs:
           GITHUB_ACTIONS: 'true'
 
       - name: Upload Pages artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v4
         with:
           path: site/dist
