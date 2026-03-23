@@ -1,6 +1,7 @@
 ---
 import BaseLayout from './BaseLayout.astro';
 import { getCollection } from 'astro:content';
+import { withBase } from '../utils/paths';
 
 interface Props {
   title: string;
@@ -10,7 +11,6 @@ interface Props {
 const { title, description } = Astro.props;
 const docs = (await getCollection('docs')).sort((a, b) => (a.data.sidebar?.order ?? 0) - (b.data.sidebar?.order ?? 0));
 const currentPath = Astro.url.pathname;
-const withBase = (path: string) => Astro.site ? new URL(path, Astro.site).pathname : `${import.meta.env.BASE_URL.replace(/\/$/, '')}${path === '/' ? '/' : path}`;
 const normalizeId = (id: string) => id.replace(/\.(md|mdx)$/, '');
 const topLevelSegment = (id: string) => normalizeId(id).split('/')[0];
 const docPath = (id: string) => {
