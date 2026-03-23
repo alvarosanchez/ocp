@@ -24,7 +24,7 @@ Local file-based repository:
 ocp repository add /absolute/path/to/my-profiles --name my-local-profiles
 ```
 
-For repository types and storage behavior, see [Repositories and profiles](/docs/concepts/repositories-and-profiles/) and [Configuration and paths](/docs/reference/configuration-and-paths/).
+For repository types and storage behavior, see [Repositories and profiles](../concepts/repositories-and-profiles/) and [Configuration and paths](../reference/configuration-and-paths/).
 
 ## 2. Inspect repositories and profiles
 
@@ -35,7 +35,7 @@ ocp profile list
 
 `repository list` shows the configured repositories. `profile list` shows the available profiles.
 
-For exact table columns, width behavior, and update notes, see [Repository commands](/docs/reference/commands/repository/) and [Profile commands](/docs/reference/commands/profile/).
+For exact table columns, width behavior, and update notes, see [Repository commands](../reference/commands/repository/) and [Profile commands](../reference/commands/profile/).
 
 ## 3. Activate a profile
 
@@ -43,7 +43,7 @@ For exact table columns, width behavior, and update notes, see [Repository comma
 ocp profile use my-company
 ```
 
-When you switch, `ocp` links profile files into `~/.config/opencode/` and handles backups and rollback for you. See [Backups and switching](/docs/reference/backups-and-switching/) for the file-level rules.
+When you switch, `ocp` links profile files into `~/.config/opencode/` and handles backups and rollback for you. See [Backups and switching](../reference/backups-and-switching/) for the file-level rules.
 
 ## 4. Confirm the active profile
 
@@ -51,4 +51,4 @@ When you switch, `ocp` links profile files into `~/.config/opencode/` and handle
 ocp profile
 ```
 
-This prints the current profile together with repository/version metadata and any update hints. See [Profile commands](/docs/reference/commands/profile/) for the output details.
+This prints the current profile together with repository/version metadata and any update hints. See [Profile commands](../reference/commands/profile/) for the output details.

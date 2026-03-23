@@ -1,13 +1,13 @@
 ---
 import NavLink from './NavLink.astro';
 import { siteConfig } from '../config';
+import { withBase } from '../utils/paths';
 
 interface Props {
   currentPath: string;
 }
 
 const { currentPath } = Astro.props;
-const withBase = (path: string) => Astro.site ? new URL(path, Astro.site).pathname : `${import.meta.env.BASE_URL.replace(/\/$/, '')}${path === '/' ? '/' : path}`;
 const menuId = 'site-navigation';
 ---
 

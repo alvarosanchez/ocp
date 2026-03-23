@@ -2,6 +2,7 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { Icon } from 'astro-icon/components';
 import { siteConfig } from '../config';
+import { withBase } from '../utils/paths';
 
 const highlights = [
   {
@@ -48,7 +49,6 @@ const docsPaths = [
   }
 ];
 
-const withBase = (path: string) => Astro.site ? new URL(path, Astro.site).pathname : `${import.meta.env.BASE_URL.replace(/\/$/, '')}${path === '/' ? '/' : path}`;
 const githubRepoUrl = siteConfig.repoUrl;
 const githubStarsBadgeUrl = 'https://img.shields.io/github/stars/alvarosanchez/ocp';
 const installCommand = 'brew install alvarosanchez/tap/ocp';
