@@ -212,19 +212,27 @@ jobs:
           raise "Formula OCP_VERSION constant not found" unless updated.match?(version_pattern)
           updated.sub!(version_pattern, "  OCP_VERSION = \"#{version}\".freeze")
 
+          version_scheme_pattern = /^  version_scheme \d+$/
+          if updated.match?(version_scheme_pattern)
+            updated.sub!(version_scheme_pattern, "  version_scheme 1")
+          else
+            updated.sub!(version_pattern, "  OCP_VERSION = \"#{version}\".freeze\n  version_scheme 1")
+          end
+
           formula_version_pattern = /^  version .*/
           if updated.match?(formula_version_pattern)
             updated.sub!(formula_version_pattern, "  version OCP_VERSION")
           else
-            updated.sub!(version_pattern, "  OCP_VERSION = \"#{version}\".freeze\n  version OCP_VERSION")
+            updated.sub!(version_scheme_pattern, "  version_scheme 1\n  version OCP_VERSION")
           end
 
           license_pattern = /^  license ".*"$/
           raise "Formula license line not found" unless updated.match?(license_pattern)
           license_line = updated.match(license_pattern)[0]
           updated.sub!(license_pattern, "")
+          updated.sub!(version_scheme_pattern, "")
           updated.gsub!(/\n{3,}/, "\n\n")
-          updated.sub!(formula_version_pattern, "  version OCP_VERSION\n#{license_line}")
+          updated.sub!(formula_version_pattern, "  version OCP_VERSION\n#{license_line}\n  version_scheme 1")
 
           sha_rules = [
             [/(ocp-\#\{OCP_VERSION\}-macos-aarch64"\n\s+sha256 ")([^"]+)(")/, macos_arm_sha, "macOS arm64"],
