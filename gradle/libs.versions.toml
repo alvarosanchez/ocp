@@ -3,10 +3,10 @@ micronaut-plugin = "4.6.2"
 graalvm-native-plugin = "1.0.0"
 micronaut-platform = "4.10.7"
 test-logger-plugin = "4.0.0"
-testcontainers = "2.0.4"
-testcontainers-gitserver = "0.14.0"
+testcontainers = "2.0.5"
+testcontainers-gitserver = "0.15.0"
 commons-codec = "1.21.0"
-tamboui = "0.2.0-SNAPSHOT"
+tamboui = "0.2.0"
 
 [libraries]
 micronaut-inject-java = { module = "io.micronaut:micronaut-inject-java" }
