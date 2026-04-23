@@ -1,6 +1,6 @@
 [versions]
 micronaut-plugin = "4.6.2"
-graalvm-native-plugin = "1.0.0"
+graalvm-native-plugin = "1.1.0"
 micronaut-platform = "4.10.7"
 test-logger-plugin = "4.0.0"
 testcontainers = "2.0.5"
