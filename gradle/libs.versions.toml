@@ -5,7 +5,7 @@ micronaut-platform = "4.10.7"
 test-logger-plugin = "4.0.0"
 testcontainers = "2.0.5"
 testcontainers-gitserver = "0.15.0"
-commons-codec = "1.21.0"
+commons-codec = "1.22.0"
 tamboui = "0.2.0"
 
 [libraries]
