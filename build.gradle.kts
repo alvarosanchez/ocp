@@ -67,7 +67,7 @@ tasks.test {
 }
 
 jacoco {
-    toolVersion = "0.8.14"
+    toolVersion = "0.8.15"
 }
 
 val jacocoTestReport by tasks.existing(JacocoReport::class) {
